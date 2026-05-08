@@ -4,15 +4,33 @@
 
 ## 强制装载序列
 
-1. **项目基线加载 (Baseline Retrieval)**
-   - 立即读取当前目录或根目录下的 `AGENTS.md`（由 `/r-init` 生成的 Layer 3 项目约束）。
-   - 如果没找到 `AGENTS.md`，立即停止并报错：“未发现 AGENTS.md，请先运行 `/r-init` 完成项目初始化。”
+### Phase 1: 项目基线加载 (Baseline Retrieval)
+- 立即读取当前目录或根目录下的 `AGENTS.md`（由 `/r-init` 生成的 Layer 3 项目约束）。
+- 如果没找到 `AGENTS.md`：
+  - **非 `/r-init` 技能**：发出警告 “⚠️ 未发现 AGENTS.md，将自动触发 /r-init 完成项目初始化。” 并自动执行 `/r-init` 的装载逻辑，完成后继续当前技能。
+  - **`/r-init` 本身**：正常继续，因为 init 的职责就是生成此文件。
+- 如果找到 `AGENTS.md`：校验其 `last_updated` 时间戳。若距当前超过 7 天，发出提示 “💡 AGENTS.md 已超过 7 天未更新，建议执行 /r-init:refresh 刷新基线。” 但不阻塞。
 
-2. **环境变量与配置确认 (Environment Lock)**
-   - 绝对禁止背诵“常见的”配置。
-   - 必须通过 `cat`、`grep` 或同等工具，读取 `package.json`、`.env`、`pom.xml`、`.cursorrules` 等真实配置文件，抓取当前项目的**真实框架版本**和**真实运行端口**。
+### Phase 2: 状态推断 (State Inference)
+- 按 `state-machine.md` 中的状态推断规则，确定当前项目状态。
+- 将推断结果注入当前技能的执行上下文，供跳步拦截使用。
 
-3. **依赖收束 (Dependency Scope)**
-   - 确认当前技能执行时，只能使用 `AGENTS.md` 中规定的技术栈（例如，规定了状态管理用 Zustand，就不准擅自引入 Redux）。
+### Phase 3: 环境与依赖并行确认 (Environment & Dependency Lock)
+以下两项**并发执行**：
+
+- **环境变量与配置确认**：
+  - 绝对禁止背诵“常见的”配置。
+  - 必须通过 `cat`、`grep` 或同等工具，读取 `package.json`、`.env`、`pom.xml`、`.cursorrules` 等真实配置文件，抓取当前项目的**真实框架版本**和**真实运行端口**。
+
+- **依赖收束与安全检查**：
+  - 确认当前技能执行时，只能使用 `AGENTS.md` 中规定的技术栈（例如，规定了状态管理用 Zustand，就不准擅自引入 Redux）。
+  - **新增依赖安全检查**：若技能执行中需要引入新依赖，必须检查：版本兼容性（与现有锁文件是否冲突）、已知安全漏洞（`npm audit` / `pip audit` 等同工具）、License 合规性。
+
+### Phase 4: 领域配置装载 (Domain Loading)
+- 从 `AGENTS.md` 读取 `domain` 字段。
+- 加载 `domains/_base.md`（通用基线，始终装载）。
+- 加载 `domains/[domain].md`（领域增量）。
+- 若为 fullstack 领域，同时加载 `domains/frontend.md` 和 `domains/backend.md`。
+- 设置 **已装载标记**：`__RITSU_LOADED__ = true`，后续技能的 Pre-flight/步骤 1 检测到此标记后跳过重复装载。
 
 > **装载完成后，系统才被允许进入具体技能的流水线逻辑。**
