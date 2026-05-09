@@ -65,7 +65,7 @@ hard_constraints:
   ```markdown
   <!-- Ritsu Configuration Block -->
 
-  ritsu-version: 3.3.0
+  ritsu-version: 3.3.1
   domain: {推断出的领域值}
 
   <!-- End Ritsu Block -->
@@ -73,15 +73,7 @@ hard_constraints:
 
   保留原文件其余部分不变，调用文件写入工具完成无损注入。
 
-### 5. Git 污染防范 (Git History Pollution)
-
-必须防止 Ritsu 产生的对话产物被意外提交。
-
-- 检查项目根目录是否存在 `.gitignore` 文件。
-- 如果存在，读取并检查是否已包含 `.ritsu/`（忽略整行匹配）。
-- 如果未包含或 `.gitignore` 不存在，使用工具自动向 `.gitignore` 文件末尾追加一行 `.ritsu/`，并向用户提示已保护 Git 历史。
-
-### 6. IDE 路由挂载
+### 5. IDE 路由挂载
 
 询问用户："请确认当前使用的 IDE（Cursor / Windsurf / 两者都要 / 跳过）？"
 
@@ -98,6 +90,46 @@ Ritsu Bundle v3.3 已激活。
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：
   /r-route /r-init /r-think /r-dev /r-opt /r-review /r-hunt /r-triage
+```
+
+### 6. Git 污染防范 (Git History Pollution)
+
+必须防止 Ritsu 产生的对话产物及各 IDE AI 的会话缓存被意外提交。
+
+- 检查项目根目录是否存在 `.gitignore` 文件。
+- 读取现有 `.gitignore`，按以下清单逐项检查并追加**缺失项**：
+
+**必加项（始终注入）**：
+
+```
+.ritsu/
+```
+
+**条件项（根据步骤 5 用户选择的 IDE 注入）**：
+
+| IDE 选择 | 追加 ignore 项            | 说明                 |
+| -------- | ------------------------- | -------------------- |
+| Cursor   | `.cursor/`                | Cursor AI 会话缓存   |
+| Windsurf | `.windsurf/`              | Windsurf AI 会话缓存 |
+| 两者     | `.cursor/` + `.windsurf/` | 两者缓存             |
+| 跳过     | 无                        | 不追加 IDE 项        |
+
+**通用 AI 产物项（始终检查，缺失则追加）**：
+
+```
+.claude/
+```
+
+> 注：`.cursorrules` / `.windsurfrules` 是项目配置文件（类似 `.editorconfig`），**不应**加入 `.gitignore`，它们应被提交到仓库供团队共享。
+
+追加完成后，向用户输出已保护的条目清单：
+
+```
+🛡️ .gitignore 已更新，以下条目已受保护：
+  ✅ .ritsu/ (Ritsu 产物)
+  ✅ .claude/ (Claude 会话缓存)
+  ✅ .cursor/ (Cursor 会话缓存)  ← 仅当选择 Cursor
+  ✅ .windsurf/ (Windsurf 会话缓存)  ← 仅当选择 Windsurf
 ```
 
 ### 7. 写入 ctx-{YYYY-MM}.jsonl
