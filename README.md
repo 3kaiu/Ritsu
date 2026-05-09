@@ -50,19 +50,34 @@ skills/Ritsu/
 
 ### 安装
 
-Ritsu 支持现代化的 Claude Plugin 体系，你可以通过一条命令一键安装全局技能，使其在你的所有工作区都能直接使用。
+Ritsu 支持现代化的 Claude Plugin 体系和通用 `npx skills` 工具，你可以通过一条命令将其安装到你所使用的任何 AI IDE 或助手中。
 
-**Claude Code CLI 安装**
+**Claude Code**
 ```bash
+# 方式 1：终端 CLI 快速全局安装
 npx skills add 3kaiu/Ritsu -a claude-code -g -y
-```
 
-**Claude Code Marketplace 插件模式**
-在你的 Claude Code 终端中输入：
-```bash
+# 方式 2：使用 Marketplace 插件模式
 /plugin marketplace add 3kaiu/Ritsu
 /plugin install ritsu@ritsu
 ```
+
+**Cursor / Windsurf / Codex / Cline 等**
+得益于统一的技能包规范，你可以一键将 Ritsu 安装到你的目标编辑器中：
+
+```bash
+# 安装到 Cursor
+npx skills add 3kaiu/Ritsu -a cursor -g -y
+
+# 安装到 Windsurf
+npx skills add 3kaiu/Ritsu -a windsurf -g -y
+
+# 安装到 Cline / Codex 等
+npx skills add 3kaiu/Ritsu -a cline -g -y
+npx skills add 3kaiu/Ritsu -a codex -g -y
+```
+
+> **提示**：安装到 Cursor / Windsurf 后，你可以直接在 Chat 面板中通过 `@` 提及对应的技能文件（如 `@SKILL.md`），或者将它们加入到项目的 `.cursorrules` / `.windsurfrules` 中实现自动化触发。
 
 ### 初始化项目
 
