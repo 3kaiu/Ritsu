@@ -1,6 +1,6 @@
 ---
 name: hunt
-version: "3.3.0"
+version: "3.3.1"
 description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 token_budget: 8000
@@ -18,16 +18,6 @@ hard_constraints:
 ---
 
 # Hunt: 技术 CSI — 深度根因诊断 (Root Cause Investigation)
-
-## ⚡ 执行前必读
-
-| ID   | 约束                       | 违反后果          |
-| ---- | -------------------------- | ----------------- |
-| HC-1 | 确诊前不改代码             | 终止，交给 /r-dev |
-| HC-2 | 假设必须 MECE + 排除条件   | 重新建立假设集    |
-| HC-3 | 全部排除时重新采集，不猜测 | 终止模糊输出      |
-
----
 
 **触发条件**：用户输入 `/r-hunt [问题描述]`，或由 `/r-triage` 携带结构化上下文路由。
 

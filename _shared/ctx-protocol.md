@@ -56,6 +56,18 @@
 2. 找到最后一条 `status=done` 记录 → 告知用户"上一个任务已完成"并推荐下一步
 3. 文件不存在 → 若需查找跨月历史可调用 `ritsu_retrieve_memory`，否则视为全新会话，正常执行
 
+### 会话恢复行为协议 (Session Recovery Protocol)
+
+当检测到未完成任务并用户确认继续时，按以下规则恢复：
+
+1. **定位断点**：读取未完成记录的 `skill` 和 `progress` 字段
+2. **跳过已完成步骤**：若 `progress` 标记了 chunk（如 `dev:chunk2/5`），则从 chunk 3 开始，跳过 chunk 1-2
+3. **无 progress 时**：从该 skill 的 Step 1 重新开始（保守策略，避免跳步导致状态不一致）
+4. **恢复后首行输出**：
+   ```
+   🔄 会话恢复: /r-{skill} | 断点: {progress 或 Step 1} | 领域: {domain}
+   ```
+
 ### 文件管理与长期记忆检索 (Local RAG)
 
 - `.ritsu/ctx-{YYYY-MM}.jsonl` 只追加，不修改历史记录（append-only）。

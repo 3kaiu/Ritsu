@@ -1,6 +1,6 @@
 ---
 name: dev
-version: "3.3.0"
+version: "3.3.1"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
 token_budget: 8000
@@ -22,17 +22,6 @@ hard_constraints:
 
 # Dev: 领域严苛的纯净编码 (Adaptive Implementation)
 
-## ⚡ 执行前必读
-
-| ID   | 约束                       | 违反后果           |
-| ---- | -------------------------- | ------------------ |
-| HC-1 | 标识符引用前必须 grep 验证 | 终止交付           |
-| HC-2 | 不得有任何占位符           | 终止交付           |
-| HC-3 | 不超出 Handoff 范围        | 警告，在摘要中标注 |
-| HC-4 | 大任务必须分块降维执行     | 终止，报错重试     |
-
----
-
 **触发条件**：用户输入 `/r-dev`。
 
 ## 执行流水线
@@ -53,12 +42,6 @@ hard_constraints:
 - **多个文件** → 列出文件名+修改时间，默认最新，告知用户可指定其他
 - **用户已指定文件** → 直接读取指定文件
 - **无文件** → 继续执行，在交付摘要注明"无 Handoff 溯源（风险已知悉）"
-
-写入 ctx-{YYYY-MM}.jsonl（调用 **`ritsu_write_artifact`** type=ctx）：
-
-```
-{"ts":"{timestamp}","skill":"dev","domain":"{value}","status":"started","artifact":null}
-```
 
 ### 2. 领域专属编码纪律
 

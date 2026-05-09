@@ -1,6 +1,6 @@
 ---
 name: init
-version: "3.3.0"
+version: "3.3.1"
 description: "Ritsu 初始化协议。扫描项目架构、提取技术栈与规范，生成 AGENTS.md。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
 token_budget: 4000
@@ -17,16 +17,6 @@ hard_constraints:
 ---
 
 # Init: 初始化项目约束基线 (Project Foundation)
-
-## ⚡ 执行前必读
-
-| ID   | 约束                        | 违反后果 |
-| ---- | --------------------------- | -------- |
-| HC-1 | 不写业务代码，不改业务文件  | 终止     |
-| HC-2 | 覆盖前识别异构并提供选项    | 终止     |
-| HC-3 | 禁止在 AGENTS.md 中留空字段 | 终止     |
-
----
 
 **触发条件**：用户输入 `/r-init` 或指明需要初始化。
 

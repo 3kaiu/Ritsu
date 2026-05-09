@@ -1,6 +1,6 @@
 ---
 name: think
-version: "3.3.0"
+version: "3.3.1"
 description: "Ritsu 领域自适应需求评审与架构设计。强制拆分为评审阶段和设计阶段，输出防腐 Handoff 文件。"
 when_to_use: "/r-think, 设计方案, 怎么做, 要不要做, 分析一下, 看看这个 PRD"
 token_budget: 10000
@@ -18,16 +18,6 @@ hard_constraints:
 ---
 
 # Think: 领域自适应需求评审与架构设计
-
-## ⚡ 执行前必读
-
-| ID   | 约束                       | 违反后果             |
-| ---- | -------------------------- | -------------------- |
-| HC-1 | Phase A 后强制停止等待确认 | 终止，回退到 Phase A |
-| HC-2 | Handoff 无占位符           | 拒绝写入文件         |
-| HC-3 | 文件名 kebab-slug          | 警告并修正           |
-
----
 
 **触发条件**：用户输入 `/r-think`。
 
@@ -120,7 +110,35 @@ hard_constraints:
 
 命名规则：需求描述前 3 个有效英文关键词 → kebab-case（如 `handoff-user-login-flow.md`）
 
-调用 **`ritsu_write_artifact`**（type=handoff）写入，Schema 引用 `_shared/artifact-schema.yaml` Schema 1。
+调用 **`ritsu_write_artifact`**（type=handoff）写入，按以下骨架构造内容：
+
+```markdown
+# {需求标题}
+
+## 边界与依赖
+
+- **目标范围 (In Scope)**: {列出}
+- **Out of Scope**: {列出，禁止模糊}
+- **新增依赖**: {名称/版本/License/体积 或 '无'}
+
+## 核心契约 (Contract)
+
+{按 domain 条件选择：backend→api_contract+data_model / frontend→component_contract / fullstack→两者}
+
+## 攻击测试防线
+
+- **宕机响应**: {外部依赖 502 降级方案}
+- **10x 瓶颈**: {流量放大 10 倍最先撑爆的点及缓解措施}
+- **回滚步骤**: {逐步骤列出回滚指令}
+
+## 实施清单
+
+- [ ] `{文件路径}`: {主干逻辑描述，精确到函数/组件级别}
+
+## Changelog
+
+- [{YYYYMMDD-HHMMSS}] /r-think: 初始设计（偏离原因：N/A）
+```
 
 写入完成后更新 ctx：
 
