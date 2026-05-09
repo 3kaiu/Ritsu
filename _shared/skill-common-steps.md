@@ -16,7 +16,7 @@
 
 解析完成后，调用 `ritsu_write_artifact`（type=ctx, filename=ctx-{YYYY-MM}.jsonl）追加：
 
-```json
+```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
   "skill": "{skill_name}",
@@ -37,7 +37,7 @@
 
 **完成时**：
 
-```json
+```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
   "skill": "{skill_name}",
@@ -50,7 +50,7 @@
 
 **失败时**：
 
-```json
+```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
   "skill": "{skill_name}",

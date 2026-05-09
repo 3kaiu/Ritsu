@@ -1,4 +1,4 @@
-# Ritsu 全局状态机 v3.3.0
+# Ritsu 全局状态机 v3.3.1
 # 定义技能间的合法流转路径、熔断规则与标准引导话术。
 # AI 执行流转判定时，必须查询此文件的 states.{current}.next 确认合法性。
 
@@ -6,11 +6,10 @@ states:
   route:
     next: [init, think, dev, hunt, review, optimize, triage]
   init:
-    next: [route, think, dev]
+    next: [route, think]
     hint:
       route: "不确定下一步"
       think: "新需求"
-      dev: "有明确任务"
   think:
     next: [dev, think]
     note: "循环允许（方案被否决时重新设计）"

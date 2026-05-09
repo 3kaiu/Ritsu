@@ -4,6 +4,7 @@
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
 #
 # ⚠️ 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
+# call_template 是 input 的快捷视图（DRY），若两者冲突以 input 为准。
 
 tools:
   - name: ritsu_get_changed_files

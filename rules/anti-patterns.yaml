@@ -1,4 +1,4 @@
-# Anti-Patterns: 全局底线约束 v3.3.0
+# Anti-Patterns: 全局底线约束 v3.3.1
 # 这些规则是不可跨越的底线，无论你当前正在执行哪个技能，都必须无条件遵守。
 # 每条规则有唯一 ID，AI 在输出中必须引用 ID 而非模糊描述。
 
@@ -32,6 +32,7 @@ global:
     name: Placeholder promises
     pattern: "在交付的代码或设计方案中留下 TODO/TBD/后续实现字样"
     enforcement: "必须一次性完成具体实现或指明阻碍的具体原因"
+    exemption: "Schema 0 (AGENTS.md) 的 '待补充' 占位符豁免此规则——init 阶段半成品允许占位，后续技能发现时应提示补充"
     severity: FATAL
   - id: AP-7
     name: Silent failures

@@ -1,6 +1,6 @@
 # 情景记忆持久化协议 (Context Protocol)
 
-> Ritsu Bundle 共享协议 v3.3.0
+> Ritsu Bundle 共享协议 v3.3.1
 > 解决问题：会话重置后 AI 丢失当前任务上下文（任务在哪一步、领域是什么、产物在哪里）
 
 ---
@@ -66,7 +66,7 @@
 
 每月最后一天（或当月 ctx 文件记录超过 50 条时），在 `ritsu_read_ctx` 返回结果中自动附加摘要行：
 
-```json
+```jsonl
 {
   "ts": "20260531-235900",
   "skill": "_summary",
@@ -86,7 +86,10 @@
       "hunt": 1,
       "optimize": 2
     },
-    "domains": { "frontend": 8, "backend": 4 }
+    "domains": {
+      "frontend": 8,
+      "backend": 4
+    }
   }
 }
 ```
