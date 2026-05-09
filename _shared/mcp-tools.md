@@ -115,6 +115,7 @@
     "content": "文件内容（必须符合 artifact-schema.md 对应 Schema）"
   },
   "validation": "写入前检查内容是否包含 TODO/待定/暂不处理 等占位符，发现则拒绝写入并报错",
+  "concurrency_control": "⚠️ 若写入目标为 ctx.md 等多进程共享文件，底层必须实现【原子追加锁 (Atomic Append Mutex)】。检测到文件被锁定时应指数退避重试，严禁在无锁状态下并发覆写导致文件撕裂。",
   "returns": {
     "path": "写入成功的完整文件路径",
     "size_bytes": "文件大小"
