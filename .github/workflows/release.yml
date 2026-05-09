@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM
+        run: |
+          cd runtime/core
+          wasm-pack build --target nodejs --release --out-dir ../pkg
+
+      - name: Package WASM for release
+        run: |
+          mkdir -p /tmp/ritsu-wasm
+          cp -r runtime/pkg/* /tmp/ritsu-wasm/
+          cd /tmp
+          tar -czf ritsu-core-wasm.tar.gz ritsu-wasm/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: /tmp/ritsu-core-wasm.tar.gz
+          generate_release_notes: true

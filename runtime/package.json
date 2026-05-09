@@ -1,7 +1,7 @@
 {
   "name": "ritsu-mcp-server",
-  "version": "3.5.0",
-  "description": "Ritsu MCP Server — 将协议声明编译为可运行的 MCP 工具服务",
+  "version": "3.5.1",
+  "description": "Ritsu MCP Server SDK — 结构化 I/O 原语，供 AI 技能调用",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
