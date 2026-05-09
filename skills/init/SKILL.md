@@ -70,7 +70,13 @@ hard_constraints:
   ```
   保留原文件其余部分不变，调用文件写入工具完成无损注入。
 
-### 5. IDE 路由挂载
+### 5. Git 污染防范 (Git History Pollution)
+必须防止 Ritsu 产生的对话产物被意外提交。
+- 检查项目根目录是否存在 `.gitignore` 文件。
+- 如果存在，读取并检查是否已包含 `ritsu/`（忽略整行匹配）。
+- 如果未包含或 `.gitignore` 不存在，使用工具自动向 `.gitignore` 文件末尾追加一行 `ritsu/`，并向用户提示已保护 Git 历史。
+
+### 6. IDE 路由挂载
 询问用户："请确认当前使用的 IDE（Cursor / Windsurf / 两者都要 / 跳过）？"
 - Cursor → 生成 `.cursorrules`
 - Windsurf → 生成 `.windsurfrules`
@@ -86,7 +92,7 @@ Ritsu Bundle v3.0 已激活。
   /r-route /r-init /r-think /r-dev /r-review /r-hunt /r-triage
 ```
 
-### 6. 写入 ctx.md
+### 7. 写入 ctx.md
 调用 **`ritsu_write_artifact`**（type=ctx）追加：
 ```
 {timestamp} | init | domain={value} | done | AGENTS.md

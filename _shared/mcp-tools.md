@@ -62,7 +62,7 @@
     "identifier": "要验证的函数名/变量名/组件名",
     "extensions": "文件后缀列表，如 ['.go', '.ts']"
   },
-  "command_template": "grep -r \"{identifier}\" . --include=\"*{ext}\" -l",
+  "command_template": "grep -r \"{identifier}\" . --include=\"*{ext}\" --exclude-dir={node_modules,.git,dist,build,out,vendor} -l",
   "returns": {
     "exists": "boolean",
     "found_in": ["找到该标识符的文件路径列表"]
@@ -146,7 +146,7 @@
 ```json
 {
   "name": "ritsu_read_ctx",
-  "description": "读取 ritsu/ctx.md，解析最近的任务状态，用于会话恢复",
+  "description": "读取 ritsu/ctx.md，解析最近的任务状态，用于会话恢复。⚠️ 必须使用 tail 机制（如 tail -n 20），仅截取最后 20 条记录，严禁全量加载引发上下文 Token 爆炸。",
   "returns": {
     "last_incomplete": "最后一条 started 但没有 done/failed 的记录，或 null",
     "last_completed": "最后一条 done 记录，或 null",
