@@ -13,6 +13,9 @@ hard_constraints:
   - id: HC-3
     rule: "不得修改 Handoff 实施清单范围之外的内容"
     severity: WARN
+  - id: HC-4
+    rule: "当实施清单超过 3 项时，严禁一次性全量输出代码。必须强制分块（每次≤2项），并在块间执行验证与用户确认"
+    severity: FATAL
 ---
 
 # Dev: 领域严苛的纯净编码 (Adaptive Implementation)
@@ -23,6 +26,7 @@ hard_constraints:
 | HC-1 | 标识符引用前必须 grep 验证 | 终止交付 |
 | HC-2 | 不得有任何占位符 | 终止交付 |
 | HC-3 | 不超出 Handoff 范围 | 警告，在摘要中标注 |
+| HC-4 | 大任务必须分块降维执行 | 终止，报错重试 |
 
 ---
 
@@ -30,10 +34,13 @@ hard_constraints:
 
 ## 执行流水线
 
-### 1. 领域解析与 Handoff 溯源
+### 1. 领域解析与零点击寻址 (Zero-Click Context Binding)
 > 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
 
-调用 **`ritsu_list_artifacts`**（type=handoff）：
+**隐式绑定优先**：首先检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何 `handoff-*.md` 或 `diagnosis-*.md` 文件。
+- **若有** → 直接将其认定为本次 `dev` 的执行目标，跳过询问！并在输出中注明"已根据 IDE 焦点自动锁定目标文件"。
+
+若未发现 IDE 焦点文件，则调用 **`ritsu_list_artifacts`**（type=handoff）：
 - **单个文件** → 读取，严格按实施清单执行
 - **多个文件** → 列出文件名+修改时间，默认最新，告知用户可指定其他
 - **用户已指定文件** → 直接读取指定文件
@@ -66,10 +73,13 @@ hard_constraints:
      等待用户指示，不自行补全
 ```
 
-### 4. 测试先行
-编写业务逻辑前，先写出验证手段：
-- 单测用例（至少覆盖正常路径 + 一个边界 case）
-- 或可执行的 `curl` / UI 验证步骤
+### 4. 降维分块执行与测试先行 (Chunked Execution)
+分析需要实现的任务清单总数：
+- **若清单项 ≤ 3**：可全量执行，但在编写业务逻辑前，先写出验证手段（单测用例、curl 或 UI 验证步骤）。
+- **若清单项 > 3**（触发 HC-4 强制约束）：
+  1. **截断**：仅选取前 1-2 项核心逻辑执行。
+  2. **验证**：调用 `ritsu_run_quality_gates` 跑通当前的 Lint/Test。
+  3. **断点确认**：输出 `[暂停点]` 总结当前进度，明确询问用户："第一批次已无损跑通，是否继续下一批次？" 严禁一次性输出所有代码导致幻觉翻车。
 
 ### 5. 沙盒自查清单（按优先级）
 - [ ] HC-1：所有外部标识符均已通过 `ritsu_grep_identifier` 验证

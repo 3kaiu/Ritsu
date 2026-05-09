@@ -12,10 +12,10 @@
 ```json
 {
   "name": "ritsu_get_changed_files",
-  "description": "同时检查 git 工作区（unstaged）和暂存区（staged）的变更文件列表，合并去重后返回",
+  "description": "同时检查 git 工作区（unstaged）和暂存区（staged）的变更文件列表，合并去重后返回。⚠️ 必须使用 pathspec 排除大文件与生成物以防 Token 爆炸。",
   "commands": [
-    "git diff --name-only",
-    "git diff --name-only --cached"
+    "git diff --name-only -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'",
+    "git diff --name-only --cached -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
   ],
   "returns": {
     "files": ["相对路径列表"],
@@ -35,10 +35,10 @@
 ```json
 {
   "name": "ritsu_get_diff",
-  "description": "获取工作区和暂存区的完整 diff，用于代码审查",
+  "description": "获取工作区和暂存区的完整 diff，用于代码审查。⚠️ 必须过滤无关大文件以防 Token OOM。",
   "commands": [
-    "git diff",
-    "git diff --cached"
+    "git diff -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'",
+    "git diff --cached -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
   ],
   "returns": {
     "diff_content": "完整 diff 文本"

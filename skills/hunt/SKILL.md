@@ -38,14 +38,18 @@ hard_constraints:
 {timestamp} | hunt | domain={value} | started | none
 ```
 
-### 2. 证据抓取
+### 2. 零点击上下文绑定 (Zero-Click Context Binding)
+**隐式绑定优先**：检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何错误日志文件、Issue 描述文档或历史 `diagnosis-*.md` 文件。
+- **若有** → 直接读取当前激活的焦点文件内容作为诊断的初始上下文，跳过向用户索要报错信息，并在输出中注明"已根据 IDE 焦点自动提取报错上下文"。
+
+### 3. 证据抓取
 **frontend**：浏览器控制台完整堆栈 / 网络面板状态码+响应体 / DevTools 状态快照 / Hydration 特征 / CORS 响应头
 
 **backend**：完整报错堆栈（含线程/goroutine 信息）/ DB 连接池状态 / 内存与 GC 曲线 / 上游服务响应延迟
 
 **infra/data**：变更前后状态文件 diff / CI 日志完整输出 / 资源依赖图失败节点
 
-### 3. 建立 MECE 假设（HC-2 执行协议）
+### 4. 建立 MECE 假设（HC-2 执行协议）
 提出 1-3 个假设，**每条必须满足**：
 - **互斥**：假设 A 成立可排除 B（死锁 vs 连接池耗尽是两个独立原因，不是子集关系）
 - **有排除条件**：明确说明哪个验证结果可以排除此假设
@@ -63,7 +67,7 @@ hard_constraints:
 
 **backend 参考方向**：DB 死锁（SHOW ENGINE INNODB STATUS）/ 连接池耗尽（检查池配置与活跃数）/ OOM（内存趋势）/ 事务隔离级别（幻读/不可重复读）
 
-### 4. 探针验证（按置信度从高到低）
+### 5. 探针验证（按置信度从高到低）
 逐个验证，每个假设验证后输出明确结论：
 ```
 假设 #1 验证：执行了 [命令]，结果为 [...]
@@ -81,7 +85,7 @@ hard_constraints:
 等待用户补充后，回到步骤 2，不输出任何推测性结论。
 ```
 
-### 5. 写入诊断报告
+### 6. 写入诊断报告
 调用 **`ritsu_write_artifact`**（type=diagnosis），文件路径：`ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`
 
 按 `_shared/artifact-schema.md` Schema 2 格式写入。
