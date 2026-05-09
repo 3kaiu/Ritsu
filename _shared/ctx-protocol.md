@@ -34,18 +34,18 @@
 **基础示例（3 态，向后兼容）**：
 
 ```jsonl
-{"ts":"20260509-145000","skill":"think","domain":"backend","status":"started","step":"1/4","artifact":null,"progress":null}
-{"ts":"20260509-145010","skill":"think","domain":"backend","status":"step_done","step":"1/4","artifact":null,"progress":null,"duration_ms":500}
-{"ts":"20260509-145020","skill":"think","domain":"backend","status":"step_done","step":"2/4","artifact":null,"progress":null,"duration_ms":1200}
-{"ts":"20260509-145030","skill":"think","domain":"backend","status":"artifact_written","step":"3/4","artifact":".ritsu/handoff-user-login-flow.md","progress":null,"artifact_meta":{"type":"handoff","size_bytes":2340,"summary":"用户登录流程设计，含 5 个实施项"}}
-{"ts":"20260509-145040","skill":"think","domain":"backend","status":"done","step":"4/4","artifact":".ritsu/handoff-user-login-flow.md","progress":null,"duration_ms":3200}
+{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started","step":"1/4","artifact":null,"progress":null}
+{"ts":"20260509-145010","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"step_done","step":"1/4","artifact":null,"progress":null,"duration_ms":500}
+{"ts":"20260509-145020","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"step_done","step":"2/4","artifact":null,"progress":null,"duration_ms":1200}
+{"ts":"20260509-145030","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"artifact_written","step":"3/4","artifact":".ritsu/handoff-user-login-flow.md","progress":null,"artifact_meta":{"type":"handoff","size_bytes":2340,"summary":"用户登录流程设计，含 5 个实施项"}}
+{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"done","step":"4/4","artifact":".ritsu/handoff-user-login-flow.md","progress":null,"duration_ms":3200}
 ```
 
 **审批事件示例**：
 
 ```jsonl
-{"ts":"20260509-145030","skill":"dev","domain":"backend","status":"approval_required","step":"3/5","artifact":null,"progress":null,"approval":{"type":"confirm","title":"确认删除以下未引用文件","options":["全部确认","仅删除安全项","取消"],"context":{"files":["utils/old-helper.ts","types/deprecated.d.ts"]}}}
-{"ts":"20260509-145040","skill":"dev","domain":"backend","status":"approval_granted","step":"3/5","artifact":null,"progress":null,"approval":{"choice":"全部确认"}}
+{"ts":"20260509-145030","correlation_id":"cid-20260509-001","skill":"dev","domain":"backend","status":"approval_required","step":"3/5","artifact":null,"progress":null,"approval":{"type":"confirm","title":"确认删除以下未引用文件","options":["全部确认","仅删除安全项","取消"],"context":{"files":["utils/old-helper.ts","types/deprecated.d.ts"]}}}
+{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"dev","domain":"backend","status":"approval_granted","step":"3/5","artifact":null,"progress":null,"approval":{"choice":"全部确认"}}
 ```
 
 **熔断事件示例**：
@@ -53,6 +53,7 @@
 ```jsonl
 {
   "ts": "20260509-152000",
+  "correlation_id": "cid-20260509-001",
   "skill": "review",
   "domain": "backend",
   "status": "circuit_breaker",
@@ -69,6 +70,7 @@
 ```jsonl
 {
   "ts": "20260509-145030",
+  "correlation_id": "cid-20260509-001",
   "skill": "dev",
   "domain": "backend",
   "status": "step_failed",
@@ -87,21 +89,22 @@
 
 **字段说明**：
 
-| 字段            | 类型         | 必填 | 说明                                                                                            |
-| --------------- | ------------ | ---- | ----------------------------------------------------------------------------------------------- |
-| `ts`            | string       | ✅   | `YYYYMMDD-HHMMSS` 格式时间戳                                                                    |
-| `skill`         | string       | ✅   | 技能名：route/init/think/dev/optimize/review/hunt/triage                                        |
-| `domain`        | string       | ✅   | 领域值：frontend/backend/fullstack/infra/data                                                   |
-| `status`        | enum         | ✅   | 见上方事件类型表                                                                                |
-| `step`          | string       | ⚠️   | 格式 `{current}/{total}`（如 `2/5`），step*done/step_failed/approval*\*/artifact_written 时必填 |
-| `artifact`      | string\|null | ✅   | 产物文件路径，无则为 `null`                                                                     |
-| `progress`      | string\|null |      | 执行进度标记（如 `dev:chunk2/5`），仅 `started` 状态需要，`done`/`failed` 时为 `null`           |
-| `duration_ms`   | number       |      | 步骤/技能耗时毫秒，step_done/done 时可选                                                        |
-| `error`         | string       |      | step_failed/failed/circuit_breaker 时必填，一句话错误描述                                       |
-| `approval`      | object       |      | approval_required/granted/denied 时必填，见审批协议                                             |
-| `artifact_meta` | object       |      | artifact_written 时必填，见产物元数据                                                           |
-| `violation`     | object       |      | step_failed 且由 anti-pattern 触发时可选，见 violation 协议                                     |
-| `redirect`      | string       |      | circuit_breaker 时必填，重定向目标技能名                                                        |
+| 字段             | 类型         | 必填 | 说明                                                                                            |
+| ---------------- | ------------ | ---- | ----------------------------------------------------------------------------------------------- |
+| `ts`             | string       | ✅   | `YYYYMMDD-HHMMSS` 格式时间戳                                                                    |
+| `correlation_id` | string       | ✅   | 任务链路关联 ID（格式 `cid-{YYYYMMDD}-{seq}`），由 route 生成，同链路技能继承                   |
+| `skill`          | string       | ✅   | 技能名：route/init/think/dev/optimize/review/hunt/triage                                        |
+| `domain`         | string       | ✅   | 领域值：frontend/backend/fullstack/infra/data                                                   |
+| `status`         | enum         | ✅   | 见上方事件类型表                                                                                |
+| `step`           | string       | ⚠️   | 格式 `{current}/{total}`（如 `2/5`），step*done/step_failed/approval*\*/artifact_written 时必填 |
+| `artifact`       | string\|null | ✅   | 产物文件路径，无则为 `null`                                                                     |
+| `progress`       | string\|null |      | 执行进度标记（如 `dev:chunk2/5`），仅 `started` 状态需要，`done`/`failed` 时为 `null`           |
+| `duration_ms`    | number       |      | 步骤/技能耗时毫秒，step_done/done 时可选                                                        |
+| `error`          | string       |      | step_failed/failed/circuit_breaker 时必填，一句话错误描述                                       |
+| `approval`       | object       |      | approval_required/granted/denied 时必填，见审批协议                                             |
+| `artifact_meta`  | object       |      | artifact_written 时必填，见产物元数据                                                           |
+| `violation`      | object       |      | step_failed 且由 anti-pattern 触发时可选，见 violation 协议                                     |
+| `redirect`       | string       |      | circuit_breaker 时必填，重定向目标技能名                                                        |
 
 **审批协议字段 (approval)**：
 

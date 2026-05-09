@@ -4,6 +4,7 @@ version: "3.4.0"
 description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能，建立全局会话上下文。"
 when_to_use: "/r-route, 我不知道该用哪个命令, 帮我决定, 从哪开始"
 token_budget: 3000
+total_steps: 5
 hard_constraints:
   - id: HC-1
     rule: "只做调度决策，不执行任何实质性的开发/设计/诊断工作"

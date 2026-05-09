@@ -11,7 +11,7 @@
 每个技能的输出必须遵循以下格式约束，禁止自由格式输出：
 
 1. **步骤输出**：每个 `[Step N Complete]` 后必须输出该步骤的结论摘要（≤3 行），禁止输出中间推理过程
-2. **步骤事件**：每个步骤完成/失败时，追加 `step_done`/`step_failed` 事件到 ctx（见 Step 1/2）
+2. **步骤事件**：每个 `[Step N Complete]` 标记同时，必须追加 `step_done` 事件到 ctx（见 Step 2）。`[Step N Complete]` 是人读锚点，`step_done` 是机读事件，两者必须成对出现
 3. **交付输出**：技能结束时必须输出标准交付块（见各 SKILL.md 末尾的交付摘要模板）
 4. **错误输出**：遇到失败时必须输出结构化错误块：
    ```
@@ -54,6 +54,7 @@
 ```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
+  "correlation_id": "{cid}",
   "skill": "{skill_name}",
   "domain": "{value}",
   "status": "started",
@@ -64,6 +65,7 @@
 ```
 
 `step` 格式为 `{current}/{total}`（如 `1/5`），`progress` 仅分块执行时填写（如 dev:chunk2/5、optimize:item3/8），否则为 `null`。
+`correlation_id` 由 route 技能生成（格式 `cid-{YYYYMMDD}-{seq}`），同链路技能继承此 ID，用于 UI 关联同一任务链路的所有事件。
 
 ---
 
@@ -74,7 +76,7 @@
 每个步骤完成后，调用 `ritsu_write_artifact`（type=ctx）追加：
 
 ```jsonl
-{"ts":"{YYYYMMDD-HHMMSS}","skill":"{skill_name}","domain":"{value}","status":"step_done","step":"{N}/{M}","artifact":null,"progress":null,"duration_ms":{耗时毫秒}}
+{"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"step_done","step":"{N}/{M}","artifact":null,"progress":null,"duration_ms":{耗时毫秒}}
 ```
 
 ### 产物写入时
@@ -82,7 +84,7 @@
 调用 `ritsu_write_artifact` 写入产物文件后，追加：
 
 ```jsonl
-{"ts":"{YYYYMMDD-HHMMSS}","skill":"{skill_name}","domain":"{value}","status":"artifact_written","step":"{N}/{M}","artifact":"{产物路径}","progress":null,"artifact_meta":{"type":"{产物类型}","size_bytes":{大小},"summary":"{一句话摘要}"}}
+{"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"artifact_written","step":"{N}/{M}","artifact":"{产物路径}","progress":null,"artifact_meta":{"type":"{产物类型}","size_bytes":{大小},"summary":"{一句话摘要}"}}
 ```
 
 ### 步骤失败时
@@ -90,6 +92,7 @@
 ```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
+  "correlation_id": "{cid}",
   "skill": "{skill_name}",
   "domain": "{value}",
   "status": "step_failed",
@@ -124,7 +127,7 @@
 ### 技能完成时
 
 ```jsonl
-{"ts":"{YYYYMMDD-HHMMSS}","skill":"{skill_name}","domain":"{value}","status":"done","step":"{M}/{M}","artifact":"{产物路径或null}","progress":null,"duration_ms":{总耗时毫秒}}
+{"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"done","step":"{M}/{M}","artifact":"{产物路径或null}","progress":null,"duration_ms":{总耗时毫秒}}
 ```
 
 ### 技能失败时
@@ -132,6 +135,7 @@
 ```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
+  "correlation_id": "{cid}",
   "skill": "{skill_name}",
   "domain": "{value}",
   "status": "failed",
@@ -170,6 +174,7 @@ triage → hunt / think / review / optimize
 ```jsonl
 {
   "ts": "{YYYYMMDD-HHMMSS}",
+  "correlation_id": "{cid}",
   "skill": "{skill_name}",
   "domain": "{value}",
   "status": "circuit_breaker",

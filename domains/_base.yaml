@@ -1,4 +1,4 @@
-# Domain: Base (通用基线) v3.3.0
+# Domain: Base (通用基线) v3.4.0
 # 所有领域配置隐式继承本基线。领域文件中不得重复声明以下内容。
 
 domain_interface_contract:

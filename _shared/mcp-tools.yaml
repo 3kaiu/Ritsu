@@ -159,7 +159,7 @@ tools:
       examples:
         - type: ctx
           filename: "ctx-2026-05.jsonl"
-          content: '{"ts":"20260509-145000","skill":"dev","domain":"frontend","status":"started","step":"1/5","artifact":null,"progress":null}'
+          content: '{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"dev","domain":"frontend","status":"started","step":"1/5","artifact":null,"progress":null}'
           html_content: null
           artifact_meta: null
         - type: handoff
@@ -268,6 +268,7 @@ tools:
           type: object
           description: "最后一条 started 但没有 done/failed 的记录，或 null"
           properties:
+            correlation_id: { type: string, description: "任务链路关联 ID" }
             skill: { type: string }
             domain: { type: string }
             step: { type: string, description: "当前步骤，如 2/5" }
@@ -276,6 +277,7 @@ tools:
           type: object
           description: "最后一条 done 记录，或 null"
           properties:
+            correlation_id: { type: string, description: "任务链路关联 ID" }
             skill: { type: string }
             domain: { type: string }
             artifact: { type: string }
@@ -287,6 +289,7 @@ tools:
             type: object
             properties:
               ts: { type: string }
+              correlation_id: { type: string, description: "任务链路关联 ID" }
               skill: { type: string }
               domain: { type: string }
               status: { type: string }

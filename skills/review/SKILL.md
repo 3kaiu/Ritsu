@@ -4,6 +4,7 @@ version: "3.4.0"
 description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
 token_budget: 6000
+total_steps: 5
 required_sections: [attack_vectors, coding_disciplines]
 hard_constraints:
   - id: HC-1

@@ -4,6 +4,7 @@ version: "3.4.0"
 description: "Ritsu 初始化协议。扫描项目架构、提取技术栈与规范，生成 AGENTS.md。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
 token_budget: 4000
+total_steps: 7
 hard_constraints:
   - id: HC-1
     rule: "不写业务代码，不修改任何现有业务文件"
@@ -85,7 +86,7 @@ hard_constraints:
 配置内容：
 
 ```
-Ritsu Bundle v3.3 已激活。
+Ritsu Bundle v3.4 已激活。
 全局规则：~/.gemini/antigravity/skills/Ritsu/
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：

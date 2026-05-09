@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ritsu-ctx-event",
+  "title": "Ritsu Context Event",
+  "description": "v3.4.0 — Ritsu ctx JSONL 事件 Schema。每行一条记录，追加不覆盖。",
+  "type": "object",
+  "required": ["ts", "correlation_id", "skill", "domain", "status"],
+  "properties": {
+    "ts": {
+      "type": "string",
+      "pattern": "^\\d{8}-\\d{6}$",
+      "description": "YYYYMMDD-HHMMSS 格式时间戳"
+    },
+    "correlation_id": {
+      "type": "string",
+      "pattern": "^cid-\\d{8}-\\d+$",
+      "description": "任务链路关联 ID，由 route 生成，同链路技能继承"
+    },
+    "skill": {
+      "type": "string",
+      "enum": ["route", "init", "think", "dev", "optimize", "review", "hunt", "triage", "_summary"],
+      "description": "技能名"
+    },
+    "domain": {
+      "type": "string",
+      "enum": ["frontend", "backend", "fullstack", "infra", "data", "_all"],
+      "description": "领域值"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["started", "step_done", "step_failed", "approval_required", "approval_granted", "approval_denied", "artifact_written", "circuit_breaker", "done", "failed"],
+      "description": "事件类型"
+    },
+    "step": {
+      "type": "string",
+      "pattern": "^\\d+/\\d+$",
+      "description": "格式 {current}/{total}，如 2/5"
+    },
+    "artifact": {
+      "type": ["string", "null"],
+      "description": "产物文件路径，无则为 null"
+    },
+    "progress": {
+      "type": ["string", "null"],
+      "description": "执行进度标记（如 dev:chunk2/5），仅 started 状态需要"
+    },
+    "duration_ms": {
+      "type": "integer",
+      "description": "步骤/技能耗时毫秒"
+    },
+    "error": {
+      "type": "string",
+      "description": "step_failed/failed/circuit_breaker 时必填，一句话错误描述"
+    },
+    "approval": {
+      "type": "object",
+      "description": "approval_required/granted/denied 时必填",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["confirm", "choose", "review_dangerous"],
+          "description": "审批类型"
+        },
+        "title": {
+          "type": "string",
+          "description": "审批标题"
+        },
+        "options": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "可选项列表"
+        },
+        "context": {
+          "type": "object",
+          "description": "审批上下文数据"
+        },
+        "choice": {
+          "type": "string",
+          "description": "用户选择的选项（granted 时必填）"
+        },
+        "reason": {
+          "type": "string",
+          "description": "用户拒绝原因（denied 时可选）"
+        }
+      },
+      "required": ["type", "title", "options"]
+    },
+    "artifact_meta": {
+      "type": "object",
+      "description": "artifact_written 时必填",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["handoff", "diagnosis", "review-stamp", "optimize-report", "ctx"],
+          "description": "产物类型"
+        },
+        "size_bytes": {
+          "type": "integer",
+          "description": "文件大小"
+        },
+        "summary": {
+          "type": "string",
+          "description": "一句话摘要"
+        }
+      },
+      "required": ["type", "size_bytes", "summary"]
+    },
+    "violation": {
+      "type": "object",
+      "description": "step_failed 且由 anti-pattern 触发时可选",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "anti-pattern ID（如 AP-2、R-3）"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["FATAL", "WARN", "HARD_STOP"],
+          "description": "严重度"
+        },
+        "pattern": {
+          "type": "string",
+          "description": "违反的模式名称"
+        },
+        "evidence": {
+          "type": "string",
+          "description": "具体证据描述"
+        }
+      },
+      "required": ["id", "severity", "pattern", "evidence"]
+    },
+    "redirect": {
+      "type": "string",
+      "description": "circuit_breaker 时必填，重定向目标技能名"
+    },
+    "summary": {
+      "type": "object",
+      "description": "月度摘要数据（仅 _summary 事件）",
+      "properties": {
+        "month": { "type": "string" },
+        "tasks_total": { "type": "integer" },
+        "tasks_done": { "type": "integer" },
+        "tasks_failed": { "type": "integer" },
+        "skills_used": { "type": "object" },
+        "domains": { "type": "object" }
+      }
+    }
+  },
+  "if-then": [
+    {
+      "if": { "properties": { "status": { "const": "step_done" } } },
+      "then": { "required": ["step"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "step_failed" } } },
+      "then": { "required": ["step", "error"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "approval_required" } } },
+      "then": { "required": ["step", "approval"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "approval_granted" } } },
+      "then": { "required": ["step", "approval"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "approval_denied" } } },
+      "then": { "required": ["step", "approval"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "artifact_written" } } },
+      "then": { "required": ["step", "artifact", "artifact_meta"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "circuit_breaker" } } },
+      "then": { "required": ["step", "error", "redirect"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "done" } } },
+      "then": { "required": ["step"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "failed" } } },
+      "then": { "required": ["error"] }
+    }
+  ]
+}
