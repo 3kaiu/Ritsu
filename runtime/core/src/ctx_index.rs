@@ -1,11 +1,10 @@
-//! ctx 索引 — JSONL 行偏移索引
+//! ctx 索引 — JSONL 条目摘要索引
 //!
 //! 替代 Node.js readFileSync + split + JSON.parse 全扫。
-//! 维护一个行偏移索引，支持 O(1) 尾部查询和 O(log n) 按条件查询。
+//! 维护解析后的条目摘要向量，支持 O(1) 尾部查询和 O(n) 按条件查询。
 //!
 //! 索引结构：
-//! - line_offsets: Vec<u64> — 每行起始字节偏移
-//! - parsed_entries: Vec<Entry> — 解析后的条目摘要（仅 skill/status/step/correlation_id）
+//! - entries: Vec<EntrySummary> — 解析后的条目摘要（skill/status/step/correlation_id 等）
 //!
 //! 写入时增量更新索引，查询时直接查索引而非重扫文件。
 
@@ -26,7 +25,6 @@ struct EntrySummary {
 
 #[derive(Debug, Default)]
 struct CtxIndex {
-    line_offsets: Vec<u64>,
     entries: Vec<EntrySummary>,
     total_lines: usize,
 }
@@ -40,19 +38,15 @@ thread_local! {
 pub fn build_index(jsonl_content: &str) -> usize {
     INDEX.with(|cell| {
         let mut idx = cell.borrow_mut();
-        idx.line_offsets.clear();
         idx.entries.clear();
         idx.total_lines = 0;
 
-        let mut offset: u64 = 0;
         for line in jsonl_content.lines() {
             let line = line.trim();
             if line.is_empty() {
-                offset += 1;
                 continue;
             }
 
-            idx.line_offsets.push(offset);
             idx.total_lines += 1;
 
             // 解析摘要字段
@@ -66,8 +60,6 @@ pub fn build_index(jsonl_content: &str) -> usize {
                 ts: None,
             });
             idx.entries.push(summary);
-
-            offset += line.len() as u64 + 1; // +1 for \n
         }
 
         idx.total_lines
@@ -79,19 +71,6 @@ pub fn build_index(jsonl_content: &str) -> usize {
 pub fn append_to_index(line_json: &str) -> usize {
     INDEX.with(|cell| {
         let mut idx = cell.borrow_mut();
-
-        // 新行偏移 = 上一行偏移 + 上一行字节长度 + 1(\n)
-        let new_offset = if let Some(&last_offset) = idx.line_offsets.last() {
-            // 找到上一行 entry 的 JSON 长度
-            let last_entry_len = idx.entries.last().map(|e| {
-                // 用序列化近似长度（精确值需要存储，此处用 line_json 近似）
-                serde_json::to_string(e).map(|s| s.len()).unwrap_or(0)
-            }).unwrap_or(0);
-            last_offset + last_entry_len as u64 + 1
-        } else {
-            0
-        };
-        idx.line_offsets.push(new_offset);
         idx.total_lines += 1;
 
         let summary: EntrySummary = serde_json::from_str(line_json).unwrap_or(EntrySummary {
@@ -201,4 +180,112 @@ pub fn reset_index() {
     INDEX.with(|cell| {
         *cell.borrow_mut() = CtxIndex::default();
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_jsonl() -> &'static str {
+        r#"{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started","step":"1/4","artifact":null,"progress":null}
+{"ts":"20260509-145010","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"step_done","step":"1/4","artifact":null,"progress":null,"duration_ms":500}
+{"ts":"20260509-145020","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"step_done","step":"2/4","artifact":null,"progress":null,"duration_ms":1200}
+{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"done","step":"4/4","artifact":".ritsu/handoff-auth.md","progress":null,"duration_ms":3200}
+{"ts":"20260509-150000","correlation_id":"cid-20260509-002","skill":"dev","domain":"frontend","status":"started","step":"1/3","artifact":null,"progress":null}
+{"ts":"20260509-150010","correlation_id":"cid-20260509-002","skill":"dev","domain":"frontend","status":"approval_required","step":"2/3","artifact":null,"progress":null,"approval":{"type":"confirm","title":"确认删除","options":["全部确认","取消"]}}"#
+    }
+
+    #[test]
+    fn test_build_index() {
+        reset_index();
+        let count = build_index(sample_jsonl());
+        assert_eq!(count, 6);
+        reset_index();
+    }
+
+    #[test]
+    fn test_append_to_index() {
+        reset_index();
+        build_index(sample_jsonl());
+        let new_count = append_to_index(
+            r#"{"ts":"20260509-151000","correlation_id":"cid-20260509-003","skill":"review","domain":"backend","status":"started","step":"1/2","artifact":null,"progress":null}"#,
+        );
+        assert_eq!(new_count, 7);
+        reset_index();
+    }
+
+    #[test]
+    fn test_query_recent() {
+        reset_index();
+        build_index(sample_jsonl());
+        let recent = query_recent(2);
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&recent).unwrap();
+        assert_eq!(parsed.len(), 2);
+        // 最后一条是 approval_required
+        assert_eq!(parsed[1]["status"].as_str().unwrap(), "approval_required");
+        reset_index();
+    }
+
+    #[test]
+    fn test_query_last_incomplete() {
+        reset_index();
+        build_index(sample_jsonl());
+        let result = query_last_incomplete();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        // cid-002 started 但没有 done/failed，应返回
+        assert_eq!(parsed["correlation_id"].as_str().unwrap(), "cid-20260509-002");
+        assert_eq!(parsed["status"].as_str().unwrap(), "started");
+        reset_index();
+    }
+
+    #[test]
+    fn test_query_last_incomplete_none() {
+        reset_index();
+        // 只有 done 事件
+        build_index(r#"{"ts":"20260509-145000","correlation_id":"cid-001","skill":"think","domain":"backend","status":"started","step":"1/1","artifact":null,"progress":null}
+{"ts":"20260509-145010","correlation_id":"cid-001","skill":"think","domain":"backend","status":"done","step":"1/1","artifact":null,"progress":null}"#);
+        let result = query_last_incomplete();
+        assert_eq!(result, "null");
+        reset_index();
+    }
+
+    #[test]
+    fn test_query_last_completed() {
+        reset_index();
+        build_index(sample_jsonl());
+        let result = query_last_completed();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["status"].as_str().unwrap(), "done");
+        assert_eq!(parsed["correlation_id"].as_str().unwrap(), "cid-20260509-001");
+        reset_index();
+    }
+
+    #[test]
+    fn test_query_pending_approvals() {
+        reset_index();
+        build_index(sample_jsonl());
+        let result = query_pending_approvals();
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["status"].as_str().unwrap(), "approval_required");
+        reset_index();
+    }
+
+    #[test]
+    fn test_index_stats() {
+        reset_index();
+        build_index(sample_jsonl());
+        let stats = index_stats();
+        assert!(stats.contains("\"total_lines\":6"));
+        assert!(stats.contains("\"indexed_entries\":6"));
+        reset_index();
+    }
+
+    #[test]
+    fn test_build_index_empty_lines() {
+        reset_index();
+        let count = build_index("\n\n  \n");
+        assert_eq!(count, 0);
+        reset_index();
+    }
 }

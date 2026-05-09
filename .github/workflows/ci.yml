@@ -16,8 +16,12 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: cd runtime && npm ci
+      - name: Version check
+        run: cd runtime && npm run version:check
       - name: Type check
         run: cd runtime && npx tsc --noEmit
+      - name: Unit tests
+        run: cd runtime && npm test
 
   check-rust:
     runs-on: ubuntu-latest

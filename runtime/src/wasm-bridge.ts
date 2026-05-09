@@ -10,31 +10,39 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-function getSharedDir(): string {
-  return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
-}
-function getPkgDir(): string {
-  return process.env.RITSU_PKG_DIR ?? resolve(__dirname, "../pkg");
-}
+import { resolve } from "node:path";
+import { getSharedDir, getPkgDir } from "../shared.js";
 
 let _wasm: any = null;
 let _wasmAvailable: boolean | null = null;
 
+// 简易异步互斥锁 — 防止并发 loadWasm 导致重复初始化
+let _loadMutex: Promise<void> = Promise.resolve();
+
 async function loadWasm(): Promise<any | null> {
   if (_wasmAvailable !== null) return _wasm;
 
-  // 检查 WASM 包是否存在
-  const wasmJsPath = resolve(getPkgDir(), "ritsu_core.js");
-  if (!existsSync(wasmJsPath)) {
-    _wasmAvailable = false;
-    return null;
-  }
+  // 串行化：等待前一个 loadWasm 完成
+  let release: () => void = () => {};
+  _loadMutex = _loadMutex.then(
+    () =>
+      new Promise<void>((r) => {
+        release = r;
+      }),
+  );
+  await _loadMutex;
 
   try {
+    // double-check：可能在等待期间已被其他调用加载
+    if (_wasmAvailable !== null) return _wasm;
+
+    // 检查 WASM 包是否存在
+    const wasmJsPath = resolve(getPkgDir(), "ritsu_core.js");
+    if (!existsSync(wasmJsPath)) {
+      _wasmAvailable = false;
+      return null;
+    }
+
     const wasmModule = await import(wasmJsPath);
     await wasmModule.default();
     _wasm = wasmModule;
@@ -55,13 +63,9 @@ async function loadWasm(): Promise<any | null> {
     console.warn(`[ritsu] WASM load failed: ${e.message}, falling back to JS`);
     _wasmAvailable = false;
     return null;
+  } finally {
+    release();
   }
-}
-
-/** WASM 是否可用 */
-export async function isWasmAvailable(): Promise<boolean> {
-  await loadWasm();
-  return _wasmAvailable === true;
 }
 
 // ─── Event Validator (WASM) ─────────────────────────────────
@@ -81,14 +85,6 @@ export async function validateEventWasm(
 }
 
 // ─── Ctx Index (WASM) ────────────────────────────────────────
-
-export async function buildIndexWasm(
-  jsonlContent: string,
-): Promise<number | null> {
-  const wasm = await loadWasm();
-  if (!wasm) return null;
-  return wasm.build_index(jsonlContent);
-}
 
 export async function appendToIndexWasm(
   lineJson: string,
@@ -153,12 +149,4 @@ export async function nextCorrelationIdWasm(
   const wasm = await loadWasm();
   if (!wasm) return null;
   return wasm.next_correlation_id(dateStr, baseSeq);
-}
-
-// ─── Info ────────────────────────────────────────────────────
-
-export async function coreVersionWasm(): Promise<string | null> {
-  const wasm = await loadWasm();
-  if (!wasm) return null;
-  return wasm.core_version();
 }

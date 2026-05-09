@@ -14,6 +14,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "version:check": "node -e \"const pkg=require('./package.json').version; const cargo=require('fs').readFileSync('core/Cargo.toml','utf8').match(/version\\s*=\\s*\\\"([^\\\"]+)\\\"/)?.[1]; if(pkg!==cargo){console.error('Version mismatch: package.json='+pkg+' Cargo.toml='+cargo);process.exit(1)}console.log('Versions aligned: '+pkg)\"",
     "build:wasm": "cd core && wasm-pack build --target nodejs --release --out-dir ../pkg",
     "postinstall": "node scripts/download-wasm.mjs"
   },

@@ -14,7 +14,7 @@
  */
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { execSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -23,7 +23,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { resolve, basename } from "node:path";
+import { resolve } from "node:path";
 import {
   appendEvent,
   readRecentEntries,
@@ -31,9 +31,16 @@ import {
   readLastIncomplete,
   getCtxFilePath,
   resetLineCount,
+  syncLineCountFromCtxFile,
   generateCorrelationId,
   getNextSeq,
 } from "../ctx-store.js";
+import {
+  ARTIFACT_VALID_TYPES,
+  ARTIFACT_PREFIX_MAP,
+  ALLOWED_BINARIES,
+  RESIDUAL_BLACKLIST,
+} from "../shared.js";
 import { validateEvent as validateEventJs } from "../event-validator.js";
 import {
   validateEventWasm,
@@ -71,28 +78,50 @@ function errorResult(msg: string): CallToolResult {
   return { content: [{ type: "text", text: `❌ ${msg}` }], isError: true };
 }
 
-function runCmd(
+async function runCmd(
   cmd: string,
   maxLines = 200,
   timeoutMs = 30_000,
   maxBufferMb = 10,
-): { ok: boolean; output: string } {
-  try {
-    const raw = execSync(cmd, {
+): Promise<{ ok: boolean; output: string }> {
+  return new Promise((resolve) => {
+    const child = spawn("sh", ["-c", cmd], {
       cwd: getProjectRoot(),
-      encoding: "utf-8",
-      timeout: timeoutMs,
-      maxBuffer: maxBufferMb * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
     });
-    const lines = raw.trim().split("\n");
-    const truncated = lines.length > maxLines;
-    const output = truncated
-      ? lines.slice(0, maxLines).join("\n") + "\n⚠️ 输出已截断"
-      : raw;
-    return { ok: true, output };
-  } catch (e: any) {
-    return { ok: false, output: e.stdout ?? e.message ?? String(e) };
-  }
+
+    let stdout = "";
+    let stderr = "";
+    const maxBytes = maxBufferMb * 1024 * 1024;
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      if (stdout.length < maxBytes) stdout += chunk.toString("utf-8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      if (stderr.length < maxBytes) stderr += chunk.toString("utf-8");
+    });
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      resolve({ ok: false, output: stdout || stderr || "timeout" });
+    }, timeoutMs);
+
+    child.on("close", (code: number | null) => {
+      clearTimeout(timer);
+      const raw = (code === 0 ? stdout : stderr || stdout).trim();
+      const lines = raw.split("\n");
+      const truncated = lines.length > maxLines;
+      const output = truncated
+        ? lines.slice(0, maxLines).join("\n") + "\n⚠️ 输出已截断"
+        : raw;
+      resolve({ ok: code === 0, output });
+    });
+
+    child.on("error", (err: Error) => {
+      clearTimeout(timer);
+      resolve({ ok: false, output: err.message });
+    });
+  });
 }
 
 // ─── Handlers ────────────────────────────────────────────────
@@ -127,8 +156,16 @@ async function ritsu_emit_event(
   };
 
   if (step) event.step = step;
-  if (params.artifact) event.artifact = params.artifact;
-  if (params.progress) event.progress = params.progress;
+  if (params.artifact !== undefined) {
+    event.artifact = params.artifact;
+  } else {
+    event.artifact = null;
+  }
+  if (params.progress !== undefined) {
+    event.progress = params.progress;
+  } else {
+    event.progress = null;
+  }
   if (params.error) event.error = String(params.error);
   if (params.approval) event.approval = params.approval;
   if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
@@ -148,13 +185,15 @@ async function ritsu_emit_event(
 
   const result = appendEvent(root, event);
 
-  // WASM 索引增量更新 — 失败不影响写入结果，仅记录警告
+  // WASM 索引增量更新 — 失败时从文件重算行数，保持 JS/WASM 一致
   try {
     await appendToIndexWasm(JSON.stringify(event));
   } catch (e: any) {
     console.warn(`[ritsu] WASM index append failed: ${e.message}`);
     // 标记索引需要重建
     _wasmIndexBuilt = false;
+    // 从文件重算真实行数，修正 JS 计数器漂移
+    syncLineCountFromCtxFile(root);
   }
 
   return textResult(
@@ -171,17 +210,37 @@ async function ritsu_emit_event(
 let _wasmIndexBuilt = false;
 let _wasmIndexMonth = "";
 
+// 简易异步互斥锁 — 防止并发 ensureWasmIndex 导致重复构建
+let _indexMutex: Promise<void> = Promise.resolve();
+
 async function ensureWasmIndex(root: string): Promise<void> {
-  // 月度切换检测 — 新月份需要重建索引
+  // 快速路径：已构建且月份未变
   const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
   if (_wasmIndexBuilt && _wasmIndexMonth === currentMonth) return;
 
-  const ctxPath = getCtxFilePath(root);
-  const count = await buildIndexFromCtxFile(ctxPath);
-  if (count !== null) {
-    resetLineCount(count);
-    _wasmIndexBuilt = true;
-    _wasmIndexMonth = currentMonth;
+  // 串行化：等待前一个 ensureWasmIndex 完成
+  let release: () => void = () => {};
+  _indexMutex = _indexMutex.then(
+    () =>
+      new Promise<void>((r) => {
+        release = r;
+      }),
+  );
+  await _indexMutex;
+
+  try {
+    // double-check：可能在等待期间已被其他调用构建
+    if (_wasmIndexBuilt && _wasmIndexMonth === currentMonth) return;
+
+    const ctxPath = getCtxFilePath(root);
+    const count = await buildIndexFromCtxFile(ctxPath);
+    if (count !== null) {
+      resetLineCount(count);
+      _wasmIndexBuilt = true;
+      _wasmIndexMonth = currentMonth;
+    }
+  } finally {
+    release();
   }
 }
 
@@ -254,26 +313,14 @@ async function ritsu_write_artifact(
   }
 
   // 产物类型校验
-  const validTypes = [
-    "handoff",
-    "diagnosis",
-    "review-stamp",
-    "optimize-report",
-  ];
-  if (!validTypes.includes(type)) {
+  if (!ARTIFACT_VALID_TYPES.includes(type as any)) {
     return errorResult(
-      `invalid artifact type: ${type}. Valid: ${validTypes.join(", ")}`,
+      `invalid artifact type: ${type}. Valid: ${ARTIFACT_VALID_TYPES.join(", ")}`,
     );
   }
 
   // 文件名前缀校验（按 artifact-schema.yaml 命名契约）
-  const prefixMap: Record<string, string> = {
-    handoff: "handoff-",
-    diagnosis: "diagnosis-",
-    "review-stamp": "review-stamp-",
-    "optimize-report": "optimize-report-",
-  };
-  const expectedPrefix = prefixMap[type];
+  const expectedPrefix = ARTIFACT_PREFIX_MAP[type];
   if (expectedPrefix && !filename.startsWith(expectedPrefix)) {
     return errorResult(
       `filename must start with '${expectedPrefix}' for type '${type}', got: ${filename}`,
@@ -337,15 +384,7 @@ async function ritsu_list_artifacts(
   if (!existsSync(dir))
     return textResult(JSON.stringify({ files: [], total_count: 0 }));
 
-  const typeMap: Record<string, string> = {
-    handoff: "handoff-",
-    diagnosis: "diagnosis-",
-    "review-stamp": "review-stamp-",
-    "optimize-report": "optimize-report-",
-    ctx: "ctx-",
-  };
-
-  const prefix = type === "all" ? "" : (typeMap[type] ?? "");
+  const prefix = type === "all" ? "" : (ARTIFACT_PREFIX_MAP[type] ?? "");
   const entries = readdirSync(dir)
     .map((f: string) => ({ name: f, stat: statSync(resolve(dir, f)) }))
     .filter(({ stat }) => stat.isFile())
@@ -355,7 +394,7 @@ async function ritsu_list_artifacts(
       modified: stat.mtime.toISOString().replace(/[-:T]/g, "").slice(0, 15),
       size_bytes: stat.size,
       artifact_type:
-        Object.entries(typeMap).find(([, p]: [string, string]) =>
+        Object.entries(ARTIFACT_PREFIX_MAP).find(([, p]: [string, string]) =>
           name.startsWith(p),
         )?.[0] ?? "unknown",
     }))
@@ -378,29 +417,26 @@ async function ritsu_exec(
 
   if (!command) return errorResult("command is required");
 
-  // 安全边界：扩展黑名单拦截危险命令
-  const dangerousPatterns = [
-    /\brm\s+-[a-zA-Z]*[rf][a-zA-Z]*\b/, // rm -rf / rm -r / rm -f / rm -fr
-    /\bmkfs\b/, // 格式化文件系统
-    /\bdd\s+if=/, // 磁盘写入
-    /:\(\)\{.*\}/, // fork bomb
-    /\bnpm\s+(publish|unpublish|access)\b/, // npm 危险操作
-    /\bgit\s+push\s+.*--(force|no-verify|force-with-lease)\b/, // 强制推送/跳过校验
-    /\bgit\s+reset\s+--hard\b/, // 硬重置
-    /\bcurl\s+.*\|\s*(sh|bash|zsh)\b/, // 远程脚本执行
-    /\bwget\s+.*\|\s*(sh|bash|zsh)\b/, // 远程脚本执行
-    /\bchmod\s+(777|000|u\+s)\b/, // 危险权限
-    /\bchown\s+.*\broot\b/, // root 权限变更
-    /\b(npm|yarn|pnpm)\s+config\s+set\s+.*registry\b/, // 注册表劫持
-    /\beval\s+["']/, // eval 注入
-    /\bshutdown\b|\breboot\b/, // 系统关机/重启
-    /\bbash\s+-c\b/, // bash 命令嵌套
-    /\bsh\s+-c\b/, // sh 命令嵌套
-    /\bzsh\s+-c\b/, // zsh 命令嵌套
-    /\b(npm|npx|yarn|pnpm)\s+(i |install )/, // 不允许通过 ritsu_exec 安装包
-  ];
+  // 安全边界：白名单 + 残余黑名单
+  // 第一层：提取命令二进制名，只允许安全子集
   const trimmedCmd = command.trim();
-  for (const pattern of dangerousPatterns) {
+
+  // 提取命令链中所有二进制名（处理管道、&&、; 等分隔符）
+  const cmdParts = trimmedCmd.split(/\||&&|;|\|\||&/).map((s) => s.trim());
+  for (const part of cmdParts) {
+    // 去除前导环境变量赋值 (KEY=val cmd ...)
+    const stripped = part.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S*\s*/, "").trim();
+    const binary = stripped.split(/\s+/)[0];
+    if (!binary) continue;
+    if (!ALLOWED_BINARIES.has(binary)) {
+      return errorResult(
+        `command blocked: '${binary}' is not in the allowed binaries list`,
+      );
+    }
+  }
+
+  // 第二层：残余黑名单 — 拦截允许的二进制中的危险用法
+  for (const pattern of RESIDUAL_BLACKLIST) {
     if (pattern.test(trimmedCmd)) {
       return errorResult(
         `dangerous command blocked by safety boundary: ${pattern.source}`,
@@ -408,7 +444,7 @@ async function ritsu_exec(
     }
   }
 
-  const r = runCmd(command, maxLines, timeoutMs, maxBufferMb);
+  const r = await runCmd(command, maxLines, timeoutMs, maxBufferMb);
   return textResult(JSON.stringify({ ok: r.ok, output: r.output }));
 }
 

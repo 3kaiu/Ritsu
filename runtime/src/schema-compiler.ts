@@ -6,17 +6,11 @@
  */
 
 import { readFileSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { getSharedDir } from "../shared.js";
 import yaml from "js-yaml";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-function getSharedDir(): string {
-  return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
-}
-
-export interface CompiledTool {
+interface CompiledTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;

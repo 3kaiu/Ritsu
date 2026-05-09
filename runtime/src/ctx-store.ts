@@ -99,26 +99,33 @@ export function resetLineCount(count: number): void {
   _lastLineCount = count;
 }
 
+/** 从 ctx 文件重算真实行数，修正 JS 计数器漂移 */
+export function syncLineCountFromCtxFile(projectRoot: string): void {
+  const ctxPath = getCtxPath(projectRoot);
+  if (!existsSync(ctxPath)) {
+    _lastLineCount = 0;
+    return;
+  }
+  const content = readFileSync(ctxPath, "utf-8").trim();
+  _lastLineCount = content ? content.split("\n").length : 0;
+  _lastCtxMonth = getCurrentMonthFilename();
+}
+
 /** 获取 ctx 文件路径（供外部构建 WASM 索引） */
 export function getCtxFilePath(projectRoot: string): string {
   ensureRitsuDir(projectRoot);
   return getCtxPath(projectRoot);
 }
 
-export function readRecentEntries(
-  projectRoot: string,
-  limit = 20,
-): Record<string, unknown>[] {
+export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
   const ctxPath = getCtxPath(projectRoot);
   if (!existsSync(ctxPath)) return [];
 
   const content = readFileSync(ctxPath, "utf-8").trim();
   if (!content) return [];
 
-  const lines = content.split("\n");
-  const recent = lines.slice(-limit);
-
-  return recent
+  return content
+    .split("\n")
     .map((line) => {
       try {
         return JSON.parse(line) as Record<string, unknown>;
@@ -129,10 +136,18 @@ export function readRecentEntries(
     .filter((e): e is Record<string, unknown> => e !== null);
 }
 
+export function readRecentEntries(
+  projectRoot: string,
+  limit = 20,
+): Record<string, unknown>[] {
+  const all = readAllEntries(projectRoot);
+  return all.slice(-limit);
+}
+
 export function readLastIncomplete(
   projectRoot: string,
 ): Record<string, unknown> | null {
-  const entries = readRecentEntries(projectRoot, 50);
+  const entries = readAllEntries(projectRoot);
   const doneSet = new Set<string>();
 
   // 先收集所有 done/failed 的 correlation_id
@@ -159,7 +174,7 @@ export function readLastIncomplete(
 export function readLastCompleted(
   projectRoot: string,
 ): Record<string, unknown> | null {
-  const entries = readRecentEntries(projectRoot, 50);
+  const entries = readAllEntries(projectRoot);
   for (let i = entries.length - 1; i >= 0; i--) {
     if (entries[i].status === "done") return entries[i];
   }
@@ -173,7 +188,7 @@ export function getNextSeq(projectRoot: string): number {
   const dd = String(today.getDate()).padStart(2, "0");
   const prefix = `cid-${yyyy}${mm}${dd}-`;
 
-  const entries = readRecentEntries(projectRoot, 200);
+  const entries = readAllEntries(projectRoot);
   let maxSeq = 0;
   for (const e of entries) {
     const cid = String(e.correlation_id ?? "");
@@ -193,10 +208,4 @@ export function generateCorrelationId(projectRoot: string): string {
   const dd = String(today.getDate()).padStart(2, "0");
   const seq = getNextSeq(projectRoot);
   return `cid-${yyyy}${mm}${dd}-${seq}`;
-}
-
-export function getCtxFileSize(projectRoot: string): number {
-  const ctxPath = getCtxPath(projectRoot);
-  if (!existsSync(ctxPath)) return 0;
-  return statSync(ctxPath).size;
 }

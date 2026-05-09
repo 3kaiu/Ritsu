@@ -189,6 +189,10 @@
   },
   "allOf": [
     {
+      "if": { "properties": { "status": { "const": "started" } } },
+      "then": { "required": ["step"] }
+    },
+    {
       "if": { "properties": { "status": { "const": "step_done" } } },
       "then": { "required": ["step"] }
     },

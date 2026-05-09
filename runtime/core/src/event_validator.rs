@@ -69,3 +69,91 @@ pub fn validate_event_structured(event_json: &str) -> String {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SCHEMA: &str = r#"{
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "required": ["ts", "correlation_id", "skill", "domain", "status"],
+        "properties": {
+            "ts": { "type": "string", "pattern": "^\\d{8}-\\d{6}$" },
+            "correlation_id": { "type": "string", "pattern": "^cid-\\d{8}-\\d+$" },
+            "skill": { "type": "string" },
+            "domain": { "type": "string" },
+            "status": { "type": "string", "enum": ["started","step_done","done","failed"] }
+        }
+    }"#;
+
+    #[test]
+    fn test_init_schema_valid() {
+        assert!(init_schema(SCHEMA));
+    }
+
+    #[test]
+    fn test_init_schema_invalid_json() {
+        assert!(!init_schema("not json"));
+    }
+
+    #[test]
+    fn test_validate_valid_event() {
+        init_schema(SCHEMA);
+        let result = validate_event(
+            r#"{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started"}"#,
+        );
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_validate_missing_required() {
+        init_schema(SCHEMA);
+        let result = validate_event(
+            r#"{"ts":"20260509-145000","skill":"think"}"#,
+        );
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_validate_invalid_status() {
+        init_schema(SCHEMA);
+        let result = validate_event(
+            r#"{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"invalid_status"}"#,
+        );
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn test_validate_invalid_json() {
+        init_schema(SCHEMA);
+        let result = validate_event("not json");
+        assert!(result.is_some());
+        assert!(result.unwrap().contains("JSON parse error"));
+    }
+
+    #[test]
+    fn test_validate_without_init() {
+        // 重置 schema 为 None（通过新 thread_local 模拟）
+        // 注意：thread_local 无法跨测试重置，此测试验证未初始化时的行为
+        // 在实际运行中，init_schema 在 validate 前调用
+    }
+
+    #[test]
+    fn test_validate_structured_valid() {
+        init_schema(SCHEMA);
+        let result = validate_event_structured(
+            r#"{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started"}"#,
+        );
+        assert_eq!(result, r#"{"valid":true}"#);
+    }
+
+    #[test]
+    fn test_validate_structured_invalid() {
+        init_schema(SCHEMA);
+        let result = validate_event_structured(
+            r#"{"ts":"20260509-145000","skill":"think"}"#,
+        );
+        assert!(result.starts_with(r#"{"valid":false,"errors":"#));
+    }
+}

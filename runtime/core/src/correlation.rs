@@ -48,3 +48,58 @@ pub fn reset_correlation() {
 pub fn current_seq() -> u32 {
     GLOBAL_SEQ.load(Ordering::SeqCst)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_next_correlation_id_format() {
+        reset_correlation();
+        let id = next_correlation_id("20260509", 0);
+        assert_eq!(id, "cid-20260509-1");
+        reset_correlation();
+    }
+
+    #[test]
+    fn test_next_correlation_id_sequential() {
+        reset_correlation();
+        let id1 = next_correlation_id("20260509", 0);
+        let id2 = next_correlation_id("20260509", 0);
+        assert_eq!(id1, "cid-20260509-1");
+        assert_eq!(id2, "cid-20260509-2");
+        reset_correlation();
+    }
+
+    #[test]
+    fn test_next_correlation_id_base_seq_sync() {
+        reset_correlation();
+        let id = next_correlation_id("20260509", 5);
+        assert_eq!(id, "cid-20260509-6");
+        let id2 = next_correlation_id("20260509", 5);
+        assert_eq!(id2, "cid-20260509-7");
+        reset_correlation();
+    }
+
+    #[test]
+    fn test_next_correlation_id_date_change_resets() {
+        reset_correlation();
+        let id1 = next_correlation_id("20260509", 0);
+        assert_eq!(id1, "cid-20260509-1");
+        // 日期变更时，base_seq 用于同步起点
+        let id2 = next_correlation_id("20260510", 0);
+        assert!(id2.starts_with("cid-20260510-"));
+        reset_correlation();
+    }
+
+    #[test]
+    fn test_current_seq() {
+        reset_correlation();
+        assert_eq!(current_seq(), 0);
+        next_correlation_id("20260509", 0);
+        assert_eq!(current_seq(), 1);
+        next_correlation_id("20260509", 0);
+        assert_eq!(current_seq(), 2);
+        reset_correlation();
+    }
+}
