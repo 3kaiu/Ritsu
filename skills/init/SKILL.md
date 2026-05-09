@@ -107,12 +107,12 @@ Ritsu Bundle v3.3 已激活。
 
 **条件项（根据步骤 5 用户选择的 IDE 注入）**：
 
-| IDE 选择 | 追加 ignore 项            | 说明                 |
-| -------- | ------------------------- | -------------------- |
-| Cursor   | `.cursor/`                | Cursor AI 会话缓存   |
-| Windsurf | `.windsurf/`              | Windsurf AI 会话缓存 |
-| 两者     | `.cursor/` + `.windsurf/` | 两者缓存             |
-| 跳过     | 无                        | 不追加 IDE 项        |
+| IDE 选择 | 追加 ignore 项                                                | 说明                             |
+| -------- | ------------------------------------------------------------- | -------------------------------- |
+| Cursor   | `.cursor/` + `.cursorrules`                                   | Cursor 会话缓存 + 个人本地配置   |
+| Windsurf | `.windsurf/` + `.windsurfrules`                               | Windsurf 会话缓存 + 个人本地配置 |
+| 两者     | `.cursor/` + `.cursorrules` + `.windsurf/` + `.windsurfrules` | 全部                             |
+| 跳过     | 无                                                            | 不追加 IDE 项                    |
 
 **通用 AI 产物项（始终检查，缺失则追加）**：
 
@@ -120,7 +120,7 @@ Ritsu Bundle v3.3 已激活。
 .claude/
 ```
 
-> 注：`.cursorrules` / `.windsurfrules` 是项目配置文件（类似 `.editorconfig`），**不应**加入 `.gitignore`，它们应被提交到仓库供团队共享。
+> 注：`.cursorrules` / `.windsurfrules` 是个人本地 IDE 配置文件，不属于项目通用配置，**应加入 `.gitignore`** 防止个人偏好污染团队仓库。
 
 追加完成后，向用户输出已保护的条目清单：
 
@@ -129,7 +129,9 @@ Ritsu Bundle v3.3 已激活。
   ✅ .ritsu/ (Ritsu 产物)
   ✅ .claude/ (Claude 会话缓存)
   ✅ .cursor/ (Cursor 会话缓存)  ← 仅当选择 Cursor
+  ✅ .cursorrules (Cursor 个人配置)  ← 仅当选择 Cursor
   ✅ .windsurf/ (Windsurf 会话缓存)  ← 仅当选择 Windsurf
+  ✅ .windsurfrules (Windsurf 个人配置)  ← 仅当选择 Windsurf
 ```
 
 ### 7. 写入 ctx-{YYYY-MM}.jsonl
