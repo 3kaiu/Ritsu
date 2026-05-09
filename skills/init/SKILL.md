@@ -8,7 +8,7 @@ hard_constraints:
     rule: "不写业务代码，不修改任何现有业务文件"
     severity: FATAL
   - id: HC-2
-    rule: "AGENTS.md 已存在时，必须询问用户确认后才能覆盖"
+    rule: "AGENTS.md 已存在时，必须识别是否为异构文件，严禁直接覆盖。异构文件必须提供注入、重置、跳过三种选项"
     severity: FATAL
   - id: HC-3
     rule: "所有字段必须填入真实扫描值，发现无法确定的字段填写'待补充'"
@@ -21,7 +21,7 @@ hard_constraints:
 | ID | 约束 | 违反后果 |
 |----|------|---------|
 | HC-1 | 不写业务代码，不改业务文件 | 终止 |
-| HC-2 | 覆盖 AGENTS.md 前必须用户确认 | 终止 |
+| HC-2 | 覆盖前识别异构并提供选项 | 终止 |
 | HC-3 | 禁止在 AGENTS.md 中留空字段 | 终止 |
 
 ---
@@ -33,8 +33,14 @@ hard_constraints:
 ### 1. 寻址与冲突检测
 - 执行 `pwd` 确认当前目录
 - 检查 `AGENTS.md` 是否存在：
-  - 存在 → 读取 `ritsu-version:` 字段，告知用户版本，询问是否覆盖，**等待明确回复**
-  - 不存在 → 直接进入步骤 2
+  - **不存在** → 直接进入步骤 2
+  - **存在且包含 `ritsu-version:`** → 确认为旧版 Ritsu 产物，告知用户版本，询问是否覆盖，等待明确回复
+  - **存在且不包含 `ritsu-version:`** → 确认为异构配置（其他 AI 或人工生成）
+    - ⚠️ **严禁直接覆盖！** 必须向用户报告发现异构文件，并强制提供三个选项：
+      1. 【无损注入】：仅在文件顶部追加 Ritsu 必需的 `ritsu-version` 和 `domain` 字段，原内容一字不改（推荐，实现多 AI 共存）
+      2. 【强行覆盖】：清除原内容，按 Ritsu v3.0 完全重写
+      3. 【跳过】：不修改文件，当前会话每次手动指定 domain
+    - 等待用户明确选择（1/2/3）后，再决定后续写入行为
 
 ### 2. 深度扫描（真实读取，禁止猜测）
 并发执行，将结果直接用于步骤 3 的领域推断：
@@ -51,9 +57,18 @@ hard_constraints:
 > - 两类混合 → fullstack 倾向
 
 ### 4. 生成 AGENTS.md
-严格按 `_shared/artifact-schema.md` **Schema 0** 输出，调用 **`ritsu_write_artifact`**（type=ctx，实际写 AGENTS.md）：
-- 将步骤 2/3 的扫描值填入所有字段
-- 任何无法确定的字段填 `待补充`，不允许留空
+根据步骤 1 用户的选择执行不同写入策略：
+- **若是全新生成 / 用户选择【强行覆盖】**：
+  严格按 `_shared/artifact-schema.md` Schema 0 输出，将步骤 2/3 的扫描值填入。任何无法确定的字段填 `待补充`，不允许留空。调用 `ritsu_write_artifact` 写入全量内容。
+- **若是用户选择【无损注入】**：
+  在现有的 `AGENTS.md` 最顶部追加 Ritsu Block：
+  ```markdown
+  <!-- Ritsu Configuration Block -->
+  ritsu-version: 3.0.0
+  domain: {推断出的领域值}
+  <!-- End Ritsu Block -->
+  ```
+  保留原文件其余部分不变，调用文件写入工具完成无损注入。
 
 ### 5. IDE 路由挂载
 询问用户："请确认当前使用的 IDE（Cursor / Windsurf / 两者都要 / 跳过）？"

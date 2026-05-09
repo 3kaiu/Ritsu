@@ -10,8 +10,14 @@
 
 ```markdown
 # {项目名} 核心开发约束 (Ritsu Layer 3)
-ritsu-version: 2.1.0
+ritsu-version: 3.0.0
 domain: {frontend | backend | fullstack | infra | data}
+
+> ⚠️ 异构共存模式：如果项目中已有其他 AI 工具（如 Waza）生成的 AGENTS.md，Ritsu 允许无损注入。此时只需在原文件顶部包含以下区块即可，其他部分不做强制要求：
+> <!-- Ritsu Configuration Block -->
+> ritsu-version: 3.0.0
+> domain: {value}
+> <!-- End Ritsu Block -->
 
 ## 1. 技术栈底座
 - 语言/运行时: {真实值，禁止留空}
