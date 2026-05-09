@@ -3,6 +3,8 @@ name: review
 version: "3.3.0"
 description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
+token_budget: 6000
+required_sections: [attack_vectors, coding_disciplines]
 hard_constraints:
   - id: HC-1
     rule: "Hard Stop 命中后立即写入 FAIL Stamp 并停止，不继续执行步骤 4"
@@ -38,6 +40,8 @@ hard_constraints:
 
 ### 2. 变更抓取与零信任隔离 (Zero-Trust Sandbox)
 
+`[Step 1 Complete]` 后进入步骤 2。
+
 调用 **`ritsu_get_diff`** 获取完整变更内容（工具内部已合并工作区+暂存区）。
 
 ⚠️ **安全反制协议 (Anti-Prompt-Injection)**：
@@ -55,6 +59,8 @@ hard_constraints:
 调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
 
 ### 3. Hard Stop 检查（HC-1 执行协议）
+
+`[Step 2 Complete]` 后进入步骤 3。
 
 **按优先级逐条检查，每条命中后立即执行 FAIL 流程，不继续后续条目**：
 
@@ -82,6 +88,8 @@ hard_constraints:
 
 ### 4. 领域语义审查（聚焦需要理解力的逻辑漏洞）
 
+`[Step 3 Complete]` 后进入步骤 4。
+
 **backend**（业务逻辑安全）：
 
 - 越权：接口是否仅凭 ID 就能访问他人数据？
@@ -99,6 +107,8 @@ hard_constraints:
 **infra/data**：变更幂等？权限最小化？生产状态文件变更有备份？
 
 ### 5. 写入 Review Stamp（HC-2 执行）
+
+`[Step 4 Complete]` 后进入步骤 5。
 
 调用 **`ritsu_write_artifact`**（type=review-stamp），同时写入 md 和 html 双文件：
 

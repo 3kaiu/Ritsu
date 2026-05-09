@@ -3,6 +3,7 @@ name: init
 version: "3.3.0"
 description: "Ritsu 初始化协议。扫描项目架构、提取技术栈与规范，生成 AGENTS.md。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
+token_budget: 4000
 hard_constraints:
   - id: HC-1
     rule: "不写业务代码，不修改任何现有业务文件"

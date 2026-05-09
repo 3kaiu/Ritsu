@@ -37,6 +37,19 @@
 - 加载 `domains/_base.yaml`（通用基线，始终装载）。
 - 加载 `domains/[domain].yaml`（领域增量）。
 - 若为 fullstack 领域，同时加载 `domains/frontend.yaml` 和 `domains/backend.yaml`。
+- **按需加载 section**：仅加载当前 skill 声明的 `required_sections`，跳过无关 section 节省 Token：
+
+| Skill    | 加载 sections                                                           | 跳过 sections                                                                                  |
+| -------- | ----------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| route    | 无需加载 domain                                                         | 全部                                                                                           |
+| init     | hypothesis_directions                                                   | coding*disciplines, attack_vectors, optimize*\*                                                |
+| think    | hypothesis_directions, coding_disciplines                               | attack*vectors, optimize*\*                                                                    |
+| dev      | coding_disciplines, attack_vectors                                      | hypothesis_directions, optimize_disciplines, optimize_tool_preferences, platform_optimizations |
+| optimize | optimize_disciplines, optimize_tool_preferences, platform_optimizations | hypothesis_directions, coding_disciplines, attack_vectors                                      |
+| review   | attack_vectors, coding_disciplines                                      | hypothesis*directions, optimize*\*                                                             |
+| hunt     | hypothesis_directions                                                   | coding*disciplines, attack_vectors, optimize*\*                                                |
+| triage   | 无需加载 domain                                                         | 全部                                                                                           |
+
 - 设置 **已装载标记**：`__RITSU_LOADED__ = true`，后续技能的 Pre-flight/步骤 1 检测到此标记后跳过重复装载。
 
 > **装载完成后，系统才被允许进入具体技能的流水线逻辑。**

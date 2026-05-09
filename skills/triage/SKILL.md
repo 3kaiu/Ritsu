@@ -3,6 +3,7 @@ name: triage
 version: "3.3.0"
 description: "Ritsu Inbox Zero 机器。处理 GitHub Issue/PR 工单：分类、裁决、路由。不做技术诊断，不写业务代码。"
 when_to_use: "/r-triage, 处理 issue, 看一下 PR, 批量回复, 工单"
+token_budget: 4000
 hard_constraints:
   - id: HC-1
     rule: "不做技术根因诊断。发现需要诊断时，记录问题描述，路由给 /r-hunt，不自行分析"

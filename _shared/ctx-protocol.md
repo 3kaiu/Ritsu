@@ -61,3 +61,38 @@
 - `.ritsu/ctx-{YYYY-MM}.jsonl` 只追加，不修改历史记录（append-only）。
 - **天然防膨胀**：因采用按月分片路由（Time-based Sharding），单文件体积得到物理遏制。
 - **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。必须使用工具菜单中的 **`ritsu_retrieve_memory`**，传入自然语言关键字，通过底层检索抓取相关的 `handoff`、`diagnosis` 碎片，实现本地 RAG 问答。
+
+### 月度摘要机制 (Monthly Summary)
+
+每月最后一天（或当月 ctx 文件记录超过 50 条时），在 `ritsu_read_ctx` 返回结果中自动附加摘要行：
+
+```json
+{
+  "ts": "20260531-235900",
+  "skill": "_summary",
+  "domain": "_all",
+  "status": "done",
+  "artifact": ".ritsu/ctx-2026-05.jsonl",
+  "progress": null,
+  "summary": {
+    "month": "2026-05",
+    "tasks_total": 12,
+    "tasks_done": 10,
+    "tasks_failed": 2,
+    "skills_used": {
+      "think": 3,
+      "dev": 5,
+      "review": 4,
+      "hunt": 1,
+      "optimize": 2
+    },
+    "domains": { "frontend": 8, "backend": 4 }
+  }
+}
+```
+
+**摘要用途**：
+
+- 跨月会话恢复时，`ritsu_read_ctx` 先读取上月摘要（1 条记录），而非全量历史
+- 摘要自动由 `ritsu_read_ctx` 工具在读取时计算生成，无需手动写入
+- 超过 3 个月的历史 ctx 文件可由用户决定是否归档删除（摘要已保留关键统计）

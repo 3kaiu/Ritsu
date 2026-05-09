@@ -3,6 +3,9 @@ name: optimize
 version: "3.3.0"
 description: "Ritsu 领域自适应代码精简优化。不改功能/布局/结构/样式，只做精简、性能提升和平台适配优化。"
 when_to_use: "/r-opt, 优化, 精简, 性能优化, refactor, 代码瘦身, 提速"
+token_budget: 6000
+required_sections:
+  [optimize_disciplines, optimize_tool_preferences, platform_optimizations]
 hard_constraints:
   - id: HC-1
     rule: "优化前后功能必须完全等价——任何行为变更视为违规，必须回滚"
@@ -45,6 +48,8 @@ hard_constraints:
 
 ### 2. 深度分析 (Deep Analysis)
 
+`[Step 1 Complete]` 后进入步骤 2。
+
 对目标文件及其直接依赖进行**只读扫描**，产出分析清单：
 
 ```
@@ -64,6 +69,8 @@ hard_constraints:
 
 ### 3. 优化方案确认
 
+`[Step 2 Complete]` 后进入步骤 3。
+
 将分析清单以表格形式呈现，每行标注：
 
 | #   | 优化项 | 当前写法 | 替换为 | 预期收益 | 风险     |
@@ -81,6 +88,8 @@ hard_constraints:
 
 ### 4. 逐项执行 (Item-by-Item Execution)
 
+`[Step 3 Complete]` 后进入步骤 4（收到用户确认后）。
+
 按确认清单**逐项**执行，每项执行后立即验证：
 
 **执行纪律**：
@@ -95,6 +104,8 @@ hard_constraints:
 > 引用 `domains/{domain}.yaml` 的 `optimize_disciplines` 和 `optimize_tool_preferences` 和 `platform_optimizations`
 
 ### 5. 优化报告输出
+
+`[Step 4 Complete]` 后进入步骤 5。
 
 所有优化项执行完毕后，输出精简报告：
 

@@ -3,6 +3,8 @@ name: hunt
 version: "3.3.0"
 description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
+token_budget: 8000
+required_sections: [hypothesis_directions]
 hard_constraints:
   - id: HC-1
     rule: "确诊前禁止修改任何业务代码。发现修改冲动时，记录到诊断报告，等确诊后交给 /r-dev"
@@ -37,11 +39,15 @@ hard_constraints:
 
 ### 2. 零点击上下文绑定 (Zero-Click Context Binding)
 
+`[Step 1 Complete]` 后进入步骤 2。
+
 **隐式绑定优先**：检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何错误日志文件、Issue 描述文档或历史 `diagnosis-*.md` 文件。
 
 - **若有** → 直接读取当前激活的焦点文件内容作为诊断的初始上下文，跳过向用户索要报错信息，并在输出中注明"已根据 IDE 焦点自动提取报错上下文"。
 
 ### 3. 证据抓取与边界扫描 (Boundary Scan)
+
+`[Step 2 Complete]` 后进入步骤 3。
 
 **系统边界定义**：在抓取具体日志前，强制输出当前报错涉及的【系统数据流链路】（例如：Client -> WAF -> Gateway -> Node.js -> Redis -> MySQL）。这能彻底消除大模型在局部盲区中瞎猜的现象。
 
@@ -53,6 +59,8 @@ hard_constraints:
 **infra/data**：变更前后状态文件 diff / CI 日志完整输出 / 资源依赖图失败节点
 
 ### 4. 建立 MECE 假设（HC-2 执行协议）
+
+`[Step 3 Complete]` 后进入步骤 4。
 
 提出 1-3 个假设，**每条必须满足**：
 
@@ -75,6 +83,8 @@ hard_constraints:
 
 ### 5. 探针验证（按置信度从高到低）
 
+`[Step 4 Complete]` 后进入步骤 5。
+
 逐个验证，每个假设验证后输出明确结论：
 
 ```
@@ -95,6 +105,8 @@ hard_constraints:
 ```
 
 ### 6. 5-Whys 根因倒推与写入诊断报告
+
+`[Step 5 Complete]` 后进入步骤 6。
 
 在最终锁定问题后，严禁直接把"报错表象"当做根因。必须执行 **【5-Whys 连续追问】** 协议：
 

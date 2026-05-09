@@ -87,6 +87,10 @@ schemas:
         rule: "每条必须精确到文件，确保 /r-dev 执行时无需做任何技术决策"
     placeholder_forbidden: true
     forbidden_patterns: [TODO, 待定, 后续完善, 暂不处理]
+    changelog:
+      title: "Changelog（append-only，禁止删除历史条目）"
+      format: "- [{YYYYMMDD-HHMMSS}] /r-{skill}: {变更摘要}（偏离原因：{why}）"
+      rule: "dev 契约自愈时追加，禁止修改或删除已有条目。每条变更可追溯。"
 
   diagnosis:
     id: 2

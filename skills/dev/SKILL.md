@@ -3,6 +3,8 @@ name: dev
 version: "3.3.0"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
+token_budget: 8000
+required_sections: [coding_disciplines, attack_vectors]
 hard_constraints:
   - id: HC-1
     rule: "外部标识符引用前必须调用 ritsu_grep_identifier 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐"
@@ -39,6 +41,8 @@ hard_constraints:
 
 > 引用 `_shared/skill-common-steps.md` Step 1
 
+`[Step 1 Complete]` 后进入步骤 2。
+
 **隐式绑定优先**：首先检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何 `handoff-*.md` 或 `diagnosis-*.md` 文件。
 
 - **若有** → 直接将其认定为本次 `dev` 的执行目标，跳过询问！并在输出中注明"已根据 IDE 焦点自动锁定目标文件"。
@@ -68,6 +72,8 @@ hard_constraints:
 
 ### 3. 标识符验证（HC-1 执行协议）
 
+`[Step 2 Complete]` 后进入步骤 3。
+
 调用任何外部模块的函数/变量/组件前，**按以下协议执行（签名级校验）**：
 
 ```
@@ -81,6 +87,8 @@ hard_constraints:
 
 ### 4. 降维分块执行与测试先行 (Chunked Execution)
 
+`[Step 3 Complete]` 后进入步骤 4。
+
 分析需要实现的任务清单总数：
 
 - **若清单项 ≤ 3**：可全量执行，但在编写业务逻辑前，先写出验证手段（单测用例、curl 或 UI 验证步骤）。
@@ -91,11 +99,15 @@ hard_constraints:
 
 ### 5. 沙盒自查清单（按优先级）
 
+`[Step 4 Complete]` 后进入步骤 5。
+
 - [ ] HC-1：所有外部标识符均已通过 `ritsu_grep_identifier` 验证
 - [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理
 - [ ] 无孤儿引用，无未使用的残余变量
 
 ### 6. 质量门禁
+
+`[Step 5 Complete]` 后进入步骤 6。
 
 调用 **`ritsu_run_quality_gates`**，等待结果：
 
@@ -104,12 +116,14 @@ hard_constraints:
 
 ### 7. Handoff 契约自愈 (Handoff Drift Prevention)
 
+`[Step 6 Complete]` 后进入步骤 7。
+
 必须防止代码与设计文档发生割裂。
 
 - 对比最终落盘的代码与步骤 1 溯源到的 `handoff-*.md` 文件。
 - 如果在 Bug 修复或需求变更过程中，**实际代码的逻辑、接口结构、或架构层级推翻了原 Handoff 的契约**：
   - 必须主动调用 `ritsu_write_artifact` 修改原 `handoff-*.md` 文件。
-  - 在文件对应位置修改契约，并在末尾追加 `## Update Log` 说明偏离原因，确保文档与代码保持绝对同构。
+  - 在文件对应位置修改契约，并在末尾 `Changelog` 区块追加条目（格式：`- [{timestamp}] /r-dev: {变更摘要}（偏离原因：{why}）`），**禁止删除已有 Changelog 条目**，确保文档与代码保持绝对同构且变更可追溯。
 
 **交付摘要**（强制输出）：
 

@@ -3,6 +3,8 @@ name: think
 version: "3.3.0"
 description: "Ritsu 领域自适应需求评审与架构设计。强制拆分为评审阶段和设计阶段，输出防腐 Handoff 文件。"
 when_to_use: "/r-think, 设计方案, 怎么做, 要不要做, 分析一下, 看看这个 PRD"
+token_budget: 10000
+required_sections: [hypothesis_directions, coding_disciplines]
 hard_constraints:
   - id: HC-1
     rule: "Phase A 完成后必须强制停止，收到用户确认后才进入 Phase B"
@@ -37,6 +39,8 @@ hard_constraints:
 
 ### A2. 多维轰炸（基于领域）
 
+`[Step A1 Complete]` 后进入 A2。
+
 **backend**：并发量？写入幂等？缓存击穿防御？事务回滚方案？审计日志要求？
 
 **frontend**：弱网/断网兜底视图？空数据/超长文本极端 UI？401/403/500 各自跳出策略？
@@ -53,6 +57,8 @@ hard_constraints:
 
 ### A3. 事前验尸报告 (Pre-mortem Matrix)
 
+`[Step A2 Complete]` 后进入 A3。
+
 在进入设计前，强制 AI 扮演"破坏者"，对当前需求输出一个异常路径矩阵，必须包含以下维度：
 | 异常场景 | 表现与后果 | 缓解/预防方案 |
 |---------|-----------|-------------|
@@ -62,6 +68,8 @@ hard_constraints:
 | **异步中断** | 任务执行到一半断网/宕机，状态如何恢复？ | |
 
 ### A4. 输出漏洞清单并强制停止
+
+`[Step A3 Complete]` 后进入 A4。
 
 ```markdown
 ## ⚠️ 需求漏洞清单 (Phase A)
@@ -83,9 +91,13 @@ hard_constraints:
 
 ### B1. 契约优先
 
+`[Phase B Started]` 用户确认后进入。
+
 先锁定边界契约（引用 `_shared/artifact-schema.yaml` Schema 1 Contract 字段），再构思实现逻辑。
 
 ### B2. 多方案博弈
+
+`[Step B1 Complete]` 后进入 B2。
 
 提供 2 套方案，使用强制对比表格：
 | 维度 | 方案 A | 方案 B |
@@ -103,6 +115,8 @@ hard_constraints:
 3. **回滚**：逐步骤列出回滚指令 + 脏数据恢复方案
 
 ### B3. Handoff 文件输出
+
+`[Step B2 Complete]` 后进入 B3。
 
 命名规则：需求描述前 3 个有效英文关键词 → kebab-case（如 `handoff-user-login-flow.md`）
 
