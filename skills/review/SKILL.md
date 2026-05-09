@@ -1,54 +1,108 @@
 ---
 name: review
-description: "Ritsu 领域自适应代码审查防线。引入 Hard Stops 绝对红线拦截，按领域动态调整黑客攻击向量，确保代码对齐 Handoff 设计案。"
+version: "3.0.0"
+description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
-metadata:
-  version: "3.0.0"
+hard_constraints:
+  - id: HC-1
+    rule: "Hard Stop 命中后立即写入 FAIL Stamp 并停止，不继续执行步骤 4"
+    severity: FATAL
+  - id: HC-2
+    rule: "无论 PASS/FAIL，必须调用 ritsu_write_artifact 写入 Review Stamp 文件"
+    severity: FATAL
+  - id: HC-3
+    rule: "变更获取必须同时使用工作区和暂存区两个命令"
+    severity: FATAL
 ---
 
 # Review: 领域自适应对抗审查 (Adaptive Adversarial Check)
 
+## ⚡ 执行前必读
+| ID | 约束 | 违反后果 |
+|----|------|---------|
+| HC-1 | Hard Stop 命中 → 立即 FAIL，停止后续步骤 | 终止 |
+| HC-2 | 必须写 Review Stamp 文件 | 终止 |
+| HC-3 | git 变更必须双命令获取 | 终止 |
+
+---
+
 **触发条件**：用户输入 `/r-review`。
-
-## 核心职责 (Capability Convergence)
-
-站在"拒绝合并"的对立面来审查代码。不仅查 Bug，更要执行 **溯源对账**：确保代码完美还原了 `/r-think` 的 Handoff 设计。
 
 ## 执行流水线
 
-### 1. 抓取上下文与溯源对账 (Handoff Traceability)
+### 1. 领域解析
+> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
 
-- **变更抓取策略**：
-  - 优先：`git diff ritsu-reviewed..HEAD`（基于上次 review 的 git tag）
-  - 回退：`git diff HEAD`（仅看最后一次提交）
-- **强制对账**：如果存在 `HANDOFF.md`，必须先逐条对比：
-  - 契约是否完整实现？
-  - 验收标准是否全部达成？
-  - 回滚指令是否已落地为可执行脚本或文档？
-- **拦截红线**：若代码偏离了原定接口契约、漏掉了 PRD 上的状态展示、或擅自改变了架构层级，视为 **架构漂移 (Handoff Drift)**，直接打回。
+写入 ctx.md（type=ctx）：
+```
+{timestamp} | review | domain={value} | started | none
+```
 
-### 2. Hard Stops (绝对红线拦截)
+### 2. 变更抓取与溯源对账
+调用 **`ritsu_get_diff`** 获取完整变更内容（工具内部已合并工作区+暂存区）。
 
-执行 `rules/anti-patterns.md` 中 **scope: review** 的全部红线（R1-R6），命中任一条即拒绝合并。同时检查 **scope: global** 的全部底线（#1-#12），全局底线在 review 中同样不可违反。
+调用 **`ritsu_list_artifacts`**（type=handoff）：
+- **存在** → 逐条对比 Handoff 契约和实施清单
+  - 发现偏离（接口契约变动 / 遗漏 PRD 状态 / 擅自改变架构层级）→ 以 **P0 级别**进入 Hard Stop 流程
+- **不存在** → Review Stamp 注明"无 Handoff 溯源"，继续
 
-### 3. 领域动态对抗审查 (Domain-Adaptive Adversarial Pass)
+调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
 
-执行 `domains/_base.md` 中的通用审查攻击向量。
-执行 `domains/[domain].md` 中的领域增量审查攻击向量。
-对照 `domains/` 中的**纪律-攻击向量对偶映射表**，逐条验证：每条编码纪律是否被对应的攻击向量测试通过。
+### 3. Hard Stop 检查（HC-1 执行协议）
+**按优先级逐条检查，每条命中后立即执行 FAIL 流程，不继续后续条目**：
 
-> 跨域攻击检查已内化于领域配置（如 `fullstack.md` 的契约漂移与端到端安全向量），无需在此重复。
+```
+检查 P1：明文凭证泄露
+  grep -r "token\|secret\|password\|api_key" . --include="*.{ext}" -i
+  ✅ 无匹配 → 继续 P2
+  ❌ 有匹配 → 立即写入 FAIL Stamp（Hard Stop P1），停止
 
-### 4. 自动化扫描集成 (Automated Scan)
+检查 P2：不明标识符
+  对 diff 中新增的每个标识符调用 ritsu_grep_identifier 验证
+  ✅ 全部存在 → 继续 P3
+  ❌ 存在未定义 → 立即写入 FAIL Stamp（Hard Stop P2），停止
 
-- **Lint**：必须运行 `AGENTS.md` 质量门禁中的 Lint 命令。若标记为"需补充"，发出警告但不阻塞。
-- **依赖安全扫描**：运行 `npm audit` / `pip audit` / `cargo audit` 等。若工具不可用，发出警告但不阻塞。
-- **SAST**：若项目配置了 SAST 工具，必须运行并纳入审查结果。若未配置，发出建议但不阻塞。
-- **失败策略**：扫描失败时，区分"工具缺失"（警告+继续）vs"扫描发现漏洞"（Hard Stop #6，拒绝合并）。
+检查 P3：破坏性契约变更
+  检查 API 路由/参数/响应结构是否变更，若变更则检查是否有迁移/双写方案
+  ✅ 无变更或有方案 → 继续 P4
+  ❌ 变更且无方案 → 立即写入 FAIL Stamp（Hard Stop P3），停止
 
-### 5. 打回路由 (Reject Routing)
+检查 P4：版本号割裂
+  比对 package.json 与 lockfile 版本一致性
+  ✅ 一致 → 进入步骤 4
+  ❌ 不一致 → 立即写入 FAIL Stamp（Hard Stop P4），停止
+```
 
-- 若打回原因为**设计缺陷**（架构漂移、契约偏离），路由到：**`/r-think [修复设计]`**
-- 若打回原因为**代码缺陷**（Bug、安全漏洞、标识符错误），路由到：**`/r-dev [修复代码]`**
+### 4. 领域语义审查（聚焦需要理解力的逻辑漏洞）
 
-> 技能流转参见 `state-machine.md`。
+**backend**（业务逻辑安全）：
+- 越权：接口是否仅凭 ID 就能访问他人数据？
+- 竞态：是否存在非原子的"先查后改"窗口期漏洞？
+- 异常链路：catch 块中 DB 连接是否释放？事务是否正确回滚？
+
+**frontend**（客户端安全与体验）：
+- XSS：用户输入是否 sanitize 后再渲染到 DOM？
+- 状态完整性：前端状态是否可被 DevTools 篡改并绕过业务校验？
+- 渲染边界：大列表是否虚拟化？
+
+**fullstack**：两套均覆盖。
+
+**infra/data**：变更幂等？权限最小化？生产状态文件变更有备份？
+
+### 5. 写入 Review Stamp（HC-2 执行）
+调用 **`ritsu_write_artifact`**（type=review-stamp），文件路径：`ritsu/review-stamp-{YYYYMMDD-HHMMSS}.md`
+
+按 `_shared/artifact-schema.md` Schema 3 格式写入，同时在会话末尾内联输出。
+
+写入 ctx.md：
+```
+{timestamp} | review | domain={value} | done | ritsu/review-stamp-{ts}.md
+```
+
+---
+
+## ⛔ 尾部锚点
+**HC-2 最终提醒**：Review Stamp 是此技能唯一强制产物。无论审查结果如何，离开前确认 `ritsu/review-stamp-*.md` 文件已成功写入。
+
+## 关联流转
+> 引用 `_shared/state-machine.md` — review PASS / FAIL 引导语。

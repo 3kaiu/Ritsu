@@ -1,75 +1,106 @@
 ---
 name: triage
-description: "Ritsu 领域自适应分诊机。按领域动态调整合并要求，执行 Action-First 处置，引入优先级矩阵与 SLA 约束。"
-when_to_use: "/r-triage, 处理 issue, 看一下 PR, 批量回复"
-metadata:
-  version: "3.0.0"
+version: "3.0.0"
+description: "Ritsu Inbox Zero 机器。处理 GitHub Issue/PR 工单：分类、裁决、路由。不做技术诊断，不写业务代码。"
+when_to_use: "/r-triage, 处理 issue, 看一下 PR, 批量回复, 工单"
+hard_constraints:
+  - id: HC-1
+    rule: "不做技术根因诊断。发现需要诊断时，记录问题描述，路由给 /r-hunt，不自行分析"
+    severity: FATAL
+  - id: HC-2
+    rule: "路由到 hunt 时，必须携带结构化上下文（摘要/复现/环境/日志），不得发送空调用"
+    severity: FATAL
+  - id: HC-3
+    rule: "PR 裁决前必须先调用 ritsu_get_changed_files 确定领域"
+    severity: WARN
 ---
 
-# Triage: 领域自适应无情分诊机 (Adaptive Triage)
+# Triage: Inbox Zero 工单裁决机 (Issue & PR Dispatcher)
+
+## ⚡ 执行前必读
+| ID | 约束 | 违反后果 |
+|----|------|---------|
+| HC-1 | 不做技术诊断，路由给 hunt | 终止，重新路由 |
+| HC-2 | hunt 路由必须携带结构化上下文 | 终止，补充上下文后重发 |
+| HC-3 | PR 裁决前先确定领域 | 警告，补充领域判断 |
+
+---
 
 **触发条件**：用户输入 `/r-triage`。
 
-## 核心职责 (Capability Convergence)
-
-扮演极其高效的开源库 Maintainer。
-
 ## 执行流水线
 
-### 1. 优先级矩阵 (Priority Matrix)
+### 1. 工单类型识别
+| 类型 | 判断标准 | 处理路径 |
+|------|----------|----------|
+| Bug Report | 有报错/异常行为描述 | 步骤 2A |
+| Feature Request | 新功能/改进诉求 | 步骤 2B |
+| PR | 代码变更请求 | 步骤 2C（先领域解析）|
+| Question | 使用疑问/求助 | 步骤 2D |
+| Duplicate | 与已有 Issue 重叠 | 直接关闭，步骤 3 |
 
-对每个 Issue/PR 进行分级：
+### 2A. Bug Report 裁决
+检查三要素完整性：**复现步骤 + 环境信息 + 完整报错日志**
 
-| 级别 | 定义                           | 响应 SLA | 处置策略                             | 状态机路径                                                               |
-| ---- | ------------------------------ | -------- | ------------------------------------ | ------------------------------------------------------------------------ |
-| P0   | 生产故障 / 安全漏洞 / 数据丢失 | 1 小时   | 立即修复，可跳过 /r-think            | TRIAGED → [dev] → IMPLEMENTED                                            |
-| P1   | 核心功能受损 / 性能严重退化    | 4 小时   | 走 /r-hunt → /r-dev 快速路径         | TRIAGED → [hunt] → DIAGNOSED → [dev] → IMPLEMENTED                       |
-| P2   | 功能缺陷 / 体验问题            | 24 小时  | 走完整 /r-think → /r-dev → /r-review | TRIAGED → [think] → DESIGNED → [dev] → IMPLEMENTED → [review] → REVIEWED |
-| P3   | 功能请求 / 优化建议            | 72 小时  | 排期评估，走 /r-think                | TRIAGED → [think] → DESIGNED                                             |
-| P4   | 文档 / 样式 / 易用性           | 1 周     | 低优先级批量处理                     | TRIAGED (闭环)                                                           |
+**三要素不全** → 标记 `needs-info`，步骤 3，不路由
 
-> **P0 豁免**：P0 级别允许跳步执行（跳过 /r-think），跳步警告自动降级为提示。
+**已知 Bug（搜索现有 Issue 确认重复）** → 关联原 Issue，关闭，步骤 3
 
-### 2. 领域针对性合并要求 (Domain Requirements)
-
-执行 `domains/_base.md` 中的通用 PR 合并要求。
-执行 `domains/[domain].md` 中的领域增量 PR 合并要求。
-
-**特殊 PR 类型规则**：
-
-- **文档 PR**：必须检查文档与代码实际行为是否一致，禁止过时文档。
-- **依赖升级 PR**：必须检查 CHANGELOG 中的 Breaking Changes，必须运行全量测试。
-- **配置 PR**：必须检查是否影响生产环境，必须有回滚方案。
-
-### 3. Action-First 处置
-
-- 严禁用"让我看看"敷衍。
-- 已修复 → 关闭；重复 → 标记并关闭；瑕疵 PR → 倾向于直接帮贡献者修复并合并 (`Maintainer Edit`)。
-- **Maintainer Edit 安全约束**：合并前必须确保 CI 通过；若项目无 CI，必须手动执行 `AGENTS.md` 中的质量门禁命令。
-
-### 4. 回复话术约束
-
-- 禁寒暄，禁啰嗦，禁机器人话术。
-- 结构：艾特提报者 → 感谢(一句) → 事实裁定 → 下一步指示。
-
-### 5. 批量处理策略
-
-- 同类 Issue 可批量处置（如：同一 Bug 的多个报告 → 关闭重复项，保留最早的一个）。
-- 依赖升级 PR 可批量合并（如：Dependabot 的 patch 级别更新）。
-
-### 6. 输出分诊结论
-
-```markdown
-# 律 (Ritsu) 分诊结论
-
-> priority: P[0-4]
-> status: open
-> generated_at: [ISO 8601 时间戳]
-
-- **Issue/PR**：[链接或标题]
-- **事实裁定**：[Bug / Feature / 重复 / 文档 / 其他]
-- **处置策略**：[对应优先级矩阵的处置策略]
-- **下一步**：[具体技能调用]
+**三要素完整且为新 Bug** → 标记 `confirmed-bug`，按 HC-2 协议路由：
+```
+/r-hunt [
+  摘要: {一句话描述：在 [环境] 下，执行 [操作] 时，发生了 [现象]}
+  复现步骤: {从工单提取的完整步骤}
+  环境: {OS / 版本 / 配置}
+  日志摘要: {关键报错行，≤20 行}
+]
 ```
 
-> 处置完成后，执行 `/r-triage:verify` 验证 Issue/PR 是否真正关闭。技能流转参见 `state-machine.md`。
+### 2B. Feature Request 裁决
+- 符合项目方向 → 标记 `accepted` → `/r-think [特性描述]`
+- 不符合/超范围 → 标记 `wontfix`，步骤 3
+- 不确定 → 标记 `needs-discussion`，发起 Issue 内讨论，不路由
+
+### 2C. PR 裁决
+
+**HC-3 前置**：调用 **`ritsu_get_changed_files`** 获取 PR 的变更文件后缀，确定领域：
+```
+[RITSU_CTX: domain={value}]（基于 PR 文件后缀推断）
+```
+
+按领域质量门槛：
+- **frontend PR**：必须提供 UI 变更截图/录屏 + 检查新增三方包体积（>50KB 需说明）
+- **backend PR**：必须提供单测覆盖率报告 + 检查破坏性 Schema 变更
+- **infra PR**：必须提供 terraform plan 或等效输出
+
+门槛未满足 → 标记 `changes-requested`，步骤 3，附缺失材料清单
+
+小瑕疵（可自行修复）→ 直接修复合并（Maintainer Edit），步骤 3 说明修改
+
+需深度审查 → `/r-review`
+
+### 2D. Question 裁决
+- 能直接回答 → 回答，关闭，标记 `answered`
+- 涉及文档缺失 → 回答，创建文档补充 Issue，关联并关闭原 Issue
+
+### 3. 回复话术（Action-First，禁止废话）
+结构：`@提报者` → 感谢（一句）→ 事实裁定 → 下一步指示
+
+标准模板：
+- **Needs Info**：`感谢反馈，请补充：① 完整复现步骤 ② 运行环境 ③ 完整报错日志。补充后重新评估。`
+- **Duplicate**：`感谢反馈，此问题已在 #{编号} 追踪，关闭此 Issue。`
+- **WONTFIX**：`感谢建议，此需求超出当前项目范围，暂不纳入，关闭。`
+- **Changes Requested**：`感谢贡献，合并前需补充：{具体清单}。`
+
+写入 ctx.md（type=ctx）：
+```
+{timestamp} | triage | domain={value} | done | none
+```
+
+---
+
+## ⛔ 尾部锚点
+**HC-1+HC-2 最终提醒**：检查本次处理是否对任何 Bug 进行了技术层面的根因分析。若有，删除分析内容，改为携带上下文路由给 `/r-hunt`。
+
+## 关联流转
+> 引用 `_shared/state-machine.md` — triage 完成引导语。
