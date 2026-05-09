@@ -23,7 +23,8 @@
 
 [dev]    ──→ [review]
 
-[review] ──→ [dev]（FAIL，必须修复）
+[review] ──→ [dev]（单次 FAIL，必须修复）
+         ──→ [think]（连续两次 FAIL 触发熔断，重审架构）
          ──→ [triage]（PASS，有工单待处理，可选）
          ──→ 结束（PASS，无工单，直接合并，可选）
 
@@ -70,7 +71,8 @@
 
 ### review FAIL
 > ❌ 律 (Ritsu) 拦截成功，Review Stamp 已写入 `ritsu/review-stamp-{ts}.md`。
-> 携带 Stamp 修复 → **`/r-dev [修复 review-stamp-{ts}.md 中的问题]`**
+> - 单次失败，携带 Stamp 修复 → **`/r-dev [修复 review-stamp-{ts}.md 中的问题]`**
+> - ⚠️ **熔断触发**（连续两次 FAIL）→ **`/r-think [架构或逻辑存在严重偏差，申请重构 Handoff]`**
 
 ### hunt 完成
 > ✅ 律 (Ritsu) 根因已锁定，诊断报告已写入 `ritsu/diagnosis-{ts}.md`。

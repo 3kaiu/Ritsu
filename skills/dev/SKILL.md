@@ -81,6 +81,13 @@ hard_constraints:
 - Lint ✅ + Test ✅ → 可以交付
 - 任何 ❌ → 修复后重新执行，不允许带着失败交付
 
+### 7. Handoff 契约自愈 (Handoff Drift Prevention)
+必须防止代码与设计文档发生割裂。
+- 对比最终落盘的代码与步骤 1 溯源到的 `handoff-*.md` 文件。
+- 如果在 Bug 修复或需求变更过程中，**实际代码的逻辑、接口结构、或架构层级推翻了原 Handoff 的契约**：
+  - 必须主动调用 `ritsu_write_artifact` 修改原 `handoff-*.md` 文件。
+  - 在文件对应位置修改契约，并在末尾追加 `## Update Log` 说明偏离原因，确保文档与代码保持绝对同构。
+
 **交付摘要**（强制输出）：
 ```
 ## 律 (Ritsu) 开发落盘清单

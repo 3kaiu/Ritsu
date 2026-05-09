@@ -94,6 +94,10 @@ hard_constraints:
 
 按 `_shared/artifact-schema.md` Schema 3 格式写入，同时在会话末尾内联输出。
 
+**⚠️ 熔断检测 (Circuit Breaker)**：
+- 如果本次审查结果为 FAIL，必须通过 `ritsu_list_artifacts` 和 `ritsu_read_ctx` 检查对该 Handoff 的审查历史。
+- 若发现**连续两次 FAIL**（包含本次），触发死循环熔断！禁止再打回给 dev，必须引导至 `/r-think` 重新审视架构设计，或要求人类介入。
+
 写入 ctx.md：
 ```
 {timestamp} | review | domain={value} | done | ritsu/review-stamp-{ts}.md
