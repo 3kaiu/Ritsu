@@ -60,18 +60,43 @@ hard_constraints:
 - 主任务优先级：`hunt > review > optimize > dev > think > triage > init`
 - 必须在输出中标注：`⚠️ 次要意图：{描述} → 主任务完成后执行 /r-{skill}`
 
-### 4. 输出路由决策
+### 4. 生成 correlation_id + 输出路由决策
+
+生成任务链路关联 ID：`cid-{YYYYMMDD}-{seq}`（seq 为当日递增序号，从当月 ctx 文件中查找当日最大 seq +1，若无则从 1 开始）。此 ID 将被同链路所有后续技能继承。
 
 ```
-[RITSU_CTX: domain={value}]
+[RITSU_CTX: domain={value}, cid={correlation_id}]
 🧭 律 (Ritsu) 调度：{意图描述} → /r-{skill}
 {若多意图：⚠️ 次要：{描述} → /r-{次要}}
 请执行：**`/r-{skill} [...]`**
 ```
 
-### 5. 写入 ctx-{YYYY-MM}.jsonl
+### 5. 写入 transition_event + ctx
 
-> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null）
+路由决策确定后，先写入状态机流转事件（供 UI 渲染状态动画），再写入 ctx：
+
+**transition_event**（追加到 ctx，status=started）：
+
+```jsonl
+{
+  "ts": "{YYYYMMDD-HHMMSS}",
+  "correlation_id": "{cid}",
+  "skill": "route",
+  "domain": "{value}",
+  "status": "started",
+  "step": "5/5",
+  "artifact": null,
+  "progress": null,
+  "transition": {
+    "from": "route",
+    "to": "{target_skill}",
+    "event": "{state-machine event name}",
+    "ui_hint": "{state-machine ui_hint}"
+  }
+}
+```
+
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null, correlation_id=步骤4生成的值）
 
 ---
 

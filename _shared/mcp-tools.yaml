@@ -339,3 +339,85 @@ tools:
         total_matches:
           type: integer
           description: "总匹配数"
+
+  - name: ritsu_emit_event
+    description: 向当月 ctx 文件追加一条结构化事件记录。此工具是 ritsu_write_artifact(type=ctx) 的专用替代，职责更单一——仅处理事件流写入，不处理产物文件写入。推荐在 step_done/step_failed/approval_*/circuit_breaker 等事件场景使用此工具代替 ritsu_write_artifact(type=ctx)
+    call_template:
+      tool: ritsu_emit_event
+      params:
+        event_type: "{started|step_done|step_failed|approval_required|approval_granted|approval_denied|artifact_written|circuit_breaker|done|failed}"
+        step: "{N}/{M}"
+        correlation_id: "{cid}"
+      example:
+        event_type: "step_done"
+        step: "3/7"
+        correlation_id: "cid-20260509-001"
+    input:
+      event_type:
+        type: enum
+        values:
+          [
+            started,
+            step_done,
+            step_failed,
+            approval_required,
+            approval_granted,
+            approval_denied,
+            artifact_written,
+            circuit_breaker,
+            done,
+            failed,
+          ]
+        required: true
+        description: "事件类型（对应 ctx-protocol.md status 枚举）"
+      step:
+        type: string
+        required: false
+        description: "步骤进度，格式 N/M（step_done/step_failed/artifact_written 等时必填）"
+      correlation_id:
+        type: string
+        required: true
+        description: "任务链路关联 ID"
+      error:
+        type: string
+        required: false
+        description: "step_failed/failed/circuit_breaker 时必填"
+      approval:
+        type: object
+        required: false
+        description: "approval_* 事件时必填"
+      artifact_meta:
+        type: object
+        required: false
+        description: "artifact_written 事件时必填"
+      violation:
+        type: object
+        required: false
+        description: "anti-pattern 触发时可选"
+      redirect:
+        type: string
+        required: false
+        description: "circuit_breaker 时必填"
+      transition:
+        type: object
+        required: false
+        description: "状态机流转事件时可选（含 from/to/event/ui_hint）"
+      duration_ms:
+        type: integer
+        required: false
+        description: "step_done/done 时可选"
+    validation: "写入前校验事件是否符合 _shared/ctx-event-schema.json 的 if-then 条件"
+    concurrency_control: "原子追加锁（同 ritsu_write_artifact）"
+    output_schema:
+      type: object
+      required: [written, line_count]
+      properties:
+        written:
+          type: boolean
+          description: "是否写入成功"
+        line_count:
+          type: integer
+          description: "当前 ctx 文件总行数（写入后）"
+        event:
+          type: object
+          description: "回显写入的完整事件对象"

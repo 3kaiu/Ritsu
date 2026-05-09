@@ -18,7 +18,17 @@
     },
     "skill": {
       "type": "string",
-      "enum": ["route", "init", "think", "dev", "optimize", "review", "hunt", "triage", "_summary"],
+      "enum": [
+        "route",
+        "init",
+        "think",
+        "dev",
+        "optimize",
+        "review",
+        "hunt",
+        "triage",
+        "_summary"
+      ],
       "description": "技能名"
     },
     "domain": {
@@ -28,7 +38,18 @@
     },
     "status": {
       "type": "string",
-      "enum": ["started", "step_done", "step_failed", "approval_required", "approval_granted", "approval_denied", "artifact_written", "circuit_breaker", "done", "failed"],
+      "enum": [
+        "started",
+        "step_done",
+        "step_failed",
+        "approval_required",
+        "approval_granted",
+        "approval_denied",
+        "artifact_written",
+        "circuit_breaker",
+        "done",
+        "failed"
+      ],
       "description": "事件类型"
     },
     "step": {
@@ -91,7 +112,13 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["handoff", "diagnosis", "review-stamp", "optimize-report", "ctx"],
+          "enum": [
+            "handoff",
+            "diagnosis",
+            "review-stamp",
+            "optimize-report",
+            "ctx"
+          ],
           "description": "产物类型"
         },
         "size_bytes": {
@@ -132,6 +159,20 @@
     "redirect": {
       "type": "string",
       "description": "circuit_breaker 时必填，重定向目标技能名"
+    },
+    "transition": {
+      "type": "object",
+      "description": "状态机流转事件时可选，供 UI 渲染状态动画",
+      "properties": {
+        "from": { "type": "string", "description": "源技能名" },
+        "to": { "type": "string", "description": "目标技能名" },
+        "event": {
+          "type": "string",
+          "description": "触发事件名（对应 state-machine.yaml transitions）"
+        },
+        "ui_hint": { "type": "string", "description": "UI 渲染提示" }
+      },
+      "required": ["from", "to", "event", "ui_hint"]
     },
     "summary": {
       "type": "object",

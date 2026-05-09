@@ -105,6 +105,7 @@
 | `artifact_meta`  | object       |      | artifact_written 时必填，见产物元数据                                                           |
 | `violation`      | object       |      | step_failed 且由 anti-pattern 触发时可选，见 violation 协议                                     |
 | `redirect`       | string       |      | circuit_breaker 时必填，重定向目标技能名                                                        |
+| `transition`     | object       |      | 状态机流转事件时可选（含 from/to/event/ui_hint），供 UI 渲染状态动画                            |
 
 **审批协议字段 (approval)**：
 
@@ -133,6 +134,17 @@
 | `severity` | enum   | ✅   | FATAL/WARN/HARD_STOP            |
 | `pattern`  | string | ✅   | 违反的模式名称                  |
 | `evidence` | string | ✅   | 具体证据描述                    |
+
+**transition 字段**：
+
+| 子字段    | 类型   | 必填 | 说明                                              |
+| --------- | ------ | ---- | ------------------------------------------------- |
+| `from`    | string | ✅   | 源技能名（如 route）                              |
+| `to`      | string | ✅   | 目标技能名（如 dev）                              |
+| `event`   | string | ✅   | 触发事件名（对应 state-machine.yaml transitions） |
+| `ui_hint` | string | ✅   | UI 渲染提示（如 show_dev_entry）                  |
+
+**机器可读 Schema**：本协议的完整 JSON Schema 见 `_shared/ctx-event-schema.json`，可用于 TypeScript 类型生成、运行时校验和 UI 组件 props 推导。
 
 **JSONL 优势**：
 
@@ -179,6 +191,7 @@
 ```jsonl
 {
   "ts": "20260531-235900",
+  "correlation_id": null,
   "skill": "_summary",
   "domain": "_all",
   "status": "done",

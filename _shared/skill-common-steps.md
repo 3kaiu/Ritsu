@@ -67,6 +67,12 @@
 `step` 格式为 `{current}/{total}`（如 `1/5`），`progress` 仅分块执行时填写（如 dev:chunk2/5、optimize:item3/8），否则为 `null`。
 `correlation_id` 由 route 技能生成（格式 `cid-{YYYYMMDD}-{seq}`），同链路技能继承此 ID，用于 UI 关联同一任务链路的所有事件。
 
+**correlation_id 继承规则**：
+
+- 若当前技能由 `/r-route` 路由触发 → 从 route 输出的 `[RITSU_CTX: ... cid={value}]` 中提取
+- 若用户直接调用 `/r-{skill}`（跳过 route）→ 从 `ritsu_read_ctx` 返回的 `last_completed.correlation_id` 或 `last_incomplete.correlation_id` 中继承
+- 若为新链路（无历史且未经过 route）→ 自行生成 `cid-{YYYYMMDD}-1`
+
 ---
 
 ## Step 2: ctx 写入（步骤/完成/失败时）
