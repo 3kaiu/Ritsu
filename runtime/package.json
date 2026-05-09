@@ -11,7 +11,9 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "build:wasm": "cd core && wasm-pack build --target nodejs --release --out-dir ../pkg",
+    "postinstall": "node scripts/download-wasm.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

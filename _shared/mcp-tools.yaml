@@ -1,373 +1,36 @@
-# Ritsu MCP Tool Schema 声明 v3.5.0
+# Ritsu MCP Tool Schema 声明 v3.5.1
 # 所有技能中的工具调用必须引用此文件中声明的工具名，禁止用自然语言描述工具调用行为。
 # AI 执行时应将此文件视为"可用工具菜单"，按 Schema 构造调用参数。
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
+#
+# ⚠️ SDK 模式：MCP Server 只提供结构化 I/O 原语，不做业务决策。
+# SKILL.md = 程序，AI = CPU，MCP 工具 = 系统调用。
 #
 # ⚠️ 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
 # call_template 是 input 的快捷视图（DRY），若两者冲突以 input 为准。
 # ⚠️ output_schema：定义工具返回值的 JSON Schema，供 UI 渲染 ToolCallCard 组件。
 
 tools:
-  - name: ritsu_get_changed_files
-    description: 同时检查 git 工作区（unstaged）和暂存区（staged）的变更文件列表，合并去重后返回
-    call_template:
-      tool: ritsu_get_changed_files
-      params: {} # 无参数
-    commands:
-      - "git diff --name-only -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
-      - "git diff --name-only --cached -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
-    output_schema:
-      type: object
-      required: [files, extensions]
-      properties:
-        files:
-          type: array
-          items: { type: string }
-          description: "变更文件相对路径列表"
-        extensions:
-          type: array
-          items: { type: string }
-          description: "去重后的文件后缀列表"
-        total_files:
-          type: integer
-          description: "变更文件总数"
-    error_handling:
-      not_a_git_repo: "告知用户当前目录不是 Git 仓库，跳过此工具，使用 P3 询问用户确定领域"
-      no_changes: "告知用户当前无变更文件，继续执行但在摘要中注明"
-
-  - name: ritsu_get_diff
-    description: 获取工作区和暂存区的完整 diff，用于代码审查。必须过滤无关大文件以防 Token OOM
-    call_template:
-      tool: ritsu_get_diff
-      params: {} # 无参数
-    commands:
-      - "git diff -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
-      - "git diff --cached -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
-    max_output_lines: 500
-    truncation: "若 diff 行数超过 max_output_lines，截断尾部并附加 '⚠️ diff 已截断，完整内容请分段查看'"
-    output_schema:
-      type: object
-      required: [diff_content]
-      properties:
-        diff_content:
-          type: string
-          description: "完整 diff 文本（或截断后文本）"
-        truncated:
-          type: boolean
-          description: "是否被截断"
-        total_lines:
-          type: integer
-          description: "diff 总行数（截断前）"
-    error_handling:
-      not_a_git_repo: "告知用户，要求手动粘贴代码变更内容"
-      no_changes: "告知用户无变更，询问是否 review 特定文件"
-
-  - name: ritsu_grep_identifier
-    description: 在项目文件中搜索指定标识符，验证其真实存在性（dev 阶段最高红线工具）
-    call_template:
-      tool: ritsu_grep_identifier
-      params:
-        identifier: "{要验证的函数名/变量名/组件名}"
-        extensions: ["{文件后缀1}", "{文件后缀2}"]
-      example:
-        identifier: "useAuth"
-        extensions: [".ts", ".tsx"]
-    input:
-      identifier:
-        type: string
-        required: true
-        description: "要验证的函数名/变量名/组件名"
-      extensions:
-        type: list
-        required: true
-        description: "文件后缀列表，如 ['.go', '.ts']"
-    command_template: 'grep -rnC 3 --max-count=10 "{identifier}" . --include="*{ext}" --exclude-dir={node_modules,.git,dist,build,out,vendor}'
-    max_output_lines: 80
-    truncation: "若匹配行数超过 max_output_lines，截断并附加 '⚠️ 匹配过多，仅展示前 10 处，请缩小搜索范围'"
-    output_schema:
-      type: object
-      required: [found]
-      properties:
-        found:
-          type: boolean
-          description: "标识符是否存在"
-        matches:
-          type: array
-          items:
-            type: object
-            properties:
-              file: { type: string, description: "匹配文件路径" }
-              line: { type: integer, description: "匹配行号" }
-              context:
-                {
-                  type: string,
-                  description: "标识符周围的上下文（含签名/参数定义）",
-                }
-          description: "匹配详情列表"
-        total_matches:
-          type: integer
-          description: "总匹配数"
-    decision:
-      exists_true: "可以引用该标识符，但必须阅读 context 字段验证签名对齐"
-      exists_false: "停止引用，告知用户：该标识符在项目中不存在，请确认名称或先定义它"
-    fallback:
-      timeout: "若 grep 执行超过 10s，降级为仅搜索入口文件（src/index.* / main.* / app.*），并告知用户搜索范围受限"
-      too_many_matches: "若 found_in 超过 20 个文件，仅返回定义处（排除调用处），并提示用户缩小 extensions 范围"
-
-  - name: ritsu_run_quality_gates
-    description: 读取 AGENTS.md 中的质量门禁命令并依次执行
-    call_template:
-      tool: ritsu_run_quality_gates
-      params: {} # 无参数，自动从 AGENTS.md 读取
-    steps:
-      - "1. 读取 AGENTS.md 的 '质量门禁' 区块"
-      - "2. 【安全校验】拦截高危命令：若发现 'rm ', 'curl ', 'wget ', ';', '&&', '|' 等高危注入符，且并非以安全工具开头，则强制抛出安全异常并拒绝执行"
-      - "3. 提取 Lint 命令并执行"
-      - "4. 提取 Test 命令并执行"
-    output_schema:
-      type: object
-      required: [lint, test]
-      properties:
-        lint:
-          type: object
-          properties:
-            passed: { type: boolean }
-            output: { type: string, description: "执行输出摘要" }
-            duration_ms: { type: integer, description: "执行耗时毫秒" }
-        test:
-          type: object
-          properties:
-            passed: { type: boolean }
-            output: { type: string, description: "执行输出摘要" }
-            duration_ms: { type: integer, description: "执行耗时毫秒" }
-    error_handling:
-      agents_not_found: "告知用户 AGENTS.md 不存在，执行 /r-init 后再继续"
-      command_not_defined: "告知用户该命令标记为'待补充'，需先完善 AGENTS.md"
-      command_failed: "输出完整失败日志，停止交付，要求修复后重新执行"
-      security_violation: "立即报警，指出可能遭遇了命令注入攻击，并请求人类检查 AGENTS.md"
-
-  - name: ritsu_write_artifact
-    description: 将产物内容写入 .ritsu/ 目录下的指定文件，写入前进行 Schema 合规验证。Diagnosis 和 Review Stamp 必须同时写入 md 和 html 双文件
-    call_template:
-      tool: ritsu_write_artifact
-      params:
-        type: "{handoff|diagnosis|review-stamp|optimize-report|ctx}"
-        filename: "{文件名含路径}"
-        content: "{文件内容}"
-        html_content: "{仅 diagnosis/review-stamp 需要}"
-        artifact_meta: "{仅非 ctx 类型需要，含 type/size_bytes/summary}"
-      examples:
-        - type: ctx
-          filename: "ctx-2026-05.jsonl"
-          content: '{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"dev","domain":"frontend","status":"started","step":"1/5","artifact":null,"progress":null}'
-          html_content: null
-          artifact_meta: null
-        - type: handoff
-          filename: ".ritsu/handoff-user-login-flow.md"
-          content: "{Handoff markdown 内容}"
-          html_content: null
-          artifact_meta:
-            {
-              "type": "handoff",
-              "size_bytes": 2340,
-              "summary": "用户登录流程设计",
-            }
-        - type: review-stamp
-          filename: ".ritsu/review-stamp-20260509-152044.md"
-          content: "{Review Stamp markdown 内容}"
-          html_content: "{Review Stamp HTML 内容}"
-          artifact_meta:
-            {
-              "type": "review-stamp",
-              "size_bytes": 1800,
-              "summary": "PASS，无 Hard Stop 命中",
-            }
-    input:
-      type:
-        type: enum
-        values: [handoff, diagnosis, review-stamp, optimize-report, ctx]
-        required: true
-      filename:
-        type: string
-        required: true
-        description: "文件名（含路径，若是 ctx 必须为 ctx-YYYY-MM.jsonl）"
-      content:
-        type: string
-        required: true
-        description: "文件内容（必须符合 artifact-schema.yaml 对应 Schema）"
-      html_content:
-        type: string
-        required: false
-        description: "当 type=diagnosis 或 type=review-stamp 时必填，为对应 HTML 渲染内容"
-      artifact_meta:
-        type: object
-        required: false
-        description: "当 type 非 ctx 时必填，产物元数据（用于 UI 渲染预览卡片）"
-        properties:
-          type: { type: string, description: "产物类型" }
-          size_bytes: { type: integer, description: "文件大小" }
-          summary: { type: string, description: "一句话摘要" }
-    validation: "写入前检查内容是否包含 TODO/待定/暂不处理 等占位符，发现则拒绝写入并报错（Schema 0 AGENTS.md 豁免）"
-    concurrency_control: "⚠️ 若写入目标为 ctx 等多进程共享文件，底层必须实现原子追加锁 (Atomic Append Mutex)。检测到文件被锁定时应指数退避重试，严禁在无锁状态下并发覆写导致文件撕裂。"
-    output_schema:
-      type: object
-      required: [path, size_bytes]
-      properties:
-        path:
-          type: string
-          description: "写入成功的 md 文件路径"
-        html_path:
-          type: string
-          description: "写入成功的 html 文件路径（仅 diagnosis/review-stamp），或 null"
-        size_bytes:
-          type: integer
-          description: "md 文件大小"
-        artifact_meta:
-          type: object
-          description: "回显产物元数据（供 UI 渲染）"
-
-  - name: ritsu_list_artifacts
-    description: 列举 .ritsu/ 目录下指定类型的产物文件，按修改时间倒序排列
-    call_template:
-      tool: ritsu_list_artifacts
-      params:
-        type: "{handoff|diagnosis|review-stamp|optimize-report|ctx|all}"
-    input:
-      type:
-        type: enum
-        values: [handoff, diagnosis, review-stamp, optimize-report, ctx, all]
-        required: true
-    output_schema:
-      type: object
-      required: [files]
-      properties:
-        files:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string, description: "文件路径" }
-              modified:
-                { type: string, description: "YYYYMMDD-HHMMSS 修改时间" }
-              size_bytes: { type: integer, description: "文件大小" }
-              artifact_type: { type: string, description: "产物类型" }
-        total_count:
-          type: integer
-          description: "文件总数"
-
-  - name: ritsu_read_ctx
-    description: 读取当月最新的 .ritsu/ctx-{YYYY-MM}.jsonl，解析最近的任务状态，用于会话恢复。必须使用 tail 机制仅截取最后 20 条记录，严禁全量加载引发上下文 Token 爆炸。若同时存在旧版 .ritsu/ctx-{YYYY-MM}.md，合并两种格式结果
-    call_template:
-      tool: ritsu_read_ctx
-      params: {} # 无参数，自动定位当月文件
-    output_schema:
-      type: object
-      required: [last_incomplete, last_completed, recent_entries]
-      properties:
-        last_incomplete:
-          type: object
-          description: "最后一条 started 但没有 done/failed 的记录，或 null"
-          properties:
-            correlation_id: { type: string, description: "任务链路关联 ID" }
-            skill: { type: string }
-            domain: { type: string }
-            step: { type: string, description: "当前步骤，如 2/5" }
-            progress: { type: string }
-        last_completed:
-          type: object
-          description: "最后一条 done 记录，或 null"
-          properties:
-            correlation_id: { type: string, description: "任务链路关联 ID" }
-            skill: { type: string }
-            domain: { type: string }
-            artifact: { type: string }
-            duration_ms: { type: integer }
-        recent_entries:
-          type: array
-          description: "最近 10 条记录（含 step_done 等事件类型）"
-          items:
-            type: object
-            properties:
-              ts: { type: string }
-              correlation_id: { type: string, description: "任务链路关联 ID" }
-              skill: { type: string }
-              domain: { type: string }
-              status: { type: string }
-              step: { type: string }
-              artifact: { type: string }
-              duration_ms: { type: integer }
-              error: { type: string }
-        pending_approvals:
-          type: array
-          description: "未处理的 approval_required 事件列表"
-          items:
-            type: object
-            properties:
-              step: { type: string }
-              approval: { type: object }
-
-  - name: ritsu_retrieve_memory
-    description: 当需要查找过去的架构决策、Bug 根因或需求契约时调用。基于全文语义或关键字扫描历史产物
-    call_template:
-      tool: ritsu_retrieve_memory
-      params:
-        query: "{搜索关键字，支持中英文混合}"
-      example:
-        query: "数据库 连接池 泄露"
-    input:
-      query:
-        type: string
-        required: true
-        description: "搜索关键字（如：数据库 连接池 泄露）"
-    command_template: 'grep -rni --max-count=5 "{query}" .ritsu/ --include="*.md" --include="*.html" --include="*.jsonl"'
-    max_output_lines: 100
-    truncation: "若匹配行数超过 max_output_lines，截断并附加 '⚠️ 结果过多，请缩小搜索关键字范围'"
-    output_schema:
-      type: object
-      required: [matches]
-      properties:
-        matches:
-          type: array
-          items:
-            type: object
-            properties:
-              file: { type: string, description: "匹配文件路径" }
-              line: { type: integer, description: "匹配行号" }
-              context: { type: string, description: "匹配内容上下文摘要" }
-              relevance:
-                { type: string, description: "相关性：high/medium/low" }
-        total_matches:
-          type: integer
-          description: "总匹配数"
-
   - name: ritsu_emit_event
-    description: 向当月 ctx 文件追加一条结构化事件记录。此工具是 ritsu_write_artifact(type=ctx) 的专用替代，职责更单一——仅处理事件流写入，不处理产物文件写入。推荐在 step_done/step_failed/approval_*/circuit_breaker 等事件场景使用此工具代替 ritsu_write_artifact(type=ctx)
+    description: 向当月 ctx 文件追加一条结构化事件记录。写入前自动校验是否符合 ctx-event-schema.json。此工具替代 ritsu_write_artifact(type=ctx)，职责更单一——仅处理事件流写入
     call_template:
       tool: ritsu_emit_event
       params:
         event_type: "{started|step_done|step_failed|approval_required|approval_granted|approval_denied|artifact_written|circuit_breaker|done|failed}"
         step: "{N}/{M}"
         correlation_id: "{cid}"
+        skill: "{skill_name}"
+        domain: "{value}"
       example:
         event_type: "step_done"
         step: "3/7"
         correlation_id: "cid-20260509-001"
+        skill: "dev"
+        domain: "frontend"
     input:
       event_type:
         type: enum
-        values:
-          [
-            started,
-            step_done,
-            step_failed,
-            approval_required,
-            approval_granted,
-            approval_denied,
-            artifact_written,
-            circuit_breaker,
-            done,
-            failed,
-          ]
+        values: [started, step_done, step_failed, approval_required, approval_granted, approval_denied, artifact_written, circuit_breaker, done, failed]
         required: true
         description: "事件类型（对应 ctx-protocol.md status 枚举）"
       step:
@@ -378,6 +41,22 @@ tools:
         type: string
         required: true
         description: "任务链路关联 ID"
+      skill:
+        type: string
+        required: false
+        description: "当前技能名"
+      domain:
+        type: string
+        required: false
+        description: "当前领域"
+      artifact:
+        type: string
+        required: false
+        description: "产物文件路径（artifact_written 时必填）"
+      progress:
+        type: string
+        required: false
+        description: "执行进度标记（如 dev:chunk2/5）"
       error:
         type: string
         required: false
@@ -407,7 +86,7 @@ tools:
         required: false
         description: "step_done/done 时可选"
     validation: "写入前校验事件是否符合 _shared/ctx-event-schema.json 的 if-then 条件"
-    concurrency_control: "原子追加锁（同 ritsu_write_artifact）"
+    concurrency_control: "原子追加锁"
     output_schema:
       type: object
       required: [written, line_count]
@@ -421,3 +100,186 @@ tools:
         event:
           type: object
           description: "回显写入的完整事件对象"
+
+  - name: ritsu_read_ctx
+    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete（最后未完成任务）、last_completed（最后已完成任务）、recent_entries（最近 10 条）、pending_approvals（待审批事件）。支持 WASM 索引加速
+    call_template:
+      tool: ritsu_read_ctx
+      params: {} # 无参数
+    input: {}
+    output_schema:
+      type: object
+      required: [last_incomplete, last_completed, recent_entries, pending_approvals]
+      properties:
+        last_incomplete:
+          type: object
+          description: "最后一条未完成事件（status=started 且无对应 done/failed）"
+          properties:
+            correlation_id: { type: string }
+            skill: { type: string }
+            domain: { type: string }
+            step: { type: string }
+        last_completed:
+          type: object
+          description: "最后一条已完成事件（status=done）"
+          properties:
+            correlation_id: { type: string }
+            skill: { type: string }
+            domain: { type: string }
+            artifact: { type: string }
+        recent_entries:
+          type: array
+          description: "最近 10 条事件"
+          items:
+            type: object
+        pending_approvals:
+          type: array
+          description: "待审批事件列表"
+          items:
+            type: object
+
+  - name: ritsu_write_artifact
+    description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。diagnosis/review-stamp 类型支持 md+html 双格式
+    call_template:
+      tool: ritsu_write_artifact
+      params:
+        type: "{handoff|diagnosis|review-stamp|optimize-report}"
+        filename: "{文件名}"
+        content: "{内容}"
+      example:
+        type: "handoff"
+        filename: "handoff-20260509-auth.md"
+        content: "# Handoff..."
+    input:
+      type:
+        type: enum
+        values: [handoff, diagnosis, review-stamp, optimize-report]
+        required: true
+        description: "产物类型"
+      filename:
+        type: string
+        required: true
+        description: "文件名（如 handoff-20260509-auth.md）"
+      content:
+        type: string
+        required: true
+        description: "文件内容（Markdown 格式）"
+      html_content:
+        type: string
+        required: false
+        description: "HTML 格式内容（仅 diagnosis/review-stamp 时可选，自动生成双格式）"
+      artifact_meta:
+        type: object
+        required: false
+        description: "产物元数据（type/size_bytes/summary）"
+    placeholder_check: "自动检测 TODO/待定/暂不处理 占位符并拒绝写入（ctx 类型豁免）"
+    output_schema:
+      type: object
+      required: [path, size_bytes]
+      properties:
+        path:
+          type: string
+          description: "写入文件绝对路径"
+        html_path:
+          type: string
+          description: "HTML 格式文件路径（仅双格式产物）"
+        size_bytes:
+          type: integer
+          description: "文件大小"
+        artifact_meta:
+          type: object
+          description: "产物元数据"
+
+  - name: ritsu_list_artifacts
+    description: 列出 .ritsu/ 目录下的产物文件。支持按类型过滤（handoff/diagnosis/review-stamp/optimize-report/ctx）
+    call_template:
+      tool: ritsu_list_artifacts
+      params:
+        type: "{类型或all}"
+      example:
+        type: "handoff"
+    input:
+      type:
+        type: string
+        required: false
+        description: "产物类型过滤（all/handoff/diagnosis/review-stamp/optimize-report/ctx），默认 all"
+    output_schema:
+      type: object
+      required: [files, total_count]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              modified: { type: string }
+              size_bytes: { type: integer }
+              artifact_type: { type: string }
+        total_count:
+          type: integer
+
+  - name: ritsu_exec
+    description: 在项目根目录执行 shell 命令并返回结构化输出。内置安全边界（拦截危险命令）和输出截断。AI 应优先使用此工具而非自行构造 shell 命令，以获得统一的截断/超时/错误处理
+    call_template:
+      tool: ritsu_exec
+      params:
+        command: "{shell 命令}"
+      example:
+        command: "git diff --name-only"
+    input:
+      command:
+        type: string
+        required: true
+        description: "要执行的 shell 命令"
+      max_output_lines:
+        type: integer
+        required: false
+        description: "最大输出行数（默认 200）"
+      timeout_ms:
+        type: integer
+        required: false
+        description: "超时毫秒数（默认 30000）"
+    safety_boundary: "自动拦截 rm -rf / mkfs / dd / npm publish / git push --force 等危险命令"
+    output_schema:
+      type: object
+      required: [ok, output]
+      properties:
+        ok:
+          type: boolean
+          description: "命令是否成功（exit code 0）"
+        output:
+          type: string
+          description: "命令输出（截断后）"
+
+  - name: ritsu_validate
+    description: 独立 Schema 校验工具。校验 JSON 数据是否符合指定 Schema。当前支持 ctx_event 类型。WASM 加速
+    call_template:
+      tool: ritsu_validate
+      params:
+        data: "{JSON 字符串}"
+        schema_type: "ctx_event"
+      example:
+        data: '{"status":"step_done","step":"3/7","correlation_id":"cid-20260509-001"}'
+        schema_type: "ctx_event"
+    input:
+      data:
+        type: string
+        required: true
+        description: "待校验的 JSON 字符串"
+      schema_type:
+        type: string
+        required: false
+        description: "Schema 类型（默认 ctx_event）"
+    output_schema:
+      type: object
+      required: [valid]
+      properties:
+        valid:
+          type: boolean
+          description: "是否通过校验"
+        errors:
+          type: array
+          items:
+            type: string
+          description: "校验错误列表"

@@ -32,7 +32,7 @@ hard_constraints:
 
 `[Step 1 Complete]` 后进入步骤 2。
 
-调用 **`ritsu_get_diff`** 获取完整变更内容（工具内部已合并工作区+暂存区）。
+调用 **`ritsu_exec`** 执行 `git diff` 获取完整变更内容。
 
 ⚠️ **安全反制协议 (Anti-Prompt-Injection)**：
 
@@ -46,7 +46,7 @@ hard_constraints:
   - 发现偏离（接口契约变动 / 遗漏 PRD 状态 / 擅自改变架构层级）→ 以 **P0 级别**进入 Hard Stop 流程
 - **不存在** → Review Stamp 注明"无 Handoff 溯源"，继续
 
-调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
+读取 AGENTS.md 获取 Lint/Test 命令，调用 **`ritsu_exec`** 执行，记录结果。
 
 ### 3. Hard Stop 检查（HC-1 执行协议）
 
@@ -61,7 +61,7 @@ hard_constraints:
   ❌ 有匹配 → 立即写入 FAIL Stamp（Hard Stop P1），停止
 
 检查 P2：不明标识符
-  对 diff 中新增的每个标识符调用 ritsu_grep_identifier 验证
+  对 diff 中新增的每个标识符调用 ritsu_exec (grep) 验证
   ✅ 全部存在 → 继续 P3
   ❌ 存在未定义 → 立即写入 FAIL Stamp（Hard Stop P2），停止
 

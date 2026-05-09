@@ -1,0 +1,64 @@
+name: Build WASM & Publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM
+        run: |
+          cd runtime/core
+          wasm-pack build --target nodejs --release --out-dir ../pkg
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ritsu-core-wasm
+          path: runtime/pkg/
+          retention-days: 30
+
+  publish-npm:
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ritsu-core-wasm
+          path: runtime/pkg/
+
+      - name: Install dependencies
+        run: cd runtime && npm ci
+
+      - name: Build TypeScript
+        run: cd runtime && npm run build
+
+      - name: Copy WASM to dist
+        run: cp -r runtime/pkg runtime/dist/pkg
+
+      - name: Publish
+        run: cd runtime && npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

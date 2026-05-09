@@ -1,14 +1,21 @@
 /**
- * 工具 Handler 注册表
+ * 工具 Handler 注册表 (SDK 模式)
  *
- * 每个 handler 接收 MCP CallToolRequest 的参数，返回 CallToolResult。
- * projectRoot 从环境变量 RITSU_PROJECT_ROOT 或 process.cwd() 获取。
+ * MCP Server = 纯 SDK，只提供结构化 I/O 原语。
+ * SKILL.md = 程序，AI 是 CPU，按需调用这些系统调用。
+ *
+ * 6 个工具：
+ *   ritsu_emit_event     — 事件写入 + Schema 校验（WASM 加速）
+ *   ritsu_read_ctx       — ctx 索引查询（WASM 加速）
+ *   ritsu_write_artifact — 产物写入 + 占位符拦截
+ *   ritsu_list_artifacts — 产物列表查询
+ *   ritsu_exec           — 通用命令执行（带截断/超时/安全边界）
+ *   ritsu_validate       — 独立 Schema 校验（纯 WASM）
  */
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { execSync } from "node:child_process";
 import {
-  appendFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -19,12 +26,17 @@ import {
 import { resolve, basename } from "node:path";
 import {
   appendEvent,
-  generateCorrelationId,
+  readRecentEntries,
   readLastCompleted,
   readLastIncomplete,
-  readRecentEntries,
 } from "../ctx-store.js";
-import { validateEvent } from "../event-validator.js";
+import { validateEvent as validateEventJs } from "../event-validator.js";
+import {
+  validateEventWasm,
+  queryLastIncompleteWasm,
+  queryLastCompletedWasm,
+  queryPendingApprovalsWasm,
+} from "../wasm-bridge.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -51,12 +63,12 @@ function errorResult(msg: string): CallToolResult {
   return { content: [{ type: "text", text: `❌ ${msg}` }], isError: true };
 }
 
-function runCmd(cmd: string, maxLines = 200): { ok: boolean; output: string } {
+function runCmd(cmd: string, maxLines = 200, timeoutMs = 30_000): { ok: boolean; output: string } {
   try {
     const raw = execSync(cmd, {
       cwd: getProjectRoot(),
       encoding: "utf-8",
-      timeout: 30_000,
+      timeout: timeoutMs,
       maxBuffer: 5 * 1024 * 1024,
     });
     const lines = raw.trim().split("\n");
@@ -72,117 +84,98 @@ function runCmd(cmd: string, maxLines = 200): { ok: boolean; output: string } {
 
 // ─── Handlers ────────────────────────────────────────────────
 
-async function ritsu_get_changed_files(): Promise<CallToolResult> {
-  const excludes =
-    "-- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'";
-  const r1 = runCmd(`git diff --name-only ${excludes}`);
-  const r2 = runCmd(`git diff --name-only --cached ${excludes}`);
+async function ritsu_emit_event(params: Record<string, unknown>): Promise<CallToolResult> {
+  const eventType = String(params.event_type ?? "");
+  const correlationId = String(params.correlation_id ?? "");
+  const step = params.step ? String(params.step) : undefined;
 
-  if (!r1.ok && !r2.ok) return errorResult("not a git repo");
+  if (!eventType) return errorResult("event_type is required");
+  if (!correlationId) return errorResult("correlation_id is required");
 
-  const files1 = r1.ok ? r1.output.trim().split("\n").filter(Boolean) : [];
-  const files2 = r2.ok ? r2.output.trim().split("\n").filter(Boolean) : [];
-  const merged = [...new Set([...files1, ...files2])];
-  const extensions = [
-    ...new Set(merged.map((f) => basename(f).split(".").pop()!)),
-  ];
-
-  return textResult(
-    JSON.stringify({ files: merged, extensions, total_files: merged.length }),
-  );
-}
-
-async function ritsu_get_diff(): Promise<CallToolResult> {
-  const excludes =
-    "-- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'";
-  const r1 = runCmd(`git diff ${excludes}`, 500);
-  const r2 = runCmd(`git diff --cached ${excludes}`, 500);
-
-  if (!r1.ok && !r2.ok) return errorResult("not a git repo");
-
-  const diff = [r1.output, r2.output].filter(Boolean).join("\n");
-  return textResult(JSON.stringify({ diff_content: diff, truncated: false }));
-}
-
-async function ritsu_grep_identifier(
-  params: Record<string, unknown>,
-): Promise<CallToolResult> {
-  const identifier = String(params.identifier ?? "");
-  const extensions = (params.extensions as string[]) ?? [];
-
-  if (!identifier) return errorResult("identifier is required");
-
-  const includeFlags = extensions.map((ext) => `--include="*${ext}"`).join(" ");
-  const cmd = `grep -rnC 3 --max-count=10 "${identifier}" . ${includeFlags} --exclude-dir={node_modules,.git,dist,build,out,vendor}`;
-
-  const r = runCmd(cmd, 80);
-  const found = r.ok && r.output.trim().length > 0;
-
-  const matches = found
-    ? r.output
-        .trim()
-        .split("\n--\n")
-        .slice(0, 10)
-        .map((chunk) => {
-          const firstLine = chunk.split("\n")[0] ?? "";
-          const [fileLine, ...rest] = firstLine.split(":");
-          return { file: fileLine, context: rest.join(":") || chunk };
-        })
-    : [];
-
-  return textResult(
-    JSON.stringify({ found, matches, total_matches: matches.length }),
-  );
-}
-
-async function ritsu_run_quality_gates(): Promise<CallToolResult> {
   const root = getProjectRoot();
-  const agentsPath = resolve(root, "AGENTS.md");
 
-  if (!existsSync(agentsPath))
-    return errorResult("AGENTS.md not found, run /r-init first");
+  const event: Record<string, unknown> = {
+    ts: ts(),
+    correlation_id: correlationId,
+    skill: String(params.skill ?? "unknown"),
+    domain: String(params.domain ?? "unknown"),
+    status: eventType,
+    step: step ?? null,
+    artifact: params.artifact ?? null,
+    progress: params.progress ?? null,
+  };
 
-  const content = readFileSync(agentsPath, "utf-8");
-  const lintMatch = content.match(/Lint[：:]\s*`?([^`\n]+)/);
-  const testMatch = content.match(/Test[：:]\s*`?([^`\n]+)/);
+  if (params.error) event.error = String(params.error);
+  if (params.approval) event.approval = params.approval;
+  if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
+  if (params.violation) event.violation = params.violation;
+  if (params.redirect) event.redirect = String(params.redirect);
+  if (params.transition) event.transition = params.transition;
+  if (params.duration_ms) event.duration_ms = Number(params.duration_ms);
 
-  const lintCmd = lintMatch?.[1]?.trim();
-  const testCmd = testMatch?.[1]?.trim();
+  // Schema 校验 — WASM 优先，JS 回退
+  const wasmResult = await validateEventWasm(event);
+  const validation = wasmResult ?? validateEventJs(event);
+  if (!validation.valid) {
+    return errorResult(`event validation failed: ${validation.errors?.join(", ")}`);
+  }
 
-  const lint = lintCmd
-    ? runCmd(lintCmd)
-    : { ok: false, output: "Lint command not defined" };
-  const test = testCmd
-    ? runCmd(testCmd)
-    : { ok: false, output: "Test command not defined" };
+  const result = appendEvent(root, event);
+  return textResult(
+    JSON.stringify({ written: true, line_count: result.lineCount, event })
+  );
+}
+
+async function ritsu_read_ctx(): Promise<CallToolResult> {
+  const root = getProjectRoot();
+
+  // WASM 加速路径
+  const wasmIncomplete = await queryLastIncompleteWasm();
+  const wasmCompleted = await queryLastCompletedWasm();
+  const wasmPending = await queryPendingApprovalsWasm();
+
+  if (wasmIncomplete !== null && wasmCompleted !== null && wasmPending !== null) {
+    const recentEntries = readRecentEntries(root, 10);
+    return textResult(
+      JSON.stringify({
+        last_incomplete: wasmIncomplete,
+        last_completed: wasmCompleted,
+        recent_entries: recentEntries,
+        pending_approvals: wasmPending,
+      })
+    );
+  }
+
+  // 纯 JS 回退
+  const lastIncomplete = readLastIncomplete(root);
+  const lastCompleted = readLastCompleted(root);
+  const recentEntries = readRecentEntries(root, 10);
+  const pendingApprovals = recentEntries.filter(
+    (e) => e.status === "approval_required"
+  );
 
   return textResult(
     JSON.stringify({
-      lint: { passed: lint.ok, output: lint.output.slice(0, 500) },
-      test: { passed: test.ok, output: test.output.slice(0, 500) },
-    }),
+      last_incomplete: lastIncomplete,
+      last_completed: lastCompleted,
+      recent_entries: recentEntries,
+      pending_approvals: pendingApprovals,
+    })
   );
 }
 
-async function ritsu_write_artifact(
-  params: Record<string, unknown>,
-): Promise<CallToolResult> {
+async function ritsu_write_artifact(params: Record<string, unknown>): Promise<CallToolResult> {
   const type = String(params.type ?? "");
   const filename = String(params.filename ?? "");
   const content = String(params.content ?? "");
   const htmlContent = params.html_content ? String(params.html_content) : null;
-  const artifactMeta = params.artifact_meta as
-    | Record<string, unknown>
-    | undefined;
+  const artifactMeta = params.artifact_meta as Record<string, unknown> | undefined;
 
   if (!type || !filename || !content)
     return errorResult("type, filename, content are required");
 
-  // 占位符检查
   if (/TODO|待定|暂不处理/.test(content) && type !== "ctx") {
-    return errorResult(
-      "content contains placeholder (TODO/待定/暂不处理), write rejected",
-    );
+    return errorResult("content contains placeholder (TODO/待定/暂不处理), write rejected");
   }
 
   const root = getProjectRoot();
@@ -206,19 +199,16 @@ async function ritsu_write_artifact(
       html_path: htmlPath,
       size_bytes: sizeBytes,
       artifact_meta: artifactMeta ?? null,
-    }),
+    })
   );
 }
 
-async function ritsu_list_artifacts(
-  params: Record<string, unknown>,
-): Promise<CallToolResult> {
+async function ritsu_list_artifacts(params: Record<string, unknown>): Promise<CallToolResult> {
   const type = String(params.type ?? "all");
   const root = getProjectRoot();
   const dir = resolve(root, RITSU_DIR);
 
-  if (!existsSync(dir))
-    return textResult(JSON.stringify({ files: [], total_count: 0 }));
+  if (!existsSync(dir)) return textResult(JSON.stringify({ files: [], total_count: 0 }));
 
   const typeMap: Record<string, string> = {
     handoff: "handoff-",
@@ -228,117 +218,66 @@ async function ritsu_list_artifacts(
     ctx: "ctx-",
   };
 
-  const prefix = type === "all" ? "" : (typeMap[type] ?? "");
+  const prefix = type === "all" ? "" : typeMap[type] ?? "";
   const entries = readdirSync(dir)
-    .filter((f) => (prefix ? f.startsWith(prefix) : true))
-    .filter((f) => statSync(resolve(dir, f)).isFile())
-    .map((f) => {
+    .filter((f: string) => (prefix ? f.startsWith(prefix) : true))
+    .filter((f: string) => statSync(resolve(dir, f)).isFile())
+    .map((f: string) => {
       const stat = statSync(resolve(dir, f));
       return {
         path: resolve(dir, f),
         modified: stat.mtime.toISOString().replace(/[-:T]/g, "").slice(0, 15),
         size_bytes: stat.size,
-        artifact_type:
-          Object.entries(typeMap).find(([, p]) => f.startsWith(p))?.[0] ??
-          "unknown",
+        artifact_type: Object.entries(typeMap).find(([, p]: [string, string]) =>
+          f.startsWith(p)
+        )?.[0] ?? "unknown",
       };
     })
-    .sort((a, b) => b.modified.localeCompare(a.modified));
-
-  return textResult(
-    JSON.stringify({ files: entries, total_count: entries.length }),
-  );
-}
-
-async function ritsu_read_ctx(): Promise<CallToolResult> {
-  const root = getProjectRoot();
-  const lastIncomplete = readLastIncomplete(root);
-  const lastCompleted = readLastCompleted(root);
-  const recentEntries = readRecentEntries(root, 10);
-
-  const pendingApprovals = recentEntries.filter(
-    (e) => e.status === "approval_required",
-  );
-
-  return textResult(
-    JSON.stringify({
-      last_incomplete: lastIncomplete,
-      last_completed: lastCompleted,
-      recent_entries: recentEntries,
-      pending_approvals: pendingApprovals,
-    }),
-  );
-}
-
-async function ritsu_retrieve_memory(
-  params: Record<string, unknown>,
-): Promise<CallToolResult> {
-  const query = String(params.query ?? "");
-  if (!query) return errorResult("query is required");
-
-  const root = getProjectRoot();
-  const cmd = `grep -rni --max-count=5 "${query}" .ritsu/ --include="*.md" --include="*.html" --include="*.jsonl"`;
-  const r = runCmd(cmd, 100);
-
-  const matches = r.ok
-    ? r.output
-        .trim()
-        .split("\n")
-        .filter(Boolean)
-        .map((line) => {
-          const [fileLine, ...rest] = line.split(":");
-          return { file: fileLine, context: rest.join(":") };
-        })
-    : [];
-
-  return textResult(JSON.stringify({ matches, total_matches: matches.length }));
-}
-
-async function ritsu_emit_event(
-  params: Record<string, unknown>,
-): Promise<CallToolResult> {
-  const eventType = String(params.event_type ?? "");
-  const correlationId = String(params.correlation_id ?? "");
-  const step = params.step ? String(params.step) : undefined;
-
-  if (!eventType) return errorResult("event_type is required");
-  if (!correlationId) return errorResult("correlation_id is required");
-
-  const root = getProjectRoot();
-  const domain = "unknown"; // domain 由 LLM 从 AGENTS.md 推断后传入
-
-  const event: Record<string, unknown> = {
-    ts: ts(),
-    correlation_id: correlationId,
-    skill: "unknown", // 由 LLM 填入
-    domain: params.domain ?? domain,
-    status: eventType,
-    step: step ?? null,
-    artifact: params.artifact ?? null,
-    progress: params.progress ?? null,
-  };
-
-  // 可选字段
-  if (params.error) event.error = String(params.error);
-  if (params.approval) event.approval = params.approval;
-  if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
-  if (params.violation) event.violation = params.violation;
-  if (params.redirect) event.redirect = String(params.redirect);
-  if (params.transition) event.transition = params.transition;
-  if (params.duration_ms) event.duration_ms = Number(params.duration_ms);
-
-  // Schema 校验
-  const validation = validateEvent(event);
-  if (!validation.valid) {
-    return errorResult(
-      `event validation failed: ${validation.errors?.join(", ")}`,
+    .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
+      String(b.modified).localeCompare(String(a.modified))
     );
+
+  return textResult(JSON.stringify({ files: entries, total_count: entries.length }));
+}
+
+async function ritsu_exec(params: Record<string, unknown>): Promise<CallToolResult> {
+  const command = String(params.command ?? "");
+  const maxLines = Number(params.max_output_lines ?? 200);
+  const timeoutMs = Number(params.timeout_ms ?? 30_000);
+
+  if (!command) return errorResult("command is required");
+
+  // 安全边界：禁止危险命令
+  const dangerous = /^(rm\s+-rf|mkfs|dd\s+if=|:\(\)\{.*\}|npm\s+publish|git\s+push\s+--force)/;
+  if (dangerous.test(command.trim())) {
+    return errorResult("dangerous command blocked by safety boundary");
   }
 
-  const result = appendEvent(root, event);
-  return textResult(
-    JSON.stringify({ written: true, line_count: result.lineCount, event }),
-  );
+  const r = runCmd(command, maxLines, timeoutMs);
+  return textResult(JSON.stringify({ ok: r.ok, output: r.output }));
+}
+
+async function ritsu_validate(params: Record<string, unknown>): Promise<CallToolResult> {
+  const dataJson = String(params.data ?? "");
+  const schemaType = String(params.schema_type ?? "ctx_event");
+
+  if (!dataJson) return errorResult("data is required (JSON string)");
+
+  if (schemaType === "ctx_event") {
+    let data: Record<string, unknown>;
+    try {
+      data = JSON.parse(dataJson);
+    } catch (e: any) {
+      return errorResult(`invalid JSON: ${e.message}`);
+    }
+
+    const wasmResult = await validateEventWasm(data);
+    const validation = wasmResult ?? validateEventJs(data);
+
+    return textResult(JSON.stringify(validation));
+  }
+
+  return errorResult(`unknown schema_type: ${schemaType}`);
 }
 
 // ─── Handler Registry ────────────────────────────────────────
@@ -347,13 +286,10 @@ export const registerHandlers: Record<
   string,
   (params: Record<string, unknown>) => Promise<CallToolResult>
 > = {
-  ritsu_get_changed_files,
-  ritsu_get_diff,
-  ritsu_grep_identifier,
-  ritsu_run_quality_gates,
+  ritsu_emit_event,
+  ritsu_read_ctx,
   ritsu_write_artifact,
   ritsu_list_artifacts,
-  ritsu_read_ctx,
-  ritsu_retrieve_memory,
-  ritsu_emit_event,
+  ritsu_exec,
+  ritsu_validate,
 };

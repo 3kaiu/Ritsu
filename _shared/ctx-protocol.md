@@ -163,7 +163,7 @@
 
 1. 找到最后一条 `status=started` 且没有对应 `done`/`failed` 的记录 → 告知用户"检测到未完成的任务"并询问是否继续
 2. 找到最后一条 `status=done` 记录 → 告知用户"上一个任务已完成"并推荐下一步
-3. 文件不存在 → 若需查找跨月历史可调用 `ritsu_retrieve_memory`，否则视为全新会话，正常执行
+3. 文件不存在 → 若需查找跨月历史可调用 `ritsu_exec` 执行 grep 搜索 .ritsu/ 目录，否则视为全新会话，正常执行
 
 ### 会话恢复行为协议 (Session Recovery Protocol)
 
@@ -182,7 +182,7 @@
 
 - `.ritsu/ctx-{YYYY-MM}.jsonl` 只追加，不修改历史记录（append-only）。
 - **天然防膨胀**：因采用按月分片路由（Time-based Sharding），单文件体积得到物理遏制。
-- **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。必须使用工具菜单中的 **`ritsu_retrieve_memory`**，传入自然语言关键字，通过底层检索抓取相关的 `handoff`、`diagnosis` 碎片，实现本地 RAG 问答。
+- **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。必须调用 `ritsu_exec` 执行 `grep -rni "{关键字}" .ritsu/ --include="*.md" --include="*.html" --include="*.jsonl"`，通过底层检索抓取相关的 `handoff`、`diagnosis` 碎片，实现本地 RAG 问答。
 
 ### 月度摘要机制 (Monthly Summary)
 

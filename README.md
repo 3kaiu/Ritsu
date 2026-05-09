@@ -35,7 +35,7 @@ skills/Ritsu/
 │   ├── state-machine.yaml      # 全局流转路径与标准引导话术
 │   ├── ctx-protocol.md         # 情景记忆持久化协议（事件流：started/step_done/approval_required/artifact_written/done）
 │   ├── ctx-event-schema.json   # ctx 事件 JSON Schema（机器可读，供 UI/TS 工具链消费）
-│   └── mcp-tools.yaml          # MCP Tool Schema 声明（9 个工具 + 结构化调用模板 + output_schema）
+│   └── mcp-tools.yaml          # MCP Tool Schema 声明（6 个 SDK 工具 + 结构化调用模板 + output_schema）
 │
 ├── rules/                      # 全局底线规则（任何技能执行前强制装载）
 │   ├── context-loader.md       # 强制上下文装载序列（AGENTS.md + 环境配置）

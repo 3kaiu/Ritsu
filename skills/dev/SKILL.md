@@ -8,7 +8,7 @@ total_steps: 7
 required_sections: [coding_disciplines, attack_vectors]
 hard_constraints:
   - id: HC-1
-    rule: "外部标识符引用前必须调用 ritsu_grep_identifier 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐"
+    rule: "外部标识符引用前必须调用 ritsu_exec 执行 grep 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐"
     severity: FATAL
   - id: HC-2
     rule: "交付物不得包含 TODO/待定/后续完善 等占位符"
@@ -61,7 +61,7 @@ hard_constraints:
 调用任何外部模块的函数/变量/组件前，**按以下协议执行（签名级校验）**：
 
 ```
-1. 调用 ritsu_grep_identifier({标识符}, {文件后缀})
+1. 调用 ritsu_exec({command: `grep -rnC 3 --max-count=10 "{标识符}" . --include="*{后缀}" --exclude-dir={node_modules,.git,dist}`})
 2. ✅ exists=true  → 必须阅读返回的 context 字段：
    - 提取该标识符的【函数签名/参数定义/类型说明】
    - 检查自己的调用代码是否与该签名严格对齐（参数顺序、对象结构、必填项）
@@ -78,14 +78,14 @@ hard_constraints:
 - **若清单项 ≤ 3**：可全量执行，但在编写业务逻辑前，先写出验证手段（单测用例、curl 或 UI 验证步骤）。
 - **若清单项 > 3**（触发 HC-4 强制约束）：
   1. **截断**：仅选取前 1-2 项核心逻辑执行。
-  2. **验证**：调用 `ritsu_run_quality_gates` 跑通当前的 Lint/Test。
+  2. **验证**：读取 AGENTS.md 获取 Lint/Test 命令，调用 `ritsu_exec` 执行。
   3. **断点确认**：输出 `[暂停点]` 总结当前进度，明确询问用户："第一批次已无损跑通，是否继续下一批次？" 严禁一次性输出所有代码导致幻觉翻车。
 
 ### 5. 沙盒自查清单（按优先级）
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-- [ ] HC-1：所有外部标识符均已通过 `ritsu_grep_identifier` 验证
+- [ ] HC-1：所有外部标识符均已通过 `ritsu_exec` (grep) 验证
 - [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理
 - [ ] 无孤儿引用，无未使用的残余变量
 
@@ -93,7 +93,7 @@ hard_constraints:
 
 `[Step 5 Complete]` 后进入步骤 6。
 
-调用 **`ritsu_run_quality_gates`**，等待结果：
+读取 AGENTS.md 获取 Lint/Test 命令，调用 **`ritsu_exec`** 执行，等待结果：
 
 - Lint ✅ + Test ✅ → 可以交付
 - 任何 ❌ → 修复后重新执行，不允许带着失败交付

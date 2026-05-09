@@ -18,7 +18,7 @@ hard_constraints:
     rule: "每项优化必须可独立验证——合并多项不可测的微优化等于未优化"
     severity: FATAL
   - id: HC-4
-    rule: "外部标识符替换前必须调用 ritsu_grep_identifier 验证新标识符存在且签名对齐"
+    rule: "外部标识符替换前必须调用 ritsu_exec 执行 grep 验证新标识符存在且签名对齐"
     severity: FATAL
 ---
 
@@ -92,7 +92,7 @@ hard_constraints:
 - **单次单项**：每次只改一个优化项，禁止批量合并修改
 - **立即验证**：每项改完后立即运行质量门禁（Lint + Test）
 - **失败即停**：若 Lint/Test 失败，立即回滚该项，记录到优化报告，继续下一项
-- **标识符校验**：替换工具函数/组件时，必须先 `ritsu_grep_identifier` 验证新标识符存在且签名对齐
+- **标识符校验**：替换工具函数/组件时，必须先 `ritsu_exec` (grep) 验证新标识符存在且签名对齐
 
 **领域专属优化规则**（按 domain 动态加载）：
 

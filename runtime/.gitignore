@@ -1,2 +1,7 @@
 node_modules/
 dist/
+
+# Rust WASM build artifacts (CI builds these, not committed)
+core/target/
+core/pkg/
+pkg/

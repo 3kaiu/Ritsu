@@ -13,7 +13,7 @@ hard_constraints:
     rule: "路由到 hunt 时，必须携带结构化上下文（摘要/复现/环境/日志），不得发送空调用"
     severity: FATAL
   - id: HC-3
-    rule: "PR 裁决前必须先调用 ritsu_get_changed_files 确定领域"
+    rule: "PR 裁决前必须先调用 ritsu_exec 执行 git diff --name-only 确定领域"
     severity: WARN
 ---
 
@@ -64,7 +64,7 @@ hard_constraints:
 
 ### 2C. PR 裁决
 
-**HC-3 前置**：调用 **`ritsu_get_changed_files`** 获取 PR 的变更文件后缀，确定领域：
+**HC-3 前置**：调用 **`ritsu_exec`** 执行 `git diff --name-only` 获取 PR 的变更文件后缀，确定领域：
 
 ```
 [RITSU_CTX: domain={value}]（基于 PR 文件后缀推断）
