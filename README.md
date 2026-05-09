@@ -46,8 +46,18 @@ skills/Ritsu/
 │   ├── frontend.yaml           # 前端增量
 │   ├── backend.yaml            # 后端增量
 │   ├── fullstack.yaml          # 全栈增量
-│   ├── devops.yaml             # 运维/基础设施增量
+│   ├── devops.yaml             # 运维增量
 │   └── data.yaml               # 数据/ML 增量
+│
+├── runtime/                   # MCP Server 运行时（TypeScript，编译 YAML 协议为可执行工具）
+│   ├── src/
+│   │   ├── index.ts            # MCP Server 入口（stdio transport）
+│   │   ├── schema-compiler.ts # mcp-tools.yaml → MCP Tool definitions 编译器
+│   │   ├── event-validator.ts  # ctx-event-schema.json + ajv 事件校验
+│   │   ├── ctx-store.ts        # .ritsu/ctx JSONL 读写 + correlation_id 生成
+│   │   └── handlers/           # 9 个工具的运行时 handler
+│   ├── package.json
+│   └── tsconfig.json
 │
 └── skills/                     # 8 个可调用技能
     ├── route/                  # 调度入口：分析意图，路由至正确技能

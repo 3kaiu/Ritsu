@@ -1,0 +1,30 @@
+{
+  "name": "ritsu-mcp-server",
+  "version": "3.5.0",
+  "description": "Ritsu MCP Server — 将协议声明编译为可运行的 MCP 工具服务",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ritsu-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "ajv": "^8.17.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.0",
+    "typescript": "^5.8.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
