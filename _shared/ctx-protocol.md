@@ -18,23 +18,24 @@
 ### 记录格式（JSONL，每行一个 JSON 对象，追加不覆盖）
 
 ```jsonl
-{"ts":"20260509-145000","skill":"think","domain":"backend","status":"started","artifact":null}
-{"ts":"20260509-150233","skill":"think","domain":"backend","status":"done","artifact":".ritsu/handoff-user-login-flow.md"}
-{"ts":"20260509-150240","skill":"dev","domain":"backend","status":"started","artifact":null}
-{"ts":"20260509-151822","skill":"dev","domain":"backend","status":"done","artifact":null}
-{"ts":"20260509-151825","skill":"review","domain":"backend","status":"started","artifact":null}
-{"ts":"20260509-152044","skill":"review","domain":"backend","status":"done","artifact":".ritsu/review-stamp-20260509-152044.md"}
+{"ts":"20260509-145000","skill":"think","domain":"backend","status":"started","artifact":null,"progress":null}
+{"ts":"20260509-150233","skill":"think","domain":"backend","status":"done","artifact":".ritsu/handoff-user-login-flow.md","progress":null}
+{"ts":"20260509-150240","skill":"dev","domain":"backend","status":"started","artifact":null,"progress":"dev:chunk1/3"}
+{"ts":"20260509-151822","skill":"dev","domain":"backend","status":"done","artifact":null,"progress":null}
+{"ts":"20260509-151825","skill":"review","domain":"backend","status":"started","artifact":null,"progress":null}
+{"ts":"20260509-152044","skill":"review","domain":"backend","status":"done","artifact":".ritsu/review-stamp-20260509-152044.md","progress":null}
 ```
 
 **字段说明**：
 
-| 字段       | 类型         | 必填 | 说明                                            |
-| ---------- | ------------ | ---- | ----------------------------------------------- |
-| `ts`       | string       | ✅   | `YYYYMMDD-HHMMSS` 格式时间戳                    |
-| `skill`    | string       | ✅   | 技能名：route/init/think/dev/review/hunt/triage |
-| `domain`   | string       | ✅   | 领域值：frontend/backend/fullstack/infra/data   |
-| `status`   | enum         | ✅   | `started` / `done` / `failed`                   |
-| `artifact` | string\|null | ✅   | 产物文件路径，无则为 `null`                     |
+| 字段       | 类型         | 必填 | 说明                                                                                  |
+| ---------- | ------------ | ---- | ------------------------------------------------------------------------------------- |
+| `ts`       | string       | ✅   | `YYYYMMDD-HHMMSS` 格式时间戳                                                          |
+| `skill`    | string       | ✅   | 技能名：route/init/think/dev/optimize/review/hunt/triage                              |
+| `domain`   | string       | ✅   | 领域值：frontend/backend/fullstack/infra/data                                         |
+| `status`   | enum         | ✅   | `started` / `done` / `failed`                                                         |
+| `artifact` | string\|null | ✅   | 产物文件路径，无则为 `null`                                                           |
+| `progress` | string\|null |      | 执行进度标记（如 `dev:chunk2/5`），仅 `started` 状态需要，`done`/`failed` 时为 `null` |
 
 **JSONL 优势**：
 

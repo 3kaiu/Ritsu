@@ -33,13 +33,7 @@ hard_constraints:
 
 ### 1. 领域解析
 
-> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
-
-写入 ctx-{YYYY-MM}.jsonl（type=ctx）：
-
-```
-{"ts":"{timestamp}","skill":"hunt","domain":"{value}","status":"started","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 1
 
 ### 2. 零点击上下文绑定 (Zero-Click Context Binding)
 
@@ -121,16 +115,10 @@ hard_constraints:
 
 写入 ctx-{YYYY-MM}.jsonl：
 
-```
-{"ts":"{timestamp}","skill":"hunt","domain":"{value}","status":"done","artifact":".ritsu/diagnosis-{ts}.md"}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=hunt, artifact=.ritsu/diagnosis-{ts}.md）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1 最终提醒**：诊断报告写完后，检查自己在整个诊断过程中是否修改了任何业务文件。若有，立即撤销并在报告中记录。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — hunt 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=hunt）

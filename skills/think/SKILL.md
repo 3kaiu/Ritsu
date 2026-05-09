@@ -33,13 +33,7 @@ hard_constraints:
 
 ### A1. 领域解析
 
-> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
-
-写入 ctx-{YYYY-MM}.jsonl（调用 **`ritsu_write_artifact`** type=ctx）：
-
-```
-{"ts":"{timestamp}","skill":"think","domain":"{value}","status":"started","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 1
 
 ### A2. 多维轰炸（基于领域）
 
@@ -114,18 +108,12 @@ hard_constraints:
 
 调用 **`ritsu_write_artifact`**（type=handoff）写入，Schema 引用 `_shared/artifact-schema.yaml` Schema 1。
 
-写入完成后更新 ctx.md：
+写入完成后更新 ctx：
 
-```
-{"ts":"{timestamp}","skill":"think","domain":"{value}","status":"done","artifact":".ritsu/handoff-{slug}.md"}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=think, artifact=.ritsu/handoff-{slug}.md）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1 最终提醒**：Handoff 文件写入前，调用 `ritsu_write_artifact` 的内置校验会拦截任何占位符，写入成功即为合规交付。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — think 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=think）

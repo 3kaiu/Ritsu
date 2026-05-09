@@ -37,7 +37,7 @@ hard_constraints:
 
 ### 1. 领域解析与零点击寻址 (Zero-Click Context Binding)
 
-> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
+> 引用 `_shared/skill-common-steps.md` Step 1
 
 **隐式绑定优先**：首先检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何 `handoff-*.md` 或 `diagnosis-*.md` 文件。
 
@@ -122,16 +122,10 @@ hard_constraints:
 
 写入 ctx-{YYYY-MM}.jsonl：
 
-```
-{"ts":"{timestamp}","skill":"dev","domain":"{value}","status":"done","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=dev, artifact=null）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1 最终提醒**：交付前回看自查清单第一条——所有外部标识符是否全部经过 grep 验证？未验证的不允许出现在交付代码中。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — dev 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=dev）

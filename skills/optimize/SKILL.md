@@ -41,13 +41,7 @@ hard_constraints:
 
 ### 1. 领域解析
 
-> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
-
-写入 ctx-{YYYY-MM}.jsonl（调用 **`ritsu_write_artifact`** type=ctx）：
-
-```
-{"ts":"{timestamp}","skill":"optimize","domain":"{value}","status":"started","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 1
 
 ### 2. 深度分析 (Deep Analysis)
 
@@ -72,11 +66,12 @@ hard_constraints:
 
 将分析清单以表格形式呈现，每行标注：
 
-| # | 优化项 | 当前写法 | 替换为 | 预期收益 | 风险 |
-|---|--------|---------|--------|---------|------|
-| 1 | ... | ... | ... | ... | 低/中/高 |
+| #   | 优化项 | 当前写法 | 替换为 | 预期收益 | 风险     |
+| --- | ------ | -------- | ------ | -------- | -------- |
+| 1   | ...    | ...      | ...    | ...      | 低/中/高 |
 
 **风险评级规则**：
+
 - **低**：删除死代码、等价 CSS 替换、注释清理
 - **中**：工具库替换、算法优化、语义标签替换
 - **高**：涉及状态管理路径、异步逻辑重构
@@ -89,6 +84,7 @@ hard_constraints:
 按确认清单**逐项**执行，每项执行后立即验证：
 
 **执行纪律**：
+
 - **单次单项**：每次只改一个优化项，禁止批量合并修改
 - **立即验证**：每项改完后立即运行质量门禁（Lint + Test）
 - **失败即停**：若 Lint/Test 失败，立即回滚该项，记录到优化报告，继续下一项
@@ -108,36 +104,34 @@ hard_constraints:
 _优化 by /r-opt · domain: {value} · date: {YYYY-MM-DD}_
 
 ## 执行摘要
+
 - 总优化项: {N}
 - 成功: {M} | 跳过(风险): {K} | 失败回滚: {L}
 
 ## 成功项明细
-| # | 优化项 | Before → After | 验证 |
-|---|--------|---------------|------|
-| 1 | ... | ... | ✅ Lint+Test 通过 |
+
+| #   | 优化项 | Before → After | 验证              |
+| --- | ------ | -------------- | ----------------- |
+| 1   | ...    | ...            | ✅ Lint+Test 通过 |
 
 ## 跳过/回滚项
-| # | 优化项 | 原因 |
-|---|--------|------|
-| ... | ... | Test 失败 / 用户跳过 |
+
+| #   | 优化项 | 原因                 |
+| --- | ------ | -------------------- |
+| ... | ...    | Test 失败 / 用户跳过 |
 
 ## 质量门禁
+
 - Lint: {✅/❌}
 - Test: {✅/❌}
 ```
 
 写入 ctx-{YYYY-MM}.jsonl：
 
-```
-{"ts":"{timestamp}","skill":"optimize","domain":"{value}","status":"done","artifact":".ritsu/optimize-report-{ts}.md"}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=optimize, artifact=.ritsu/optimize-report-{ts}.md）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1 最终提醒**：优化完成后，逐文件 `git diff` 确认无功能行为变更。若发现任何非预期行为变更，立即回滚。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — optimize 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=optimize）

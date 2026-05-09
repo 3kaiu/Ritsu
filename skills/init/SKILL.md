@@ -54,7 +54,7 @@ hard_constraints:
 
 ### 3. 领域解析（结合扫描结果）
 
-> 引用 `_shared/domain-resolver.md`
+> 引用 `_shared/skill-common-steps.md` Step 1
 > 步骤 2 的扫描结果作为 P2 的辅助依据（不覆盖 P1）：
 >
 > - package.json + React/Vue → frontend 倾向
@@ -111,18 +111,10 @@ Ritsu Bundle v3.3 已激活。
 
 ### 7. 写入 ctx-{YYYY-MM}.jsonl
 
-调用 **`ritsu_write_artifact`**（type=ctx）追加：
-
-```
-{"ts":"{timestamp}","skill":"init","domain":"{value}","status":"done","artifact":"AGENTS.md"}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=init, artifact=AGENTS.md）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1 最终提醒**：init 完成后，AGENTS.md 是唯一产物，不附带任何业务代码或逻辑变更。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — init 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=init）

@@ -33,7 +33,7 @@ hard_constraints:
 
 ⚠️ **现实对账机制 (Temporal Desync Check)**：
 
-- 如果 `ctx.md` 记录上一任务为 `done`（例如开发完成），但你通过文件探查或 Git 状态发现代码实际上并不存在（用户可能执行了 `git reset --hard` 时间回退）。
+- 如果 ctx 记录上一任务为 `done`（例如开发完成），但你通过文件探查或 Git 状态发现代码实际上并不存在（用户可能执行了 `git reset --hard` 时间回退）。
 - **必须触发状态机回拨**：向用户提示"检测到 Git 时空错位，代码已回滚"，主动忽略该 `done` 记录，将状态机自适应拨回 `started`，并询问是否重新执行该任务。
 
 如果没有发生时空错位，按正常逻辑提示：
@@ -44,7 +44,7 @@ hard_constraints:
 
 ### 2. 领域解析
 
-> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
+> 引用 `_shared/skill-common-steps.md` Step 1
 
 ### 3. 意图识别与路由
 
@@ -78,18 +78,10 @@ hard_constraints:
 
 ### 5. 写入 ctx-{YYYY-MM}.jsonl
 
-调用 **`ritsu_write_artifact`**（type=ctx）追加：
-
-```
-{"ts":"{timestamp}","skill":"route","domain":"{value}","status":"done","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1 最终提醒**：输出路由决策后立即停止。不执行被路由技能的任何步骤。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — route 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=route）

@@ -72,12 +72,12 @@ tools:
     input:
       type:
         type: enum
-        values: [handoff, diagnosis, review-stamp, ctx]
+        values: [handoff, diagnosis, review-stamp, optimize-report, ctx]
         required: true
       filename:
         type: string
         required: true
-        description: "文件名（含路径，若是 ctx 必须为 ctx-YYYY-MM.md 或 ctx-YYYY-MM.jsonl）"
+        description: "文件名（含路径，若是 ctx 必须为 ctx-YYYY-MM.jsonl）"
       content:
         type: string
         required: true
@@ -107,7 +107,7 @@ tools:
           size_bytes: 0
 
   - name: ritsu_read_ctx
-    description: 读取当月最新的 .ritsu/ctx-{YYYY-MM}.md 或 .ritsu/ctx-{YYYY-MM}.jsonl，解析最近的任务状态，用于会话恢复。必须使用 tail 机制仅截取最后 20 条记录，严禁全量加载引发上下文 Token 爆炸
+    description: 读取当月最新的 .ritsu/ctx-{YYYY-MM}.jsonl，解析最近的任务状态，用于会话恢复。必须使用 tail 机制仅截取最后 20 条记录，严禁全量加载引发上下文 Token 爆炸。若同时存在旧版 .ritsu/ctx-{YYYY-MM}.md，合并两种格式结果
     returns:
       last_incomplete: "最后一条 started 但没有 done/failed 的记录，或 null"
       last_completed: "最后一条 done 记录，或 null"

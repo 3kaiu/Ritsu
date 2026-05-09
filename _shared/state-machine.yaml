@@ -43,10 +43,18 @@ states:
       optimize: "性能优化工单"
 
 circuit_breaker:
-  skill: review
-  condition: "连续两次 FAIL"
-  action: route_to_think
-  message: "⚠️ 熔断触发（连续两次 FAIL）→ 必须引导至 /r-think 重新审视架构设计，或要求人类介入"
+  - skill: review
+    condition: "连续两次 FAIL"
+    action: route_to_think
+    message: "⚠️ 熔断触发（连续两次 FAIL）→ 必须引导至 /r-think 重新审视架构设计，或要求人类介入"
+  - skill: dev→review
+    condition: "同一 handoff 的 dev→review 循环超过 3 次"
+    action: route_to_think
+    message: "⚠️ 循环熔断（dev↔review 循环 >3 次）→ 反复修补说明设计有缺陷，必须引导至 /r-think 重新审视"
+  - skill: optimize→review
+    condition: "同一模块的 optimize→review 循环超过 2 次"
+    action: route_to_think
+    message: "⚠️ 循环熔断（optimize↔review 循环 >2 次）→ 优化引入回归说明理解不充分，必须引导至 /r-think 重新审视"
 
 guidance:
   route_done:

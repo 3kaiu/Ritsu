@@ -9,6 +9,8 @@ schemas:
     path: "{项目根}/AGENTS.md"
     format: markdown
     consumer: human_and_ai
+    placeholder_allowed: true
+    placeholder_note: "AGENTS.md 为 init 阶段半成品，'待补充' 占位符在此 Schema 中豁免 AP-6。后续技能执行时若发现'待补充'字段，应提示用户补充而非拒绝"
     required_fields:
       - field: ritsu-version
         type: string
@@ -57,7 +59,8 @@ schemas:
             fields:
               - name: api_contract
                 label: "API / 接口契约"
-                sub_fields: [method_path, request_schema, response_schema, error_codes]
+                sub_fields:
+                  [method_path, request_schema, response_schema, error_codes]
               - name: data_model
                 label: "数据模型"
                 sub_fields: [table_name, key_fields, index_design]
@@ -65,7 +68,8 @@ schemas:
             fields:
               - name: component_contract
                 label: "组件契约"
-                sub_fields: [component_name, props_type, emits_callbacks, state_machine]
+                sub_fields:
+                  [component_name, props_type, emits_callbacks, state_machine]
       - title: "攻击测试防线"
         fields:
           - name: downtime_response
@@ -160,6 +164,40 @@ schemas:
             format: "✅ 通过 | ❌ 失败，输出：..."
           - name: test
             format: "✅ 通过 | ❌ 失败，输出：..."
+
+  optimize_report:
+    id: 4
+    path: ".ritsu/optimize-report-{YYYYMMDD-HHMMSS}.md"
+    format: markdown
+    consumer: ai
+    html_render: false
+    required_sections:
+      - title: "执行摘要"
+        id: summary
+        fields:
+          - name: total_items
+            format: "整数"
+          - name: succeeded
+            format: "整数"
+          - name: skipped
+            format: "整数（风险跳过）"
+          - name: rolled_back
+            format: "整数（验证失败回滚）"
+      - title: "成功项明细"
+        id: succeeded-items
+        type: table
+        columns: [序号, 优化项, Before → After, 验证结果]
+      - title: "跳过/回滚项"
+        id: skipped-items
+        type: table
+        columns: [序号, 优化项, 原因]
+      - title: "质量门禁"
+        id: quality-gates
+        fields:
+          - name: lint
+            format: "✅ 通过 | ❌ 失败"
+          - name: test
+            format: "✅ 通过 | ❌ 失败"
 
 dual_format_protocol:
   version: "3.3.0"

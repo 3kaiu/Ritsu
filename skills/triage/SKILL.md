@@ -109,16 +109,10 @@ hard_constraints:
 
 写入 ctx-{YYYY-MM}.jsonl（type=ctx）：
 
-```
-{"ts":"{timestamp}","skill":"triage","domain":"{value}","status":"done","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=triage, artifact=null）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-1+HC-2 最终提醒**：检查本次处理是否对任何 Bug 进行了技术层面的根因分析。若有，删除分析内容，改为携带上下文路由给 `/r-hunt`。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — triage 完成引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=triage）

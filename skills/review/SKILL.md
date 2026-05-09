@@ -34,13 +34,7 @@ hard_constraints:
 
 ### 1. 领域解析
 
-> 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
-
-写入 ctx-{YYYY-MM}.jsonl（type=ctx）：
-
-```
-{"ts":"{timestamp}","skill":"review","domain":"{value}","status":"started","artifact":null}
-```
+> 引用 `_shared/skill-common-steps.md` Step 1
 
 ### 2. 变更抓取与零信任隔离 (Zero-Trust Sandbox)
 
@@ -117,19 +111,14 @@ hard_constraints:
 
 - 如果本次审查结果为 FAIL，必须通过 `ritsu_list_artifacts` 和 `ritsu_read_ctx` 检查对该 Handoff 的审查历史。
 - 若发现**连续两次 FAIL**（包含本次），触发死循环熔断！禁止再打回给 dev，必须引导至 `/r-think` 重新审视架构设计，或要求人类介入。
+- 若发现**同一 handoff 的 dev→review 循环超过 3 次**（含 PASS 后又回来修），触发循环熔断！必须引导至 `/r-think`，反复修补说明设计有根本缺陷。
 
 写入 ctx-{YYYY-MM}.jsonl：
 
-```
-{"ts":"{timestamp}","skill":"review","domain":"{value}","status":"done","artifact":".ritsu/review-stamp-{ts}.md"}
-```
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=review, artifact=.ritsu/review-stamp-{ts}.md）
 
 ---
 
-## ⛔ 尾部锚点
-
-**HC-2 最终提醒**：Review Stamp 是此技能唯一强制产物。无论审查结果如何，离开前确认 `.ritsu/review-stamp-*.md` 和 `.ritsu/review-stamp-*.html` 文件均已成功写入。
-
 ## 关联流转
 
-> 引用 `_shared/state-machine.yaml` — review PASS / FAIL 引导语。
+> 引用 `_shared/skill-common-steps.md` Step 3（skill=review）
