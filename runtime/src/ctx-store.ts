@@ -8,8 +8,10 @@ import {
   mkdirSync,
   readFileSync,
   statSync,
+  rmSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import { lockSync, unlockSync, checkSync } from "proper-lockfile";
 
 const RITSU_DIR = ".ritsu";
 
@@ -32,24 +34,80 @@ function ensureRitsuDir(projectRoot: string): string {
   return dir;
 }
 
+let _lastLineCount = 0;
+let _lastCtxMonth = "";
+
+/** 清理残留锁文件（进程异常退出后可能遗留） */
+function cleanupStaleLock(ctxPath: string): void {
+  const lockPath = ctxPath + ".lock";
+  if (existsSync(lockPath)) {
+    try {
+      // 检查锁是否 stale（无进程持有）
+      if (!checkSync(ctxPath, { lockfilePath: ctxPath + ".lock" })) {
+        rmSync(lockPath, { force: true });
+      }
+    } catch {
+      // checkSync 在锁文件损坏时抛异常，直接清理
+      rmSync(lockPath, { force: true });
+    }
+  }
+}
+
 export function appendEvent(
   projectRoot: string,
-  event: Record<string, unknown>
+  event: Record<string, unknown>,
 ): { path: string; lineCount: number } {
   ensureRitsuDir(projectRoot);
   const ctxPath = getCtxPath(projectRoot);
   const line = JSON.stringify(event);
-  appendFileSync(ctxPath, line + "\n");
 
-  // 统计行数
-  const content = readFileSync(ctxPath, "utf-8");
-  const lineCount = content.trim().split("\n").length;
-  return { path: ctxPath, lineCount };
+  // 月度切换检测 — 新月份重置行数计数器
+  const currentMonth = getCurrentMonthFilename();
+  if (currentMonth !== _lastCtxMonth) {
+    _lastCtxMonth = currentMonth;
+    // 重新统计新文件行数
+    if (existsSync(ctxPath)) {
+      const content = readFileSync(ctxPath, "utf-8").trim();
+      _lastLineCount = content ? content.split("\n").length : 0;
+    } else {
+      _lastLineCount = 0;
+    }
+  }
+
+  // 清理残留锁
+  cleanupStaleLock(ctxPath);
+
+  // 确保 ctx 文件存在（proper-lockfile 要求目标文件存在）
+  if (!existsSync(ctxPath)) {
+    appendFileSync(ctxPath, "");
+  }
+
+  // 原子追加锁 — 锁定 ctx 文件本身，粒度精确
+  lockSync(ctxPath);
+  try {
+    appendFileSync(ctxPath, line + "\n");
+    _lastLineCount++;
+  } finally {
+    unlockSync(ctxPath);
+  }
+
+  return { path: ctxPath, lineCount: _lastLineCount };
+}
+
+/** 重置行数计数器（索引重建时调用） */
+export function resetLineCount(count: number): void {
+  _lastLineCount = count;
+}
+
+/** 获取 ctx 文件路径（供外部构建 WASM 索引） */
+export function getCtxFilePath(projectRoot: string): string {
+  ensureRitsuDir(projectRoot);
+  return getCtxPath(projectRoot);
 }
 
 export function readRecentEntries(
   projectRoot: string,
-  limit = 20
+  limit = 20,
 ): Record<string, unknown>[] {
   const ctxPath = getCtxPath(projectRoot);
   if (!existsSync(ctxPath)) return [];
@@ -72,7 +130,7 @@ export function readRecentEntries(
 }
 
 export function readLastIncomplete(
-  projectRoot: string
+  projectRoot: string,
 ): Record<string, unknown> | null {
   const entries = readRecentEntries(projectRoot, 50);
   const doneSet = new Set<string>();
@@ -99,7 +157,7 @@ export function readLastIncomplete(
 }
 
 export function readLastCompleted(
-  projectRoot: string
+  projectRoot: string,
 ): Record<string, unknown> | null {
   const entries = readRecentEntries(projectRoot, 50);
   for (let i = entries.length - 1; i >= 0; i--) {

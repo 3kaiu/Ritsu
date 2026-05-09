@@ -29,6 +29,10 @@ import {
   readRecentEntries,
   readLastCompleted,
   readLastIncomplete,
+  getCtxFilePath,
+  resetLineCount,
+  generateCorrelationId,
+  getNextSeq,
 } from "../ctx-store.js";
 import { validateEvent as validateEventJs } from "../event-validator.js";
 import {
@@ -36,6 +40,10 @@ import {
   queryLastIncompleteWasm,
   queryLastCompletedWasm,
   queryPendingApprovalsWasm,
+  queryRecentWasm,
+  buildIndexFromCtxFile,
+  appendToIndexWasm,
+  nextCorrelationIdWasm,
 } from "../wasm-bridge.js";
 
 const RITSU_DIR = ".ritsu";
@@ -63,13 +71,18 @@ function errorResult(msg: string): CallToolResult {
   return { content: [{ type: "text", text: `❌ ${msg}` }], isError: true };
 }
 
-function runCmd(cmd: string, maxLines = 200, timeoutMs = 30_000): { ok: boolean; output: string } {
+function runCmd(
+  cmd: string,
+  maxLines = 200,
+  timeoutMs = 30_000,
+  maxBufferMb = 10,
+): { ok: boolean; output: string } {
   try {
     const raw = execSync(cmd, {
       cwd: getProjectRoot(),
       encoding: "utf-8",
       timeout: timeoutMs,
-      maxBuffer: 5 * 1024 * 1024,
+      maxBuffer: maxBufferMb * 1024 * 1024,
     });
     const lines = raw.trim().split("\n");
     const truncated = lines.length > maxLines;
@@ -84,27 +97,38 @@ function runCmd(cmd: string, maxLines = 200, timeoutMs = 30_000): { ok: boolean;
 
 // ─── Handlers ────────────────────────────────────────────────
 
-async function ritsu_emit_event(params: Record<string, unknown>): Promise<CallToolResult> {
+async function ritsu_emit_event(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
   const eventType = String(params.event_type ?? "");
-  const correlationId = String(params.correlation_id ?? "");
+  let correlationId = String(params.correlation_id ?? "");
   const step = params.step ? String(params.step) : undefined;
 
   if (!eventType) return errorResult("event_type is required");
-  if (!correlationId) return errorResult("correlation_id is required");
 
   const root = getProjectRoot();
 
+  // correlation_id 自动生成 — WASM 优先，JS 回退
+  // WASM base_seq 从 ctx 文件扫描真实 max seq，防止进程重启后 ID 重复
+  if (!correlationId) {
+    const dateStr = ts().slice(0, 8); // YYYYMMDD
+    const baseSeq = getNextSeq(root);
+    const wasmCid = await nextCorrelationIdWasm(dateStr, baseSeq);
+    correlationId = wasmCid ?? generateCorrelationId(root);
+  }
+
+  // 构造事件对象 — step/artifact/progress 仅在有值时设置，避免 null 违反 Schema pattern
   const event: Record<string, unknown> = {
     ts: ts(),
     correlation_id: correlationId,
     skill: String(params.skill ?? "unknown"),
     domain: String(params.domain ?? "unknown"),
     status: eventType,
-    step: step ?? null,
-    artifact: params.artifact ?? null,
-    progress: params.progress ?? null,
   };
 
+  if (step) event.step = step;
+  if (params.artifact) event.artifact = params.artifact;
+  if (params.progress) event.progress = params.progress;
   if (params.error) event.error = String(params.error);
   if (params.approval) event.approval = params.approval;
   if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
@@ -117,32 +141,75 @@ async function ritsu_emit_event(params: Record<string, unknown>): Promise<CallTo
   const wasmResult = await validateEventWasm(event);
   const validation = wasmResult ?? validateEventJs(event);
   if (!validation.valid) {
-    return errorResult(`event validation failed: ${validation.errors?.join(", ")}`);
+    return errorResult(
+      `event validation failed: ${validation.errors?.join(", ")}`,
+    );
   }
 
   const result = appendEvent(root, event);
+
+  // WASM 索引增量更新 — 失败不影响写入结果，仅记录警告
+  try {
+    await appendToIndexWasm(JSON.stringify(event));
+  } catch (e: any) {
+    console.warn(`[ritsu] WASM index append failed: ${e.message}`);
+    // 标记索引需要重建
+    _wasmIndexBuilt = false;
+  }
+
   return textResult(
-    JSON.stringify({ written: true, line_count: result.lineCount, event })
+    JSON.stringify({
+      written: true,
+      line_count: result.lineCount,
+      ts: event.ts,
+      correlation_id: correlationId,
+    }),
   );
+}
+
+// WASM 索引是否已初始化（进程级单例）
+let _wasmIndexBuilt = false;
+let _wasmIndexMonth = "";
+
+async function ensureWasmIndex(root: string): Promise<void> {
+  // 月度切换检测 — 新月份需要重建索引
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  if (_wasmIndexBuilt && _wasmIndexMonth === currentMonth) return;
+
+  const ctxPath = getCtxFilePath(root);
+  const count = await buildIndexFromCtxFile(ctxPath);
+  if (count !== null) {
+    resetLineCount(count);
+    _wasmIndexBuilt = true;
+    _wasmIndexMonth = currentMonth;
+  }
 }
 
 async function ritsu_read_ctx(): Promise<CallToolResult> {
   const root = getProjectRoot();
 
+  // 首次查询时构建 WASM 索引
+  await ensureWasmIndex(root);
+
   // WASM 加速路径
   const wasmIncomplete = await queryLastIncompleteWasm();
   const wasmCompleted = await queryLastCompletedWasm();
   const wasmPending = await queryPendingApprovalsWasm();
+  const wasmRecent = await queryRecentWasm(10);
 
-  if (wasmIncomplete !== null && wasmCompleted !== null && wasmPending !== null) {
-    const recentEntries = readRecentEntries(root, 10);
+  if (
+    wasmIncomplete !== null &&
+    wasmCompleted !== null &&
+    wasmPending !== null &&
+    wasmRecent !== null
+  ) {
     return textResult(
       JSON.stringify({
         last_incomplete: wasmIncomplete,
         last_completed: wasmCompleted,
-        recent_entries: recentEntries,
+        recent_entries: wasmRecent,
         pending_approvals: wasmPending,
-      })
+      }),
     );
   }
 
@@ -151,7 +218,7 @@ async function ritsu_read_ctx(): Promise<CallToolResult> {
   const lastCompleted = readLastCompleted(root);
   const recentEntries = readRecentEntries(root, 10);
   const pendingApprovals = recentEntries.filter(
-    (e) => e.status === "approval_required"
+    (e) => e.status === "approval_required",
   );
 
   return textResult(
@@ -160,22 +227,68 @@ async function ritsu_read_ctx(): Promise<CallToolResult> {
       last_completed: lastCompleted,
       recent_entries: recentEntries,
       pending_approvals: pendingApprovals,
-    })
+    }),
   );
 }
 
-async function ritsu_write_artifact(params: Record<string, unknown>): Promise<CallToolResult> {
+async function ritsu_write_artifact(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
   const type = String(params.type ?? "");
   const filename = String(params.filename ?? "");
   const content = String(params.content ?? "");
   const htmlContent = params.html_content ? String(params.html_content) : null;
-  const artifactMeta = params.artifact_meta as Record<string, unknown> | undefined;
+  const artifactMeta = params.artifact_meta as
+    | Record<string, unknown>
+    | undefined;
 
   if (!type || !filename || !content)
     return errorResult("type, filename, content are required");
 
-  if (/TODO|待定|暂不处理/.test(content) && type !== "ctx") {
-    return errorResult("content contains placeholder (TODO/待定/暂不处理), write rejected");
+  // 占位符拦截 — ctx 类型豁免，AGENTS.md (handoff) 也豁免 init 阶段
+  const placeholderPattern = /TODO|待定|暂不处理|后续完善|TBD/;
+  if (placeholderPattern.test(content) && type !== "ctx") {
+    return errorResult(
+      "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",
+    );
+  }
+
+  // 产物类型校验
+  const validTypes = [
+    "handoff",
+    "diagnosis",
+    "review-stamp",
+    "optimize-report",
+  ];
+  if (!validTypes.includes(type)) {
+    return errorResult(
+      `invalid artifact type: ${type}. Valid: ${validTypes.join(", ")}`,
+    );
+  }
+
+  // 文件名前缀校验（按 artifact-schema.yaml 命名契约）
+  const prefixMap: Record<string, string> = {
+    handoff: "handoff-",
+    diagnosis: "diagnosis-",
+    "review-stamp": "review-stamp-",
+    "optimize-report": "optimize-report-",
+  };
+  const expectedPrefix = prefixMap[type];
+  if (expectedPrefix && !filename.startsWith(expectedPrefix)) {
+    return errorResult(
+      `filename must start with '${expectedPrefix}' for type '${type}', got: ${filename}`,
+    );
+  }
+
+  // 路径穿越防护
+  if (
+    filename.includes("..") ||
+    filename.includes("/") ||
+    filename.includes("\\")
+  ) {
+    return errorResult(
+      "filename must not contain path traversal (..) or directory separators",
+    );
   }
 
   const root = getProjectRoot();
@@ -183,6 +296,17 @@ async function ritsu_write_artifact(params: Record<string, unknown>): Promise<Ca
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
   const mdPath = resolve(dir, filename);
+
+  // 覆盖保护 — 已存在文件需确认
+  if (existsSync(mdPath)) {
+    const overwrite = params.overwrite === true || params.overwrite === "true";
+    if (!overwrite) {
+      return errorResult(
+        `file already exists: ${filename}. Set overwrite=true to replace.`,
+      );
+    }
+  }
+
   writeFileSync(mdPath, content, "utf-8");
   const sizeBytes = statSync(mdPath).size;
 
@@ -199,16 +323,19 @@ async function ritsu_write_artifact(params: Record<string, unknown>): Promise<Ca
       html_path: htmlPath,
       size_bytes: sizeBytes,
       artifact_meta: artifactMeta ?? null,
-    })
+    }),
   );
 }
 
-async function ritsu_list_artifacts(params: Record<string, unknown>): Promise<CallToolResult> {
+async function ritsu_list_artifacts(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
   const type = String(params.type ?? "all");
   const root = getProjectRoot();
   const dir = resolve(root, RITSU_DIR);
 
-  if (!existsSync(dir)) return textResult(JSON.stringify({ files: [], total_count: 0 }));
+  if (!existsSync(dir))
+    return textResult(JSON.stringify({ files: [], total_count: 0 }));
 
   const typeMap: Record<string, string> = {
     handoff: "handoff-",
@@ -218,46 +345,76 @@ async function ritsu_list_artifacts(params: Record<string, unknown>): Promise<Ca
     ctx: "ctx-",
   };
 
-  const prefix = type === "all" ? "" : typeMap[type] ?? "";
+  const prefix = type === "all" ? "" : (typeMap[type] ?? "");
   const entries = readdirSync(dir)
-    .filter((f: string) => (prefix ? f.startsWith(prefix) : true))
-    .filter((f: string) => statSync(resolve(dir, f)).isFile())
-    .map((f: string) => {
-      const stat = statSync(resolve(dir, f));
-      return {
-        path: resolve(dir, f),
-        modified: stat.mtime.toISOString().replace(/[-:T]/g, "").slice(0, 15),
-        size_bytes: stat.size,
-        artifact_type: Object.entries(typeMap).find(([, p]: [string, string]) =>
-          f.startsWith(p)
+    .map((f: string) => ({ name: f, stat: statSync(resolve(dir, f)) }))
+    .filter(({ stat }) => stat.isFile())
+    .filter(({ name }) => (prefix ? name.startsWith(prefix) : true))
+    .map(({ name, stat }) => ({
+      path: resolve(dir, name),
+      modified: stat.mtime.toISOString().replace(/[-:T]/g, "").slice(0, 15),
+      size_bytes: stat.size,
+      artifact_type:
+        Object.entries(typeMap).find(([, p]: [string, string]) =>
+          name.startsWith(p),
         )?.[0] ?? "unknown",
-      };
-    })
+    }))
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>
-      String(b.modified).localeCompare(String(a.modified))
+      String(b.modified).localeCompare(String(a.modified)),
     );
 
-  return textResult(JSON.stringify({ files: entries, total_count: entries.length }));
+  return textResult(
+    JSON.stringify({ files: entries, total_count: entries.length }),
+  );
 }
 
-async function ritsu_exec(params: Record<string, unknown>): Promise<CallToolResult> {
+async function ritsu_exec(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
   const command = String(params.command ?? "");
   const maxLines = Number(params.max_output_lines ?? 200);
   const timeoutMs = Number(params.timeout_ms ?? 30_000);
+  const maxBufferMb = Number(params.max_buffer_mb ?? 10);
 
   if (!command) return errorResult("command is required");
 
-  // 安全边界：禁止危险命令
-  const dangerous = /^(rm\s+-rf|mkfs|dd\s+if=|:\(\)\{.*\}|npm\s+publish|git\s+push\s+--force)/;
-  if (dangerous.test(command.trim())) {
-    return errorResult("dangerous command blocked by safety boundary");
+  // 安全边界：扩展黑名单拦截危险命令
+  const dangerousPatterns = [
+    /\brm\s+-[a-zA-Z]*[rf][a-zA-Z]*\b/, // rm -rf / rm -r / rm -f / rm -fr
+    /\bmkfs\b/, // 格式化文件系统
+    /\bdd\s+if=/, // 磁盘写入
+    /:\(\)\{.*\}/, // fork bomb
+    /\bnpm\s+(publish|unpublish|access)\b/, // npm 危险操作
+    /\bgit\s+push\s+.*--(force|no-verify|force-with-lease)\b/, // 强制推送/跳过校验
+    /\bgit\s+reset\s+--hard\b/, // 硬重置
+    /\bcurl\s+.*\|\s*(sh|bash|zsh)\b/, // 远程脚本执行
+    /\bwget\s+.*\|\s*(sh|bash|zsh)\b/, // 远程脚本执行
+    /\bchmod\s+(777|000|u\+s)\b/, // 危险权限
+    /\bchown\s+.*\broot\b/, // root 权限变更
+    /\b(npm|yarn|pnpm)\s+config\s+set\s+.*registry\b/, // 注册表劫持
+    /\beval\s+["']/, // eval 注入
+    /\bshutdown\b|\breboot\b/, // 系统关机/重启
+    /\bbash\s+-c\b/, // bash 命令嵌套
+    /\bsh\s+-c\b/, // sh 命令嵌套
+    /\bzsh\s+-c\b/, // zsh 命令嵌套
+    /\b(npm|npx|yarn|pnpm)\s+(i |install )/, // 不允许通过 ritsu_exec 安装包
+  ];
+  const trimmedCmd = command.trim();
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(trimmedCmd)) {
+      return errorResult(
+        `dangerous command blocked by safety boundary: ${pattern.source}`,
+      );
+    }
   }
 
-  const r = runCmd(command, maxLines, timeoutMs);
+  const r = runCmd(command, maxLines, timeoutMs, maxBufferMb);
   return textResult(JSON.stringify({ ok: r.ok, output: r.output }));
 }
 
-async function ritsu_validate(params: Record<string, unknown>): Promise<CallToolResult> {
+async function ritsu_validate(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
   const dataJson = String(params.data ?? "");
   const schemaType = String(params.schema_type ?? "ctx_event");
 

@@ -12,8 +12,17 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { compileToolsFromYaml } from "./schema-compiler.js";
 import { registerHandlers } from "./handlers/index.js";
+import { readFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SERVER_VERSION = "3.5.0";
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// 从 package.json 读取版本号，单一事实来源
+const pkg = JSON.parse(
+  readFileSync(resolve(__dirname, "../package.json"), "utf-8"),
+);
+const SERVER_VERSION: string = pkg.version;
 
 async function main() {
   const server = new McpServer({
@@ -47,3 +56,14 @@ main().catch((err) => {
   console.error("[ritsu-mcp-server] fatal:", err);
   process.exit(1);
 });
+
+// 优雅关闭 — 清理残留锁文件
+function gracefulShutdown(signal: string) {
+  console.error(`[ritsu-mcp-server] received ${signal}, shutting down...`);
+  // proper-lockfile 的锁文件会在 unlockSync 时自动删除
+  // 此处仅做日志，MCP SDK 会处理 transport 关闭
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

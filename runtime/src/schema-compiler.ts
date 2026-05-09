@@ -11,7 +11,10 @@ import { fileURLToPath } from "node:url";
 import yaml from "js-yaml";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SHARED_DIR = resolve(__dirname, "../../../_shared");
+
+function getSharedDir(): string {
+  return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
+}
 
 export interface CompiledTool {
   name: string;
@@ -41,7 +44,7 @@ interface YamlInputField {
 }
 
 function convertInputToJsonSchema(
-  input: Record<string, YamlInputField>
+  input: Record<string, YamlInputField>,
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
@@ -84,7 +87,7 @@ function convertInputToJsonSchema(
 }
 
 export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
-  const yamlPath = resolve(SHARED_DIR, "mcp-tools.yaml");
+  const yamlPath = resolve(getSharedDir(), "mcp-tools.yaml");
   const raw = readFileSync(yamlPath, "utf-8");
   const doc = yaml.load(raw) as { tools: unknown[] };
 

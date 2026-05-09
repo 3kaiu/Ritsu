@@ -1,6 +1,6 @@
 ---
 name: hunt
-version: "3.4.0"
+version: "3.5.1"
 description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 token_budget: 8000

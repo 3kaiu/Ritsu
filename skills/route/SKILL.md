@@ -1,6 +1,6 @@
 ---
 name: route
-version: "3.4.0"
+version: "3.5.1"
 description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能，建立全局会话上下文。"
 when_to_use: "/r-route, 我不知道该用哪个命令, 帮我决定, 从哪开始"
 token_budget: 3000

@@ -14,8 +14,12 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SHARED_DIR = resolve(__dirname, "../../_shared");
-const PKG_DIR = resolve(__dirname, "../pkg");
+function getSharedDir(): string {
+  return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
+}
+function getPkgDir(): string {
+  return process.env.RITSU_PKG_DIR ?? resolve(__dirname, "../pkg");
+}
 
 let _wasm: any = null;
 let _wasmAvailable: boolean | null = null;
@@ -24,7 +28,7 @@ async function loadWasm(): Promise<any | null> {
   if (_wasmAvailable !== null) return _wasm;
 
   // 检查 WASM 包是否存在
-  const wasmJsPath = resolve(PKG_DIR, "ritsu_core.js");
+  const wasmJsPath = resolve(getPkgDir(), "ritsu_core.js");
   if (!existsSync(wasmJsPath)) {
     _wasmAvailable = false;
     return null;
@@ -36,7 +40,7 @@ async function loadWasm(): Promise<any | null> {
     _wasm = wasmModule;
 
     // 初始化 Schema
-    const schemaPath = resolve(SHARED_DIR, "ctx-event-schema.json");
+    const schemaPath = resolve(getSharedDir(), "ctx-event-schema.json");
     const schemaJson = readFileSync(schemaPath, "utf-8");
     const ok = _wasm.init_schema(schemaJson);
     if (!ok) {
@@ -86,6 +90,14 @@ export async function buildIndexWasm(
   return wasm.build_index(jsonlContent);
 }
 
+export async function appendToIndexWasm(
+  lineJson: string,
+): Promise<number | null> {
+  const wasm = await loadWasm();
+  if (!wasm) return null;
+  return wasm.append_to_index(lineJson);
+}
+
 export async function queryRecentWasm(
   limit: number,
 ): Promise<Record<string, unknown>[] | null> {
@@ -118,6 +130,18 @@ export async function queryPendingApprovalsWasm(): Promise<
   const wasm = await loadWasm();
   if (!wasm) return null;
   return JSON.parse(wasm.query_pending_approvals());
+}
+
+/** 从 ctx 文件读取内容并构建 WASM 索引（首次查询时调用） */
+export async function buildIndexFromCtxFile(
+  ctxFilePath: string,
+): Promise<number | null> {
+  const wasm = await loadWasm();
+  if (!wasm) return null;
+  if (!existsSync(ctxFilePath)) return 0;
+  const content = readFileSync(ctxFilePath, "utf-8").trim();
+  if (!content) return 0;
+  return wasm.build_index(content);
 }
 
 // ─── Correlation ID (WASM) ───────────────────────────────────

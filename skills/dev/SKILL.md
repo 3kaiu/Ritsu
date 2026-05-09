@@ -1,6 +1,6 @@
 ---
 name: dev
-version: "3.4.0"
+version: "3.5.1"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
 token_budget: 8000

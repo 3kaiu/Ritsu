@@ -80,8 +80,18 @@ pub fn append_to_index(line_json: &str) -> usize {
     INDEX.with(|cell| {
         let mut idx = cell.borrow_mut();
 
-        let current_offset = idx.line_offsets.last().map(|&o| o).unwrap_or(0);
-        idx.line_offsets.push(current_offset + line_json.len() as u64);
+        // 新行偏移 = 上一行偏移 + 上一行字节长度 + 1(\n)
+        let new_offset = if let Some(&last_offset) = idx.line_offsets.last() {
+            // 找到上一行 entry 的 JSON 长度
+            let last_entry_len = idx.entries.last().map(|e| {
+                // 用序列化近似长度（精确值需要存储，此处用 line_json 近似）
+                serde_json::to_string(e).map(|s| s.len()).unwrap_or(0)
+            }).unwrap_or(0);
+            last_offset + last_entry_len as u64 + 1
+        } else {
+            0
+        };
+        idx.line_offsets.push(new_offset);
         idx.total_lines += 1;
 
         let summary: EntrySummary = serde_json::from_str(line_json).unwrap_or(EntrySummary {

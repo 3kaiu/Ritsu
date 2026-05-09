@@ -7,10 +7,15 @@
  * 3. 下载失败 → 纯 JS 回退（ajv），打印提示
  */
 
-import { createWriteStream, existsSync, mkdirSync, rmSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  rmSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { get } from "node:https";
 import { execSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,29 +23,23 @@ const PKG_DIR = resolve(__dirname, "../pkg");
 
 let VERSION = "3.5.1";
 try {
-  const pkg = JSON.parse(readFileSync(resolve(__dirname, "../package.json"), "utf-8"));
+  const pkg = JSON.parse(
+    readFileSync(resolve(__dirname, "../package.json"), "utf-8"),
+  );
   VERSION = pkg.version ?? VERSION;
 } catch {}
 
 const REPO = "3kaiu/Ritsu";
 const ASSET_NAME = "ritsu-core-wasm.tar.gz";
 
-function download(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = createWriteStream(dest);
-    get(url, { headers: { "User-Agent": "ritsu-mcp-server" } }, (res) => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        download(res.headers.location, dest).then(resolve).catch(reject);
-        return;
-      }
-      if (res.statusCode !== 200) {
-        reject(new Error(`HTTP ${res.statusCode}`));
-        return;
-      }
-      res.pipe(file);
-      file.on("finish", () => { file.close(); resolve(); });
-    }).on("error", reject);
+async function download(url, dest) {
+  const res = await fetch(url, {
+    redirect: "follow",
+    headers: { "User-Agent": "ritsu-mcp-server" },
   });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+  writeFileSync(dest, buffer);
 }
 
 async function main() {
@@ -57,13 +56,17 @@ async function main() {
   try {
     console.log(`[ritsu] Downloading pre-built WASM v${VERSION}...`);
     await download(releaseUrl, tarPath);
-    execSync(`tar -xzf "${tarPath}" -C "${PKG_DIR}" --strip-components=1`, { stdio: "inherit" });
+    execSync(`tar -xzf "${tarPath}" -C "${PKG_DIR}" --strip-components=1`, {
+      stdio: "inherit",
+    });
     rmSync(tarPath, { force: true });
     console.log("[ritsu] ✅ WASM module ready");
   } catch (e) {
     console.warn(`[ritsu] ⚠️  Pre-built WASM not available (${e.message})`);
     console.warn("[ritsu] Running in pure JS mode (ajv fallback).");
-    console.warn("[ritsu] For WASM acceleration: install Rust toolchain + run `npm run build:wasm`");
+    console.warn(
+      "[ritsu] For WASM acceleration: install Rust toolchain + run `npm run build:wasm`",
+    );
   }
 }
 

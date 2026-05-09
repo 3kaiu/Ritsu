@@ -12,18 +12,23 @@
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "build:wasm": "cd core && wasm-pack build --target nodejs --release --out-dir ../pkg",
     "postinstall": "node scripts/download-wasm.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
-    "ajv": "^8.17.0",
-    "js-yaml": "^4.1.0"
+    "ajv": "8.x",
+    "js-yaml": "^4.1.0",
+    "proper-lockfile": "^4.1.2"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.0",
-    "typescript": "^5.8.0"
+    "@types/proper-lockfile": "^4.1.4",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.5"
   },
   "engines": {
     "node": ">=18.0.0"

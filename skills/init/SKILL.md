@@ -1,6 +1,6 @@
 ---
 name: init
-version: "3.4.0"
+version: "3.5.1"
 description: "Ritsu 初始化协议。扫描项目架构、提取技术栈与规范，生成 AGENTS.md。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
 token_budget: 4000
