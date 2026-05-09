@@ -79,14 +79,14 @@ hard_constraints:
 - **若清单项 > 3**（触发 HC-4 强制约束）：
   1. **截断**：仅选取前 1-2 项核心逻辑执行。
   2. **验证**：读取 AGENTS.md 获取 Lint/Test 命令，调用 `ritsu_exec` 执行。
-  3. **断点确认**：输出 `[暂停点]` 总结当前进度，明确询问用户："第一批次已无损跑通，是否继续下一批次？" 严禁一次性输出所有代码导致幻觉翻车。
+  3. **断点确认**：调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"分块断点确认", options:["继续下一批次", "暂停并审查", "回滚当前批次"]})`，等待用户选择后追加 `approval_granted` 或 `approval_denied` 事件。严禁一次性输出所有代码导致幻觉翻车。
 
 ### 5. 沙盒自查清单（按优先级）
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-- [ ] HC-1：所有外部标识符均已通过 `ritsu_exec` (grep) 验证
-- [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理
+- [ ] HC-1：所有外部标识符均已通过 `ritsu_exec` (grep) 验证 — 违反时追加 `ritsu_emit_event(event_type=step_failed, violation={id:AP-2, severity:FATAL, pattern:"Hallucinate paths", evidence:"grep 返回 0 matches"})`
+- [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理 — 违反时追加 `ritsu_emit_event(event_type=step_failed, violation={id:AP-6, severity:FATAL, pattern:"Placeholder promise", evidence:"发现占位符文本"})`
 - [ ] 无孤儿引用，无未使用的残余变量
 
 ### 6. 质量门禁

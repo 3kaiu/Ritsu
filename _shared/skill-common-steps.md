@@ -49,7 +49,7 @@
 2. **P2**：分析变更文件后缀推断（.tsx/.vue→frontend, .go/.java→backend, 混合→fullstack, .tf/.yml→infra, .py/.ipynb→data）
 3. **P3**：P1/P2 均无法判断时，**强制询问用户**，不得自行猜测
 
-解析完成后，调用 `ritsu_write_artifact`（type=ctx, filename=ctx-{YYYY-MM}.jsonl）追加：
+解析完成后，调用 `ritsu_emit_event` 追加：
 
 ```jsonl
 {
@@ -79,7 +79,7 @@
 
 ### 步骤完成时
 
-每个步骤完成后，调用 `ritsu_write_artifact`（type=ctx）追加：
+每个步骤完成后，调用 `ritsu_emit_event` 追加：
 
 ```jsonl
 {"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"step_done","step":"{N}/{M}","artifact":null,"progress":null,"duration_ms":{耗时毫秒}}
@@ -154,9 +154,41 @@
 
 ---
 
-## Step 3: 关联流转 + 状态机引导
+## Step 3: 关联流转 + 状态机引导 + transition_event
 
-完成后按 `_shared/state-machine.yaml` 输出引导语。关键流转路径：
+完成后按 `_shared/state-machine.yaml` 输出引导语，**并写入 transition_event**。
+
+**transition_event 写入规则**：
+
+每个技能完成时（done 事件之前），必须追加一条含 `transition` 字段的事件，标记当前技能的流转出口：
+
+```jsonl
+{
+  "ts": "{YYYYMMDD-HHMMSS}",
+  "correlation_id": "{cid}",
+  "skill": "{skill_name}",
+  "domain": "{value}",
+  "status": "step_done",
+  "step": "{M}/{M}",
+  "artifact": null,
+  "progress": null,
+  "transition": {
+    "from": "{当前技能}",
+    "to": "{下一技能}",
+    "event": "{state-machine.yaml 中的 event 名}",
+    "ui_hint": "{state-machine.yaml 中的 ui_hint}"
+  }
+}
+```
+
+- `from` = 当前技能名
+- `to` = 推荐的下一技能名（按 state-machine.yaml states.{current}.next 匹配）
+- `event` = 触发流转的事件名（如 `handoff_written`、`dev_complete`、`review_fail` 等）
+- `ui_hint` = UI 渲染提示（如 `show_dev_summary`、`show_review_fail_items` 等）
+
+**多出口场景**（如 review 有 4 个 next）：写入用户实际选择的流转方向，不写所有可能方向。
+
+关键流转路径：
 
 ```
 route  → {matched_skill}

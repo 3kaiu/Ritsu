@@ -105,10 +105,10 @@ hard_constraints:
 
 ---
 
-**请逐条确认：采用推荐方案 / 切换备选方案 / 自定义方案。全部确认后进入 Phase B。**
+**请逐条确认：采用推荐方案 / 切换备选方案 / 自定义方案。**
 ```
 
-**收到确认前，保持等待，重复上方提示，不进入 Phase B。**
+调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"漏洞清单逐条确认", options:每条漏洞的推荐/备选/自定义})`，等待用户逐条选择后追加 `approval_granted` 事件。**收到确认前，不进入 Phase B。**
 
 ---
 
@@ -124,7 +124,7 @@ hard_constraints:
 
 `[Step B1 Complete]` 后进入 B2。
 
-提供 2 套方案，使用强制对比表格：
+提供 2 套方案，使用强制对比表格，并调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"架构方案选择", options:["方案A", "方案B"]})` 等待用户选择：
 | 维度 | 方案 A | 方案 B |
 |------|-------|-------|
 | 核心依赖 | | |

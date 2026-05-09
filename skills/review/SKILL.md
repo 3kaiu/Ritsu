@@ -58,23 +58,25 @@ hard_constraints:
 检查 P1：明文凭证泄露
   grep -r "token\|secret\|password\|api_key" . --include="*.{ext}" -i
   ✅ 无匹配 → 继续 P2
-  ❌ 有匹配 → 立即写入 FAIL Stamp（Hard Stop P1），停止
+  ❌ 有匹配 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-1, severity:FATAL, pattern:"Credential leak", evidence:"发现明文凭证"})`，写入 FAIL Stamp，停止
 
 检查 P2：不明标识符
   对 diff 中新增的每个标识符调用 ritsu_exec (grep) 验证
   ✅ 全部存在 → 继续 P3
-  ❌ 存在未定义 → 立即写入 FAIL Stamp（Hard Stop P2），停止
+  ❌ 存在未定义 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-2, severity:FATAL, pattern:"Undefined identifier", evidence:"标识符未在代码库中找到定义"})`，写入 FAIL Stamp，停止
 
 检查 P3：破坏性契约变更
   检查 API 路由/参数/响应结构是否变更，若变更则检查是否有迁移/双写方案
   ✅ 无变更或有方案 → 继续 P4
-  ❌ 变更且无方案 → 立即写入 FAIL Stamp（Hard Stop P3），停止
+  ❌ 变更且无方案 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-3, severity:FATAL, pattern:"Breaking contract change", evidence:"契约变更无迁移方案"})`，写入 FAIL Stamp，停止
 
 检查 P4：版本号割裂
   比对 package.json 与 lockfile 版本一致性
   ✅ 一致 → 进入步骤 4
-  ❌ 不一致 → 立即写入 FAIL Stamp（Hard Stop P4），停止
+  ❌ 不一致 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-4, severity:WARN, pattern:"Version drift", evidence:"lockfile 与 package.json 版本不一致"})`，写入 FAIL Stamp，停止
 ```
+
+Hard Stop FAIL 后，调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"Hard Stop 后续动作", options:["修复后重新审查 → /r-dev", "熔断重审架构 → /r-think", "终止审查"]})` 等待用户选择。
 
 ### 4. 领域语义审查（聚焦需要理解力的逻辑漏洞）
 

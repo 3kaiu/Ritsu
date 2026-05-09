@@ -89,10 +89,10 @@ hard_constraints:
 
 **执行纪律**：
 
-- **单次单项**：每次只改一个优化项，禁止批量合并修改
+- **单次单项**：每次只改一个优化项，禁止批量合并修改 — 违反时追加 `ritsu_emit_event(event_type=step_failed, violation={id:AP-8, severity:FATAL, pattern:"Scope creep", evidence:"单次修改多个优化项"})`
 - **立即验证**：每项改完后立即运行质量门禁（Lint + Test）
-- **失败即停**：若 Lint/Test 失败，立即回滚该项，记录到优化报告，继续下一项
-- **标识符校验**：替换工具函数/组件时，必须先 `ritsu_exec` (grep) 验证新标识符存在且签名对齐
+- **失败即停**：若 Lint/Test 失败，立即回滚该项，调用 `ritsu_emit_event(event_type=approval_required, approval={type:confirm, title:"优化项回滚确认", options:["确认回滚并继续下一项", "终止优化"]})`，记录到优化报告
+- **标识符校验**：替换工具函数/组件时，必须先 `ritsu_exec` (grep) 验证新标识符存在且签名对齐 — 违反时追加 `ritsu_emit_event(event_type=step_failed, violation={id:AP-2, severity:FATAL, pattern:"Hallucinate paths", evidence:"新标识符未在代码库中找到"})`
 
 **领域专属优化规则**（按 domain 动态加载）：
 
