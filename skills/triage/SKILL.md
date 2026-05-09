@@ -1,6 +1,6 @@
 ---
 name: triage
-version: "3.3.1"
+version: "3.4.0"
 description: "Ritsu Inbox Zero 机器。处理 GitHub Issue/PR 工单：分类、裁决、路由。不做技术诊断，不写业务代码。"
 when_to_use: "/r-triage, 处理 issue, 看一下 PR, 批量回复, 工单"
 token_budget: 4000

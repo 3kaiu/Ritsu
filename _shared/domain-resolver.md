@@ -1,6 +1,6 @@
 # 领域解析协议 (Domain Resolver)
 
-> Ritsu Bundle 共享协议 v3.3.1 · 所有技能必须引用此文件，禁止各自重复实现领域判断逻辑。
+> Ritsu Bundle 共享协议 v3.4.0 · 所有技能必须引用此文件，禁止各自重复实现领域判断逻辑。
 > ⚠️ 执行入口已内联至 `skill-common-steps.md` Step 1。本文件为完整参考，LLM 通常无需额外读取。
 
 ---

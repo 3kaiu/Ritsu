@@ -1,6 +1,6 @@
 ---
 name: optimize
-version: "3.3.1"
+version: "3.4.0"
 description: "Ritsu 领域自适应代码精简优化。不改功能/布局/结构/样式，只做精简、性能提升和平台适配优化。"
 when_to_use: "/r-opt, 优化, 精简, 性能优化, refactor, 代码瘦身, 提速"
 token_budget: 6000

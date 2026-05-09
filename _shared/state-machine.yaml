@@ -1,25 +1,82 @@
-# Ritsu 全局状态机 v3.3.1
+# Ritsu 全局状态机 v3.4.0
 # 定义技能间的合法流转路径、熔断规则与标准引导话术。
 # AI 执行流转判定时，必须查询此文件的 states.{current}.next 确认合法性。
+# transitions 定义触发流转的事件和 UI 渲染提示，供前端消费。
 
 states:
   route:
     next: [init, think, dev, hunt, review, optimize, triage]
+    transitions:
+      - to: init
+        event: no_agents_md
+        ui_hint: show_init_prompt
+      - to: think
+        event: feature_request
+        ui_hint: show_think_entry
+      - to: dev
+        event: implementation_request
+        ui_hint: show_dev_entry
+      - to: hunt
+        event: bug_report
+        ui_hint: show_hunt_entry
+      - to: review
+        event: review_request
+        ui_hint: show_review_entry
+      - to: optimize
+        event: optimization_request
+        ui_hint: show_optimize_entry
+      - to: triage
+        event: issue_triage
+        ui_hint: show_triage_entry
   init:
     next: [route, think]
+    transitions:
+      - to: route
+        event: init_complete_undecided
+        ui_hint: show_route_options
+      - to: think
+        event: init_complete_with_feature
+        ui_hint: show_think_entry
     hint:
       route: "不确定下一步"
       think: "新需求"
   think:
     next: [dev, think]
     note: "循环允许（方案被否决时重新设计）"
+    transitions:
+      - to: dev
+        event: handoff_written
+        ui_hint: show_handoff_preview
+      - to: think
+        event: design_rejected
+        ui_hint: highlight_rejected_items
   dev:
     next: [review, optimize]
+    transitions:
+      - to: review
+        event: dev_complete
+        ui_hint: show_dev_summary
+      - to: optimize
+        event: dev_complete_needs_optimization
+        ui_hint: show_optimize_suggestion
     branches:
       review: "开发完成，需审查"
       optimize: "代码可用但需精简/提速"
   review:
     next: [dev, think, optimize, triage]
+    transitions:
+      - to: dev
+        event: review_fail
+        ui_hint: show_review_fail_items
+      - to: think
+        event: circuit_breaker_triggered
+        ui_hint: show_circuit_breaker_alert
+      - to: optimize
+        event: review_pass_with_optimization
+        ui_hint: show_optimize_opportunity
+      - to: triage
+        event: review_pass_with_issues
+        ui_hint: show_triage_suggestion
     branches:
       dev: "单次 FAIL，必须修复"
       think: "连续两次 FAIL 触发熔断，重审架构"
@@ -28,13 +85,37 @@ states:
   optimize:
     next: [review]
     note: "优化后必须审查确认无功能回归"
+    transitions:
+      - to: review
+        event: optimize_complete
+        ui_hint: show_optimize_summary
   hunt:
     next: [dev, think]
+    transitions:
+      - to: dev
+        event: simple_fix_identified
+        ui_hint: show_diagnosis_summary
+      - to: think
+        event: architectural_fix_needed
+        ui_hint: show_architectural_alert
     branches:
       dev: "简单修复"
       think: "架构级修复"
   triage:
     next: [hunt, think, review, optimize]
+    transitions:
+      - to: hunt
+        event: bug_issue
+        ui_hint: show_bug_issue_context
+      - to: think
+        event: feature_issue
+        ui_hint: show_feature_issue_context
+      - to: review
+        event: pr_issue
+        ui_hint: show_pr_diff_preview
+      - to: optimize
+        event: performance_issue
+        ui_hint: show_performance_metrics
     branches:
       hunt: "Bug 工单"
       think: "Feature 工单"

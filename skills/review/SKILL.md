@@ -1,6 +1,6 @@
 ---
 name: review
-version: "3.3.1"
+version: "3.4.0"
 description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
 token_budget: 6000
