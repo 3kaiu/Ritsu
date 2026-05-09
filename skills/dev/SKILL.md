@@ -39,7 +39,7 @@ hard_constraints:
 - **用户已指定文件** → 直接读取指定文件
 - **无文件** → 继续执行，在交付摘要注明"无 Handoff 溯源（风险已知悉）"
 
-写入 ctx.md（调用 **`ritsu_write_artifact`** type=ctx）：
+写入 ctx-{YYYY-MM}.md（调用 **`ritsu_write_artifact`** type=ctx）：
 ```
 {timestamp} | dev | domain={value} | started | none
 ```
@@ -96,7 +96,7 @@ hard_constraints:
 - Lint: ✅/❌ | Test: ✅/❌
 ```
 
-写入 ctx.md：
+写入 ctx-{YYYY-MM}.md：
 ```
 {timestamp} | dev | domain={value} | done | none
 ```

@@ -104,14 +104,14 @@
 ---
 
 ### `ritsu_write_artifact`
-写入 Ritsu 产物文件（Handoff / Diagnosis / Review Stamp / ctx.md）。
+写入 Ritsu 产物文件（Handoff / Diagnosis / Review Stamp / ctx-{YYYY-MM}.md）。
 ```json
 {
   "name": "ritsu_write_artifact",
   "description": "将产物内容写入 ritsu/ 目录下的指定文件，写入前进行 Schema 合规验证",
   "input": {
     "type": "handoff | diagnosis | review-stamp | ctx",
-    "filename": "文件名（含路径）",
+    "filename": "文件名（含路径，若是 ctx 必须为 ctx-YYYY-MM.md）",
     "content": "文件内容（必须符合 artifact-schema.md 对应 Schema）"
   },
   "validation": "写入前检查内容是否包含 TODO/待定/暂不处理 等占位符，发现则拒绝写入并报错",
@@ -145,15 +145,33 @@
 ---
 
 ### `ritsu_read_ctx`
-读取当前项目的任务上下文日志。
+读取当前项目的任务上下文日志分片。
 ```json
 {
   "name": "ritsu_read_ctx",
-  "description": "读取 ritsu/ctx.md，解析最近的任务状态，用于会话恢复。⚠️ 必须使用 tail 机制（如 tail -n 20），仅截取最后 20 条记录，严禁全量加载引发上下文 Token 爆炸。",
+  "description": "读取当月最新的 ritsu/ctx-{YYYY-MM}.md，解析最近的任务状态，用于会话恢复。⚠️ 必须使用 tail 机制（如 tail -n 20），仅截取最后 20 条记录，严禁全量加载引发上下文 Token 爆炸。",
   "returns": {
     "last_incomplete": "最后一条 started 但没有 done/failed 的记录，或 null",
     "last_completed": "最后一条 done 记录，或 null",
     "recent_entries": "最近 10 条记录列表"
+  }
+}
+```
+
+---
+
+### `ritsu_retrieve_memory`
+基于 RAG 思路的长期记忆检索工具。
+```json
+{
+  "name": "ritsu_retrieve_memory",
+  "description": "当需要查找过去的架构决策、Bug 根因或需求契约时调用。基于全文语义或关键字扫描历史产物。",
+  "input": {
+    "query": "搜索关键字（如：数据库 连接池 泄露）"
+  },
+  "command_template": "grep -rni \"{query}\" ritsu/ --include=\"*.md\"",
+  "returns": {
+    "matches": ["匹配到的文件路径与内容上下文摘要片段"]
   }
 }
 ```

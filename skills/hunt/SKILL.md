@@ -33,7 +33,7 @@ hard_constraints:
 ### 1. 领域解析
 > 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
 
-写入 ctx.md（type=ctx）：
+写入 ctx-{YYYY-MM}.md（type=ctx）：
 ```
 {timestamp} | hunt | domain={value} | started | none
 ```
@@ -86,7 +86,7 @@ hard_constraints:
 
 按 `_shared/artifact-schema.md` Schema 2 格式写入。
 
-写入 ctx.md：
+写入 ctx-{YYYY-MM}.md：
 ```
 {timestamp} | hunt | domain={value} | done | ritsu/diagnosis-{ts}.md
 ```

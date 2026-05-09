@@ -97,7 +97,7 @@ hard_constraints:
 - **WONTFIX**：`感谢建议，此需求超出当前项目范围，暂不纳入，关闭。`
 - **Changes Requested**：`感谢贡献，合并前需补充：{具体清单}。`
 
-写入 ctx.md（type=ctx）：
+写入 ctx-{YYYY-MM}.md（type=ctx）：
 ```
 {timestamp} | triage | domain={value} | done | none
 ```

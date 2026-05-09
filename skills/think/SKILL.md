@@ -33,7 +33,7 @@ hard_constraints:
 ### A1. 领域解析
 > 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
 
-写入 ctx.md（调用 **`ritsu_write_artifact`** type=ctx）：
+写入 ctx-{YYYY-MM}.md（调用 **`ritsu_write_artifact`** type=ctx）：
 ```
 {timestamp} | think | domain={value} | started | none
 ```

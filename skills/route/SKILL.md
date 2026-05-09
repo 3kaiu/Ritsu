@@ -67,7 +67,7 @@ hard_constraints:
 请执行：**`/r-{skill} [...]`**
 ```
 
-### 5. 写入 ctx.md
+### 5. 写入 ctx-{YYYY-MM}.md
 调用 **`ritsu_write_artifact`**（type=ctx）追加：
 ```
 {timestamp} | route | domain={value} | done | none

@@ -92,7 +92,7 @@ Ritsu Bundle v3.0 已激活。
   /r-route /r-init /r-think /r-dev /r-review /r-hunt /r-triage
 ```
 
-### 7. 写入 ctx.md
+### 7. 写入 ctx-{YYYY-MM}.md
 调用 **`ritsu_write_artifact`**（type=ctx）追加：
 ```
 {timestamp} | init | domain={value} | done | AGENTS.md
