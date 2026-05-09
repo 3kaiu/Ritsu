@@ -50,19 +50,23 @@ skills/Ritsu/
 
 ### 安装
 
-Ritsu 是纯 Markdown 文件，无需安装任何依赖。将本仓库克隆到你的 AI 助手的 Skills 目录：
+Ritsu 支持现代化的 Claude Plugin 体系，你可以通过一条命令一键安装全局技能，使其在你的所有工作区都能直接使用。
 
+**Claude Code CLI 安装**
 ```bash
-# Antigravity / Gemini
-git clone <repo-url> ~/.gemini/antigravity/skills/Ritsu
+npx skills add 3kaiu/Ritsu -a claude-code -g -y
+```
 
-# 其他 AI 助手（按各自 Skills 目录约定放置）
-git clone <repo-url> /path/to/your/ai/skills/Ritsu
+**Claude Code Marketplace 插件模式**
+在你的 Claude Code 终端中输入：
+```bash
+/plugin marketplace add 3kaiu/Ritsu
+/plugin install ritsu@ritsu
 ```
 
 ### 初始化项目
 
-在任何新项目中，第一步运行：
+安装完毕后，在任何一个你需要接入规范的新项目中，第一步运行：
 
 ```
 /r-init

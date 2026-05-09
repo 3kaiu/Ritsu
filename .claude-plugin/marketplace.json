@@ -1,0 +1,89 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "ritsu",
+  "description": "Ritsu Engineering Governance Skill Bundle: route, init, think, dev, review, hunt, triage.",
+  "owner": {
+    "name": "3kaiu",
+    "email": "3kaiu@example.com"
+  },
+  "plugins": [
+    {
+      "name": "ritsu",
+      "description": "Installs the full Ritsu toolkit. Registers all 7 skills under the ritsu namespace, callable as /r-route, /r-init, /r-think, /r-dev, /r-review, /r-hunt, and /r-triage.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./",
+      "homepage": "https://github.com/3kaiu/Ritsu"
+    },
+    {
+      "name": "ritsu-route",
+      "description": "Global task dispatcher. Analyzes user intent, routes to the correct skill, and establishes global context.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/route",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-init",
+      "description": "Project initialization. Scans tech stack and architectures, generating the AGENTS.md constraint baseline.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/init",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-think",
+      "description": "Domain-adaptive requirement review and architecture design. Strict two-phase workflow producing an anti-corruption Handoff document.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/think",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-dev",
+      "description": "Strict domain-adaptive coding pipeline. Defends against blind edits and undefined identifiers, enforcing domain-specific dev disciplines.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/dev",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-review",
+      "description": "Adversarial code review line. Hard Stops for critical issues and domain-semantic reviews, producing a Review Stamp artifact.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/review",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-hunt",
+      "description": "Root cause diagnostic engine. Gathers evidence, builds MECE hypotheses, verifies, and locks root cause. Modifying code is strictly forbidden.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/hunt",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-triage",
+      "description": "Inbox Zero machine for issue/PR triage. Dispatches tasks based on context. Does not diagnose technical issues or write business code.",
+      "version": "3.0.0",
+      "category": "development",
+      "source": "./skills/triage",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    }
+  ]
+}
