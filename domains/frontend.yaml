@@ -62,7 +62,7 @@ discipline_attack_mapping:
 optimize_disciplines:
   - id: FE-O1
     name: 工具库优先替换
-    rule: "手写的 useState+useEffect 组合必须优先替换为 react-use / ahooks 对应工具函数。react-use 擅长：useDebounce/useThrottle/useLocalStorage/usetoggle。ahooks 擅长：useRequest/useDebounceFn/useThrottleFn/useMemoizedFn/useDeepCompareEffect/useSize/useClickAway"
+    rule: "手写的 useState+useEffect 组合必须优先替换为 react-use / ahooks 对应工具函数。react-use 擅长：useDebounce/useThrottle/useLocalStorage/useToggle。ahooks 擅长：useDebounceFn/useThrottleFn/useMemoizedFn/useDeepCompareEffect/useSize/useClickAway/useUpdateEffect"
   - id: FE-O2
     name: 请求层精简
     rule: "手写的 fetch/axios + useState + useEffect + loading/error 状态管理必须替换为 TanStack Query（useQuery/useMutation/useInfiniteQuery），自动获得缓存/重试/去重/失效刷新"
@@ -101,7 +101,7 @@ optimize_tool_preferences:
             useClickAway,
             useUpdateEffect,
           ]
-    rule: "react-use 擅长简单原子 hook，ahooks 擅长复杂业务 hook。优先 ahooks 的 useRequest 替代手写请求逻辑；优先 react-use 的 useDebounce/useThrottle 替代手写防抖节流"
+    rule: "react-use 擅长简单原子 hook，ahooks 擅长复杂业务 hook。优先 react-use 的 useDebounce/useThrottle 替代手写防抖节流；请求层替换见下方请求层分类"
   - category: 请求层
     libraries:
       - name: "@tanstack/react-query"

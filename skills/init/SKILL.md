@@ -106,7 +106,7 @@ Ritsu Bundle v3.3 已激活。
 全局规则：~/.gemini/antigravity/skills/Ritsu/
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：
-  /r-route /r-init /r-think /r-dev /r-review /r-hunt /r-triage
+  /r-route /r-init /r-think /r-dev /r-opt /r-review /r-hunt /r-triage
 ```
 
 ### 7. 写入 ctx-{YYYY-MM}.jsonl

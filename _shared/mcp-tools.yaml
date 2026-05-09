@@ -21,8 +21,10 @@ tools:
     commands:
       - "git diff -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
       - "git diff --cached -- . ':(exclude)*lock*' ':(exclude)*.svg' ':(exclude)*.map' ':(exclude)*.min.js'"
+    max_output_lines: 500
+    truncation: "若 diff 行数超过 max_output_lines，截断尾部并附加 '⚠️ diff 已截断，完整内容请分段查看'"
     returns:
-      diff_content: 完整 diff 文本
+      diff_content: 完整 diff 文本（或截断后文本）
     error_handling:
       not_a_git_repo: "告知用户，要求手动粘贴代码变更内容"
       no_changes: "告知用户无变更，询问是否 review 特定文件"
@@ -38,7 +40,9 @@ tools:
         type: list
         required: true
         description: "文件后缀列表，如 ['.go', '.ts']"
-    command_template: 'grep -rnC 3 "{identifier}" . --include="*{ext}" --exclude-dir={node_modules,.git,dist,build,out,vendor}'
+    command_template: 'grep -rnC 3 --max-count=10 "{identifier}" . --include="*{ext}" --exclude-dir={node_modules,.git,dist,build,out,vendor}'
+    max_output_lines: 80
+    truncation: "若匹配行数超过 max_output_lines，截断并附加 '⚠️ 匹配过多，仅展示前 10 处，请缩小搜索范围'"
     returns:
       exists: boolean
       found_in: [找到该标识符的文件路径列表]
@@ -46,6 +50,9 @@ tools:
     decision:
       exists_true: "可以引用该标识符，但必须阅读 context 字段验证签名对齐"
       exists_false: "停止引用，告知用户：该标识符在项目中不存在，请确认名称或先定义它"
+    fallback:
+      timeout: "若 grep 执行超过 10s，降级为仅搜索入口文件（src/index.* / main.* / app.*），并告知用户搜索范围受限"
+      too_many_matches: "若 found_in 超过 20 个文件，仅返回定义处（排除调用处），并提示用户缩小 extensions 范围"
 
   - name: ritsu_run_quality_gates
     description: 读取 AGENTS.md 中的质量门禁命令并依次执行
@@ -98,7 +105,7 @@ tools:
     input:
       type:
         type: enum
-        values: [handoff, diagnosis, review-stamp, ctx, all]
+        values: [handoff, diagnosis, review-stamp, optimize-report, ctx, all]
         required: true
     returns:
       files:
@@ -120,6 +127,8 @@ tools:
         type: string
         required: true
         description: "搜索关键字（如：数据库 连接池 泄露）"
-    command_template: 'grep -rni "{query}" .ritsu/ --include="*.md" --include="*.html" --include="*.jsonl"'
+    command_template: 'grep -rni --max-count=5 "{query}" .ritsu/ --include="*.md" --include="*.html" --include="*.jsonl"'
+    max_output_lines: 100
+    truncation: "若匹配行数超过 max_output_lines，截断并附加 '⚠️ 结果过多，请缩小搜索关键字范围'"
     returns:
       matches: [匹配到的文件路径与内容上下文摘要片段]
