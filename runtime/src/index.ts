@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * Ritsu MCP Server — 将 _shared/mcp-tools.yaml 声明编译为可运行的 MCP 工具服务
  *
@@ -29,7 +30,10 @@ async function main() {
       tool.name,
       tool.description,
       tool.inputSchema,
-      registerHandlers[tool.name] ?? (async () => ({ content: [{ type: "text", text: "handler not implemented" }] }))
+      registerHandlers[tool.name] ??
+        (async () => ({
+          content: [{ type: "text", text: "handler not implemented" }],
+        })),
     );
   }
 

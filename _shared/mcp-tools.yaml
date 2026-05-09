@@ -1,4 +1,4 @@
-# Ritsu MCP Tool Schema 声明 v3.4.0
+# Ritsu MCP Tool Schema 声明 v3.5.0
 # 所有技能中的工具调用必须引用此文件中声明的工具名，禁止用自然语言描述工具调用行为。
 # AI 执行时应将此文件视为"可用工具菜单"，按 Schema 构造调用参数。
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。

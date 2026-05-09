@@ -1,4 +1,4 @@
-# Domain: Fullstack (全栈) v3.4.0
+# Domain: Fullstack (全栈) v3.5.0
 # 继承 _base.yaml + frontend.yaml + backend.yaml 全部内容。以下仅声明全栈领域增量。
 # 合并协议：当 frontend 与 backend 的规则冲突时，以主视角领域优先；无主视角时以更严格的规则为准。
 

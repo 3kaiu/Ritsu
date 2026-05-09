@@ -1,4 +1,4 @@
-# Skill 公共步骤模板 v3.4.0
+# Skill 公共步骤模板 v3.5.0
 
 > 所有 SKILL.md 中重复出现的三个步骤，统一引用此模板，禁止各自重写。
 > 引用方式：`> 引用 _shared/skill-common-steps.md Step N`

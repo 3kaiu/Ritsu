@@ -1,4 +1,4 @@
-# Anti-Patterns: 全局底线约束 v3.4.0
+# Anti-Patterns: 全局底线约束 v3.5.0
 # 这些规则是不可跨越的底线，无论你当前正在执行哪个技能，都必须无条件遵守。
 # 每条规则有唯一 ID，AI 在输出中必须引用 ID 而非模糊描述。
 # violation 事件格式见 _shared/ctx-protocol.md violation 字段定义。

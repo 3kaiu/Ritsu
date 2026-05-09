@@ -66,7 +66,7 @@ hard_constraints:
   ```markdown
   <!-- Ritsu Configuration Block -->
 
-  ritsu-version: 3.4.0
+  ritsu-version: 3.5.0
   domain: {推断出的领域值}
 
   <!-- End Ritsu Block -->
@@ -86,7 +86,7 @@ hard_constraints:
 配置内容：
 
 ```
-Ritsu Bundle v3.4 已激活。
+Ritsu Bundle v3.5 已激活。
 全局规则：~/.gemini/antigravity/skills/Ritsu/
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：

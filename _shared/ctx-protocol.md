@@ -1,8 +1,8 @@
 # 情景记忆持久化协议 (Context Protocol)
 
-> Ritsu Bundle 共享协议 v3.4.0
+> Ritsu Bundle 共享协议 v3.5.0
 > 解决问题：会话重置后 AI 丢失当前任务上下文（任务在哪一步、领域是什么、产物在哪里）
-> v3.4.0 扩展：从 3 态记录（started/done/failed）演进为全生命周期事件流，支持 UI 渲染
+> v3.5.0 扩展：从 3 态记录（started/done/failed）演进为全生命周期事件流，支持 UI 渲染
 
 ---
 

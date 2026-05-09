@@ -1,4 +1,4 @@
-# Domain: DevOps / Infra (运维与基础设施) v3.4.0
+# Domain: DevOps / Infra (运维与基础设施) v3.5.0
 # 继承 _base.yaml 全部内容。以下仅声明 DevOps 领域增量。
 
 extends: _base
