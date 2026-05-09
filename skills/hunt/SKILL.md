@@ -42,7 +42,10 @@ hard_constraints:
 **隐式绑定优先**：检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何错误日志文件、Issue 描述文档或历史 `diagnosis-*.md` 文件。
 - **若有** → 直接读取当前激活的焦点文件内容作为诊断的初始上下文，跳过向用户索要报错信息，并在输出中注明"已根据 IDE 焦点自动提取报错上下文"。
 
-### 3. 证据抓取
+### 3. 证据抓取与边界扫描 (Boundary Scan)
+**系统边界定义**：在抓取具体日志前，强制输出当前报错涉及的【系统数据流链路】（例如：Client -> WAF -> Gateway -> Node.js -> Redis -> MySQL）。这能彻底消除大模型在局部盲区中瞎猜的现象。
+
+根据边界定义抓取证据：
 **frontend**：浏览器控制台完整堆栈 / 网络面板状态码+响应体 / DevTools 状态快照 / Hydration 特征 / CORS 响应头
 
 **backend**：完整报错堆栈（含线程/goroutine 信息）/ DB 连接池状态 / 内存与 GC 曲线 / 上游服务响应延迟
@@ -85,10 +88,19 @@ hard_constraints:
 等待用户补充后，回到步骤 2，不输出任何推测性结论。
 ```
 
-### 6. 写入诊断报告
-调用 **`ritsu_write_artifact`**（type=diagnosis），文件路径：`ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`
+### 6. 5-Whys 根因倒推与写入诊断报告
+在最终锁定问题后，严禁直接把"报错表象"当做根因。必须执行 **【5-Whys 连续追问】** 协议：
+```
+报错表象：[例如：变量为 undefined]
+↳ 为什么？因为 [DB 返回为空]
+  ↳ 为什么？因为 [外键关联失效]
+    ↳ 为什么？因为 [上一版数据迁移遗漏了约束]
+      ↳ 物理根因：[数据迁移脚本不完整]
+```
 
-按 `_shared/artifact-schema.md` Schema 2 格式写入。
+基于 5-Whys 的最终结论，调用 **`ritsu_write_artifact`**（type=diagnosis），文件路径：`ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`
+
+按 `_shared/artifact-schema.md` Schema 2 格式写入（将其中的 Root Cause 替换为 5-Whys 提炼的物理根因）。
 
 写入 ctx-{YYYY-MM}.md：
 ```

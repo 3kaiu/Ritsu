@@ -5,7 +5,7 @@ description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
 hard_constraints:
   - id: HC-1
-    rule: "任何外部标识符引用前，必须调用 ritsu_grep_identifier 验证其存在"
+    rule: "外部标识符引用前必须调用 ritsu_grep_identifier 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐"
     severity: FATAL
   - id: HC-2
     rule: "交付物不得包含 TODO/待定/后续完善 等占位符"
@@ -62,15 +62,15 @@ hard_constraints:
 **infra/data**：变更幂等性 / 最小权限 / 状态文件备份确认
 
 ### 3. 标识符验证（HC-1 执行协议）
-调用任何外部模块的函数/变量/组件前，**按以下协议执行**：
+调用任何外部模块的函数/变量/组件前，**按以下协议执行（签名级校验）**：
 
 ```
-调用 ritsu_grep_identifier({标识符}, {文件后缀})
-  ✅ exists=true  → 记录 found_in 路径，方可引用
-  ❌ exists=false → 停止编写该调用，输出：
-    "标识符 '{名称}' 在项目中不存在。
-     请确认：① 名称是否有拼写错误 ② 是否需要先在项目中定义它"
-     等待用户指示，不自行补全
+1. 调用 ritsu_grep_identifier({标识符}, {文件后缀})
+2. ✅ exists=true  → 必须阅读返回的 context 字段：
+   - 提取该标识符的【函数签名/参数定义/类型说明】
+   - 检查自己的调用代码是否与该签名严格对齐（参数顺序、对象结构、必填项）
+   - 若签名与预期不符，严禁盲目猜测，必须修正自己的调用逻辑或询问用户
+3. ❌ exists=false → 停止编写该调用，输出错误提示并等待指示
 ```
 
 ### 4. 降维分块执行与测试先行 (Chunked Execution)

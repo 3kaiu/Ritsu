@@ -62,10 +62,11 @@
     "identifier": "要验证的函数名/变量名/组件名",
     "extensions": "文件后缀列表，如 ['.go', '.ts']"
   },
-  "command_template": "grep -r \"{identifier}\" . --include=\"*{ext}\" --exclude-dir={node_modules,.git,dist,build,out,vendor} -l",
+  "command_template": "grep -rnC 3 \"{identifier}\" . --include=\"*{ext}\" --exclude-dir={node_modules,.git,dist,build,out,vendor}",
   "returns": {
     "exists": "boolean",
-    "found_in": ["找到该标识符的文件路径列表"]
+    "found_in": ["找到该标识符的文件路径列表"],
+    "context": "标识符周围的上下文（包含签名/参数定义）"
   },
   "decision": {
     "exists=true": "可以引用该标识符",
