@@ -1,0 +1,64 @@
+# Domain: Base (通用基线) v3.3.0
+# 所有领域配置隐式继承本基线。领域文件中不得重复声明以下内容。
+
+domain_interface_contract:
+  order:
+    - hypothesis_directions
+    - coding_disciplines
+    - attack_vectors
+    - pr_requirements
+    - discipline_attack_mapping
+  rule: "领域文件仅声明增量内容，与 _base.yaml 重复的禁止出现"
+
+hypothesis_directions:
+  - id: B-H1
+    name: 时区/编码/Locale/序列化差异
+  - id: B-H2
+    name: 第三方 SDK 静默升级或 API 变更
+  - id: B-H3
+    name: 环境变量缺失或配置漂移
+  - id: B-H4
+    name: 资源竞争（文件锁、端口占用、连接池耗尽）
+  - id: B-H5
+    name: 数据边界（空值、超长文本、特殊字符、Unicode 异常）
+
+coding_disciplines:
+  - id: B-D1
+    name: 资源释放
+    rule: "所有外部资源（连接、句柄、流、会话）必须在 finally / defer / 组件卸毁中释放"
+  - id: B-D2
+    name: 错误传播
+    rule: "严禁吞异常。捕获后必须：重新抛出、记录日志、或转换为领域错误。空 catch 块视为严重违规"
+  - id: B-D3
+    name: 幂等性
+    rule: "写入操作应尽量设计为幂等。非幂等操作必须显式标注并说明原因"
+
+attack_vectors:
+  - id: B-A1
+    name: 输入校验断裂
+    check: "任何外部输入（用户输入、API 响应、文件内容）是否在入口处做了类型/长度/格式校验？"
+  - id: B-A2
+    name: 权限越界
+    check: "是否只需知道 ID 就能操作非归属资源？（IDOR 检查）"
+  - id: B-A3
+    name: 回滚能力
+    check: "变更是否可逆？回滚步骤是否文档化且测试过？"
+
+pr_requirements:
+  - id: B-PR1
+    rule: "CI 必须全绿（或手动执行 AGENTS.md 质量门禁命令）"
+  - id: B-PR2
+    rule: "PR 描述必须包含变更动机和影响范围"
+  - id: B-PR3
+    rule: "无 Hard Stop 命中（参照 /r-review 红线列表）"
+
+discipline_attack_mapping:
+  - discipline: B-D1
+    attack: B-A1
+    relation: "异常兜底：捕获后资源是否未释放？"
+  - discipline: B-D2
+    attack: B-A1
+    relation: "输入校验断裂：异常是否被吞导致静默失败？"
+  - discipline: B-D3
+    attack: B-A3
+    relation: "重复请求是否产生脏数据？"

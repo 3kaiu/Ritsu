@@ -1,0 +1,31 @@
+# Domain: Fullstack (全栈) v3.3.0
+# 继承 _base.yaml + frontend.yaml + backend.yaml 全部内容。以下仅声明全栈领域增量。
+# 合并协议：当 frontend 与 backend 的规则冲突时，以主视角领域优先；无主视角时以更严格的规则为准。
+
+extends: [_base, frontend, backend]
+
+coding_disciplines:
+  - id: FS-D1
+    name: 前后端数据状态流转闭环
+    rule: "前端提交 → 后端持久化 → 前端刷新，整条链路是否原子闭环？"
+  - id: FS-D2
+    name: 接口契约一致性
+    rule: "前端 TypeScript 类型定义与后端 API Response Schema 是否同步？"
+
+attack_vectors:
+  - id: FS-A1
+    name: 契约漂移
+    check: "前端调用的 API 字段与后端实际返回是否一致？是否存在前端依赖了后端未承诺的字段？"
+  - id: FS-A2
+    name: 端到端安全
+    check: "前端输入校验是否与后端校验对齐？是否存在前端校验通过但后端绕过的路径？"
+
+pr_requirements: []
+
+discipline_attack_mapping:
+  - discipline: FS-D1
+    attack: FS-A1
+    relation: "前端是否依赖后端未承诺的字段？"
+  - discipline: FS-D2
+    attack: FS-A2
+    relation: "前端校验通过但后端绕过？"

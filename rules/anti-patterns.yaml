@@ -1,0 +1,94 @@
+# Anti-Patterns: 全局底线约束 v3.3.0
+# 这些规则是不可跨越的底线，无论你当前正在执行哪个技能，都必须无条件遵守。
+# 每条规则有唯一 ID，AI 在输出中必须引用 ID 而非模糊描述。
+
+global:
+  - id: AP-1
+    name: Act before reading
+    pattern: "执行文件修改或生成方案前，未通过 pwd/package.json 确认环境"
+    enforcement: "必须通过 pwd 确认路径，通过读取 package.json/.env 确认真实配置。严禁依赖记忆"
+    severity: FATAL
+  - id: AP-2
+    name: Hallucinate paths
+    pattern: "引用或调用函数前，未 grep 验证其真实存在"
+    enforcement: "引用前必须 grep 验证，禁止制造 Unknown identifiers 导致编译失败"
+    severity: FATAL
+  - id: AP-3
+    name: Serial interrogation
+    pattern: "遇到不清晰的需求，分成多次对话追问"
+    enforcement: "必须将所有选项打包在一次回复中抛出"
+    severity: FATAL
+  - id: AP-4
+    name: Scope creep
+    pattern: "用户让修 Bug A，顺手重构了旁边的代码 B"
+    enforcement: "只触碰范围内的必要代码"
+    severity: FATAL
+  - id: AP-5
+    name: Confidence without evidence
+    pattern: "回复'这应该能工作'但不提供任何运行日志"
+    enforcement: "必须主动运行验证脚本，并直接抛出运行结果"
+    severity: FATAL
+  - id: AP-6
+    name: Placeholder promises
+    pattern: "在交付的代码或设计方案中留下 TODO/TBD/后续实现字样"
+    enforcement: "必须一次性完成具体实现或指明阻碍的具体原因"
+    severity: FATAL
+  - id: AP-7
+    name: Silent failures
+    pattern: "命令执行报错了，假装没看见继续下一步"
+    enforcement: "必须停下来，分析报错，或将报错直接反馈给用户"
+    severity: FATAL
+  - id: AP-8
+    name: Unsolicited version bump
+    pattern: "未经用户明确要求主动修改 version 字段或生成 CHANGELOG"
+    enforcement: "除非用户明确要求发版，否则绝不主动修改"
+    severity: WARN
+  - id: AP-9
+    name: Attribution leak
+    pattern: "在提交的代码、PR 评论或 Issue 回复中加上 Co-authored-by: Claude/AI"
+    enforcement: "你的产出归属于用户，绝不带有 AI 机器人的身份痕迹"
+    severity: FATAL
+  - id: AP-10
+    name: State skip
+    pattern: "跳过前置技能直接执行后续技能，且未对跳步风险做出警告"
+    enforcement: "必须遵循 state-machine.yaml 中的流转协议"
+    severity: FATAL
+  - id: AP-11
+    name: Domain assumption
+    pattern: "未确认领域角色就硬编码前端/后端分支逻辑"
+    enforcement: "必须先通过角色探针确认领域，再引用 domains/ 下对应的领域配置"
+    severity: FATAL
+  - id: AP-12
+    name: Drift blindness
+    pattern: "AGENTS.md 超过 7 天未更新却仍然盲信其内容"
+    enforcement: "必须按 Context Loader 提示刷新基线"
+    severity: WARN
+
+review:
+  - id: R-1
+    name: 不明标识符
+    pattern: "代码中引入了找不到定义的变量或组件"
+    severity: HARD_STOP
+    note: "全局 AP-2 的 review 特化"
+  - id: R-2
+    name: 版本号不同步
+    pattern: "package.json 等多处版本号出现割裂"
+    severity: HARD_STOP
+  - id: R-3
+    name: 明文凭证泄露
+    pattern: "存在硬编码的 Token、Key、或敏感日志全量打印"
+    severity: HARD_STOP
+  - id: R-4
+    name: 破坏性契约变更
+    pattern: "修改了现有 API/数据格式但不向后兼容，且无双写/迁移方案"
+    severity: HARD_STOP
+  - id: R-5
+    name: 数据迁移不可逆
+    pattern: "迁移脚本无法回滚，或没有回滚测试"
+    severity: HARD_STOP
+  - id: R-6
+    name: 安全漏洞引入
+    pattern: "新增依赖存在已知 CVE，或代码中存在注入/越权风险"
+    severity: HARD_STOP
+
+dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能内的具体执行步骤是本底线在特定上下文中的落地细化，不属于重复定义"

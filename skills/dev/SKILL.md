@@ -1,6 +1,6 @@
 ---
 name: dev
-version: "3.0.0"
+version: "3.3.0"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
 hard_constraints:
@@ -21,12 +21,13 @@ hard_constraints:
 # Dev: 领域严苛的纯净编码 (Adaptive Implementation)
 
 ## ⚡ 执行前必读
-| ID | 约束 | 违反后果 |
-|----|------|---------|
-| HC-1 | 标识符引用前必须 grep 验证 | 终止交付 |
-| HC-2 | 不得有任何占位符 | 终止交付 |
-| HC-3 | 不超出 Handoff 范围 | 警告，在摘要中标注 |
-| HC-4 | 大任务必须分块降维执行 | 终止，报错重试 |
+
+| ID   | 约束                       | 违反后果           |
+| ---- | -------------------------- | ------------------ |
+| HC-1 | 标识符引用前必须 grep 验证 | 终止交付           |
+| HC-2 | 不得有任何占位符           | 终止交付           |
+| HC-3 | 不超出 Handoff 范围        | 警告，在摘要中标注 |
+| HC-4 | 大任务必须分块降维执行     | 终止，报错重试     |
 
 ---
 
@@ -35,20 +36,24 @@ hard_constraints:
 ## 执行流水线
 
 ### 1. 领域解析与零点击寻址 (Zero-Click Context Binding)
+
 > 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
 
 **隐式绑定优先**：首先检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何 `handoff-*.md` 或 `diagnosis-*.md` 文件。
+
 - **若有** → 直接将其认定为本次 `dev` 的执行目标，跳过询问！并在输出中注明"已根据 IDE 焦点自动锁定目标文件"。
 
 若未发现 IDE 焦点文件，则调用 **`ritsu_list_artifacts`**（type=handoff）：
+
 - **单个文件** → 读取，严格按实施清单执行
 - **多个文件** → 列出文件名+修改时间，默认最新，告知用户可指定其他
 - **用户已指定文件** → 直接读取指定文件
 - **无文件** → 继续执行，在交付摘要注明"无 Handoff 溯源（风险已知悉）"
 
-写入 ctx-{YYYY-MM}.md（调用 **`ritsu_write_artifact`** type=ctx）：
+写入 ctx-{YYYY-MM}.jsonl（调用 **`ritsu_write_artifact`** type=ctx）：
+
 ```
-{timestamp} | dev | domain={value} | started | none
+{"ts":"{timestamp}","skill":"dev","domain":"{value}","status":"started","artifact":null}
 ```
 
 ### 2. 领域专属编码纪律
@@ -62,6 +67,7 @@ hard_constraints:
 **infra/data**：变更幂等性 / 最小权限 / 状态文件备份确认
 
 ### 3. 标识符验证（HC-1 执行协议）
+
 调用任何外部模块的函数/变量/组件前，**按以下协议执行（签名级校验）**：
 
 ```
@@ -74,7 +80,9 @@ hard_constraints:
 ```
 
 ### 4. 降维分块执行与测试先行 (Chunked Execution)
+
 分析需要实现的任务清单总数：
+
 - **若清单项 ≤ 3**：可全量执行，但在编写业务逻辑前，先写出验证手段（单测用例、curl 或 UI 验证步骤）。
 - **若清单项 > 3**（触发 HC-4 强制约束）：
   1. **截断**：仅选取前 1-2 项核心逻辑执行。
@@ -82,39 +90,48 @@ hard_constraints:
   3. **断点确认**：输出 `[暂停点]` 总结当前进度，明确询问用户："第一批次已无损跑通，是否继续下一批次？" 严禁一次性输出所有代码导致幻觉翻车。
 
 ### 5. 沙盒自查清单（按优先级）
+
 - [ ] HC-1：所有外部标识符均已通过 `ritsu_grep_identifier` 验证
 - [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理
 - [ ] 无孤儿引用，无未使用的残余变量
 
 ### 6. 质量门禁
+
 调用 **`ritsu_run_quality_gates`**，等待结果：
+
 - Lint ✅ + Test ✅ → 可以交付
 - 任何 ❌ → 修复后重新执行，不允许带着失败交付
 
 ### 7. Handoff 契约自愈 (Handoff Drift Prevention)
+
 必须防止代码与设计文档发生割裂。
+
 - 对比最终落盘的代码与步骤 1 溯源到的 `handoff-*.md` 文件。
 - 如果在 Bug 修复或需求变更过程中，**实际代码的逻辑、接口结构、或架构层级推翻了原 Handoff 的契约**：
   - 必须主动调用 `ritsu_write_artifact` 修改原 `handoff-*.md` 文件。
   - 在文件对应位置修改契约，并在末尾追加 `## Update Log` 说明偏离原因，确保文档与代码保持绝对同构。
 
 **交付摘要**（强制输出）：
+
 ```
 ## 律 (Ritsu) 开发落盘清单
 - 涉及文件: {路径 + 改动概述}
-- Handoff 溯源: ritsu/handoff-{slug}.md 或 无（风险已知悉）
+- Handoff 溯源: .ritsu/handoff-{slug}.md 或 无（风险已知悉）
 - Lint: ✅/❌ | Test: ✅/❌
 ```
 
-写入 ctx-{YYYY-MM}.md：
+写入 ctx-{YYYY-MM}.jsonl：
+
 ```
-{timestamp} | dev | domain={value} | done | none
+{"ts":"{timestamp}","skill":"dev","domain":"{value}","status":"done","artifact":null}
 ```
 
 ---
 
 ## ⛔ 尾部锚点
+
 **HC-1 最终提醒**：交付前回看自查清单第一条——所有外部标识符是否全部经过 grep 验证？未验证的不允许出现在交付代码中。
 
 ## 关联流转
-> 引用 `_shared/state-machine.md` — dev 完成引导语。
+
+> 引用 `_shared/state-machine.yaml` — dev 完成引导语。

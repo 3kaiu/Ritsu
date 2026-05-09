@@ -16,7 +16,7 @@
 
 ### Phase 2: 状态推断 (State Inference)
 
-- 按 `state-machine.md` 中的状态推断规则，确定当前项目状态。
+- 按 `state-machine.yaml` 中的状态推断规则，确定当前项目状态。
 - 将推断结果注入当前技能的执行上下文，供跳步拦截使用。
 
 ### Phase 3: 环境与依赖并行确认 (Environment & Dependency Lock)
@@ -34,9 +34,9 @@
 ### Phase 4: 领域配置装载 (Domain Loading)
 
 - 从 `AGENTS.md` 读取 `domain` 字段。
-- 加载 `domains/_base.md`（通用基线，始终装载）。
-- 加载 `domains/[domain].md`（领域增量）。
-- 若为 fullstack 领域，同时加载 `domains/frontend.md` 和 `domains/backend.md`。
+- 加载 `domains/_base.yaml`（通用基线，始终装载）。
+- 加载 `domains/[domain].yaml`（领域增量）。
+- 若为 fullstack 领域，同时加载 `domains/frontend.yaml` 和 `domains/backend.yaml`。
 - 设置 **已装载标记**：`__RITSU_LOADED__ = true`，后续技能的 Pre-flight/步骤 1 检测到此标记后跳过重复装载。
 
 > **装载完成后，系统才被允许进入具体技能的流水线逻辑。**

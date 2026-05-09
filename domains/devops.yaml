@@ -1,0 +1,50 @@
+# Domain: DevOps / Infra (运维与基础设施) v3.3.0
+# 继承 _base.yaml 全部内容。以下仅声明 DevOps 领域增量。
+
+extends: _base
+
+hypothesis_directions:
+  - id: OP-H1
+    name: 配置漂移 (Config Drift) / 环境不一致
+  - id: OP-H2
+    name: 资源配额耗尽 (CPU/Memory/Disk)
+  - id: OP-H3
+    name: 网络分区 / DNS 解析失败
+  - id: OP-H4
+    name: 密钥轮换未生效 / 证书过期
+
+coding_disciplines:
+  - id: OP-D1
+    name: IaC 幂等性
+    rule: "基础设施变更必须可重复执行不产生副作用"
+  - id: OP-D2
+    name: 最小权限
+    rule: "ServiceAccount / IAM Role 必须遵循最小权限原则"
+  - id: OP-D3
+    name: 可观测性
+    rule: "所有变更必须关联 Metrics / Alerts / Logs"
+
+attack_vectors:
+  - id: OP-A1
+    name: 密钥泄露
+    check: "Terraform/Ansible/Helm values 中是否硬编码了 Secret？"
+  - id: OP-A2
+    name: 破坏性变更
+    check: "基础设施变更是否会导致服务中断？是否有蓝绿/金丝雀发布策略？"
+
+pr_requirements:
+  - id: OP-PR1
+    rule: "必须提供 Plan 输出 (terraform plan / helm diff) 或变更影响范围说明"
+  - id: OP-PR2
+    rule: "检查是否修改了生产环境的配额或安全组"
+
+discipline_attack_mapping:
+  - discipline: OP-D1
+    attack: OP-A2
+    relation: "重复 apply 是否产生副作用？"
+  - discipline: OP-D2
+    attack: OP-A1
+    relation: "ServiceAccount 是否有超出必要的权限？"
+  - discipline: OP-D3
+    attack: null
+    relation: "变更后是否有对应的 Alert 规则？"

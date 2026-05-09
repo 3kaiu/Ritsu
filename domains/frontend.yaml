@@ -1,0 +1,60 @@
+# Domain: Frontend (前端) v3.3.0
+# 继承 _base.yaml 全部内容。以下仅声明前端领域增量。
+
+extends: _base
+
+hypothesis_directions:
+  - id: FE-H1
+    name: 缓存过期 / Service Worker 拦截
+  - id: FE-H2
+    name: 闭包引起的旧值 (Stale Closure)
+  - id: FE-H3
+    name: 竞态条件 (Race Condition in State)
+  - id: FE-H4
+    name: 三方库版本冲突 / Peer Dependency 缺失
+  - id: FE-H5
+    name: Hydration 冲突 (SSR 场景)
+  - id: FE-H6
+    name: CORS 拦截 / 资源加载 404
+
+coding_disciplines:
+  - id: FE-D1
+    name: Re-render 检查
+    rule: "状态变更粒度是否最小化？严禁滥用全局状态。必须将可共享状态隔离至最近公共祖先组件"
+  - id: FE-D2
+    name: 竞态条件
+    rule: "异步网络请求必须做取消 (AbortController) 或防抖处理"
+  - id: FE-D3
+    name: 内存泄漏
+    rule: "绑定的全局事件或定时器必须在组件销毁时解绑"
+
+attack_vectors:
+  - id: FE-A1
+    name: XSS 与数据注入
+    check: "用户输入是否直接渲染在 DOM 中？"
+  - id: FE-A2
+    name: 状态篡改
+    check: "前端状态管理是否容易被直接从 Console 或插件中篡改并绕过业务校验？"
+  - id: FE-A3
+    name: 性能与渲染
+    check: "是否存在不必要的大面积重渲染？大列表是否做了虚拟化？"
+  - id: FE-A4
+    name: 跨域信任
+    check: "后端 API 返回值是否被前端无条件信任并渲染？"
+
+pr_requirements:
+  - id: FE-PR1
+    rule: "必须提供 UI 变更截图或录屏"
+  - id: FE-PR2
+    rule: "检查是否增加了不必要的大体积三方包（>50KB 需说明）"
+
+discipline_attack_mapping:
+  - discipline: FE-D1
+    attack: FE-A3
+    relation: "大面积重渲染？"
+  - discipline: FE-D2
+    attack: FE-H3
+    relation: "请求取消是否生效？"
+  - discipline: FE-D3
+    attack: null
+    relation: "全局事件/定时器是否仍在运行？"

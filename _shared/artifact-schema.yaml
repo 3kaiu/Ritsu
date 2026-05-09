@@ -1,0 +1,179 @@
+# Ritsu 产物契约 v3.3.0
+# 定义所有跨技能中间产物的强制格式。
+# 下游技能读取上游产物时，必须按此 Schema 解析，禁止自由解读。
+# ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
+
+schemas:
+  agents_md:
+    id: 0
+    path: "{项目根}/AGENTS.md"
+    format: markdown
+    consumer: human_and_ai
+    required_fields:
+      - field: ritsu-version
+        type: string
+        pattern: "3.3.0"
+      - field: domain
+        type: enum
+        values: [frontend, backend, fullstack, infra, data]
+      - field: 技术栈底座.语言/运行时
+        type: string
+        placeholder: "待补充"
+      - field: 质量门禁.Lint
+        type: string
+        placeholder: "待补充"
+      - field: 质量门禁.Test
+        type: string
+        placeholder: "待补充"
+    heterogeneity:
+      detect: "存在 ritsu-version: 字段 → 旧版 Ritsu 产物；不存在 → 异构配置"
+      injection_template:
+        prefix: "<!-- Ritsu Configuration Block -->"
+        fields: [ritsu-version, domain]
+        suffix: "<!-- End Ritsu Block -->"
+
+  handoff:
+    id: 1
+    path: ".ritsu/handoff-{kebab-slug}.md"
+    format: markdown
+    consumer: ai
+    html_render: false
+    slug_rule: "取需求描述的前 3 个有效英文关键词，转 kebab-case 小写"
+    slug_conflict: "追加序号，如 handoff-user-login-flow-2.md"
+    required_sections:
+      - title: "边界与依赖"
+        fields:
+          - name: target_scope
+            label: "目标范围 (In Scope)"
+          - name: out_of_scope
+            label: "Out of Scope"
+            rule: "明确列出，禁止模糊"
+          - name: new_dependencies
+            label: "新增依赖"
+            format: "名称 / 版本 / License / 体积 或 '无'"
+      - title: "核心契约 (Contract)"
+        conditional_fields:
+          - domains: [backend, fullstack]
+            fields:
+              - name: api_contract
+                label: "API / 接口契约"
+                sub_fields: [method_path, request_schema, response_schema, error_codes]
+              - name: data_model
+                label: "数据模型"
+                sub_fields: [table_name, key_fields, index_design]
+          - domains: [frontend, fullstack]
+            fields:
+              - name: component_contract
+                label: "组件契约"
+                sub_fields: [component_name, props_type, emits_callbacks, state_machine]
+      - title: "攻击测试防线"
+        fields:
+          - name: downtime_response
+            label: "宕机响应"
+            rule: "外部依赖 502 时的降级方案，不允许填'暂不处理'"
+          - name: 10x_bottleneck
+            label: "10x 瓶颈"
+            rule: "流量放大 10 倍最先撑爆的点及缓解措施"
+          - name: rollback_steps
+            label: "回滚步骤"
+            rule: "上线发现致命 Bug 的确切回滚指令（逐步骤列出）"
+      - title: "实施清单"
+        type: checklist
+        item_format: "- [ ] `{文件路径}`: {主干逻辑描述，精确到函数/组件级别}"
+        rule: "每条必须精确到文件，确保 /r-dev 执行时无需做任何技术决策"
+    placeholder_forbidden: true
+    forbidden_patterns: [TODO, 待定, 后续完善, 暂不处理]
+
+  diagnosis:
+    id: 2
+    md_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md"
+    html_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.html"
+    format: dual
+    consumer: ai_and_human
+    required_sections:
+      - title: "根因确诊"
+        id: root-cause
+        fields:
+          - name: root_cause
+            format: "一句话精准描述，格式：'由于 [原因]，导致 [现象]'"
+      - title: "证据链"
+        id: evidence
+        type: table
+        columns: [序号, 证据, 来源]
+      - title: "领域影响范围"
+        id: impact
+        fields:
+          - name: impact_layer
+            enum: [仅前端渲染, 数据库数据, 服务可用性]
+          - name: impact_scope
+            enum: [单用户, 特定条件, 全量]
+      - title: "复现步骤"
+        id: reproduce
+        fields:
+          - name: environment
+          - name: steps
+            type: ordered_list
+      - title: "验证命令"
+        id: verify
+        type: code_block
+        rule: "可直接执行的验证命令（证明根因成立）"
+    optional_sections:
+      - title: "推荐修复入口"
+        items:
+          - "简单修复（< 2h）→ /r-dev [...]"
+          - "架构级修复 → /r-think [...]"
+
+  review_stamp:
+    id: 3
+    md_path: ".ritsu/review-stamp-{YYYYMMDD-HHMMSS}.md"
+    html_path: ".ritsu/review-stamp-{YYYYMMDD-HHMMSS}.html"
+    format: dual
+    consumer: ai_and_human
+    must_write_file: true
+    must_inline_output: true
+    required_sections:
+      - title: "结论"
+        id: verdict
+        fields:
+          - name: verdict
+            type: enum
+            values: [PASS, FAIL]
+      - title: "Hard Stop 命中"
+        id: hard-stops
+        fields:
+          - name: hard_stops
+            format: "无 | P{N} — {描述}"
+      - title: "领域发现"
+        id: findings
+        fields:
+          - name: findings
+            format: "无 | - 问题描述（严重度：高/中/低）"
+      - title: "溯源对账"
+        id: traceability
+        fields:
+          - name: traceability
+            format: "已对账: .ritsu/handoff-{slug}.md | 无 Handoff 存档（风险已知悉）"
+      - title: "质量门禁执行结果"
+        id: quality-gates
+        fields:
+          - name: lint
+            format: "✅ 通过 | ❌ 失败，输出：..."
+          - name: test
+            format: "✅ 通过 | ❌ 失败，输出：..."
+
+dual_format_protocol:
+  version: "3.3.0"
+  principle:
+    md_consumer: "AI（grep / RAG 检索）"
+    html_consumer: "人类（浏览器直接打开）"
+    md_write: always
+    html_write: "diagnosis + review-stamp only"
+    handoff_html: false
+    ctx_html: false
+  html_requirements:
+    - rule: "自包含：所有 CSS/JS 内联，不引用外部资源（离线可打开）"
+    - rule: "语义锚点：关键区块必须带 id 属性（如 id='root-cause'、id='hard-stops'），供 AI 精准定位"
+    - rule: "暗色主题：默认暗色背景（#1a1a2e），对齐开发者审美"
+    - rule: "可折叠：证据链、Hard Stop 详情等长区块使用 details/summary 折叠"
+    - rule: "状态徽章：PASS/FAIL、严重度等级使用颜色徽章（绿/红/黄）醒目标注"
+    - rule: "元数据注入：head 中嵌入 meta name='ritsu-artifact' 和 meta name='ritsu-timestamp'，供工具识别"

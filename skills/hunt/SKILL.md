@@ -1,6 +1,6 @@
 ---
 name: hunt
-version: "3.0.0"
+version: "3.3.0"
 description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 hard_constraints:
@@ -18,11 +18,12 @@ hard_constraints:
 # Hunt: 技术 CSI — 深度根因诊断 (Root Cause Investigation)
 
 ## ⚡ 执行前必读
-| ID | 约束 | 违反后果 |
-|----|------|---------|
-| HC-1 | 确诊前不改代码 | 终止，交给 /r-dev |
-| HC-2 | 假设必须 MECE + 排除条件 | 重新建立假设集 |
-| HC-3 | 全部排除时重新采集，不猜测 | 终止模糊输出 |
+
+| ID   | 约束                       | 违反后果          |
+| ---- | -------------------------- | ----------------- |
+| HC-1 | 确诊前不改代码             | 终止，交给 /r-dev |
+| HC-2 | 假设必须 MECE + 排除条件   | 重新建立假设集    |
+| HC-3 | 全部排除时重新采集，不猜测 | 终止模糊输出      |
 
 ---
 
@@ -31,18 +32,23 @@ hard_constraints:
 ## 执行流水线
 
 ### 1. 领域解析
+
 > 引用 `_shared/domain-resolver.md`，输出 `[RITSU_CTX: domain={value}]`
 
-写入 ctx-{YYYY-MM}.md（type=ctx）：
+写入 ctx-{YYYY-MM}.jsonl（type=ctx）：
+
 ```
-{timestamp} | hunt | domain={value} | started | none
+{"ts":"{timestamp}","skill":"hunt","domain":"{value}","status":"started","artifact":null}
 ```
 
 ### 2. 零点击上下文绑定 (Zero-Click Context Binding)
+
 **隐式绑定优先**：检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何错误日志文件、Issue 描述文档或历史 `diagnosis-*.md` 文件。
+
 - **若有** → 直接读取当前激活的焦点文件内容作为诊断的初始上下文，跳过向用户索要报错信息，并在输出中注明"已根据 IDE 焦点自动提取报错上下文"。
 
 ### 3. 证据抓取与边界扫描 (Boundary Scan)
+
 **系统边界定义**：在抓取具体日志前，强制输出当前报错涉及的【系统数据流链路】（例如：Client -> WAF -> Gateway -> Node.js -> Redis -> MySQL）。这能彻底消除大模型在局部盲区中瞎猜的现象。
 
 根据边界定义抓取证据：
@@ -53,11 +59,14 @@ hard_constraints:
 **infra/data**：变更前后状态文件 diff / CI 日志完整输出 / 资源依赖图失败节点
 
 ### 4. 建立 MECE 假设（HC-2 执行协议）
+
 提出 1-3 个假设，**每条必须满足**：
+
 - **互斥**：假设 A 成立可排除 B（死锁 vs 连接池耗尽是两个独立原因，不是子集关系）
 - **有排除条件**：明确说明哪个验证结果可以排除此假设
 
 输出格式：
+
 ```
 假设 #1（置信度：高）：由于 [具体原因]，导致 [现象]
   排除条件：执行 [命令/操作]，若输出 [X] 则此假设不成立
@@ -71,7 +80,9 @@ hard_constraints:
 **backend 参考方向**：DB 死锁（SHOW ENGINE INNODB STATUS）/ 连接池耗尽（检查池配置与活跃数）/ OOM（内存趋势）/ 事务隔离级别（幻读/不可重复读）
 
 ### 5. 探针验证（按置信度从高到低）
+
 逐个验证，每个假设验证后输出明确结论：
+
 ```
 假设 #1 验证：执行了 [命令]，结果为 [...]
 → ✅ 确认：根因锁定，进入步骤 5
@@ -79,6 +90,7 @@ hard_constraints:
 ```
 
 **全部假设排除时（HC-3 执行协议）**：
+
 ```
 输出：
   "已排除所有假设：
@@ -89,7 +101,9 @@ hard_constraints:
 ```
 
 ### 6. 5-Whys 根因倒推与写入诊断报告
+
 在最终锁定问题后，严禁直接把"报错表象"当做根因。必须执行 **【5-Whys 连续追问】** 协议：
+
 ```
 报错表象：[例如：变量为 undefined]
 ↳ 为什么？因为 [DB 返回为空]
@@ -98,19 +112,25 @@ hard_constraints:
       ↳ 物理根因：[数据迁移脚本不完整]
 ```
 
-基于 5-Whys 的最终结论，调用 **`ritsu_write_artifact`**（type=diagnosis），文件路径：`ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`
+基于 5-Whys 的最终结论，调用 **`ritsu_write_artifact`**（type=diagnosis），同时写入 md 和 html 双文件：
 
-按 `_shared/artifact-schema.md` Schema 2 格式写入（将其中的 Root Cause 替换为 5-Whys 提炼的物理根因）。
+- md 路径：`.ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`（Schema 2，AI 消费）
+- html 路径：`.ritsu/diagnosis-{YYYYMMDD-HHMMSS}.html`（Schema 4，人类可视化）
 
-写入 ctx-{YYYY-MM}.md：
+按 `_shared/artifact-schema.yaml` Schema 2 格式写入（将其中的 Root Cause 替换为 5-Whys 提炼的物理根因）。
+
+写入 ctx-{YYYY-MM}.jsonl：
+
 ```
-{timestamp} | hunt | domain={value} | done | ritsu/diagnosis-{ts}.md
+{"ts":"{timestamp}","skill":"hunt","domain":"{value}","status":"done","artifact":".ritsu/diagnosis-{ts}.md"}
 ```
 
 ---
 
 ## ⛔ 尾部锚点
+
 **HC-1 最终提醒**：诊断报告写完后，检查自己在整个诊断过程中是否修改了任何业务文件。若有，立即撤销并在报告中记录。
 
 ## 关联流转
-> 引用 `_shared/state-machine.md` — hunt 完成引导语。
+
+> 引用 `_shared/state-machine.yaml` — hunt 完成引导语。
