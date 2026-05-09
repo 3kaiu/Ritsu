@@ -58,3 +58,69 @@ discipline_attack_mapping:
   - discipline: FE-D3
     attack: null
     relation: "全局事件/定时器是否仍在运行？"
+
+optimize_disciplines:
+  - id: FE-O1
+    name: 工具库优先替换
+    rule: "手写的 useState+useEffect 组合必须优先替换为 react-use / ahooks 对应工具函数。react-use 擅长：useDebounce/useThrottle/useLocalStorage/usetoggle。ahooks 擅长：useRequest/useDebounceFn/useThrottleFn/useMemoizedFn/useDeepCompareEffect/useSize/useClickAway"
+  - id: FE-O2
+    name: 请求层精简
+    rule: "手写的 fetch/axios + useState + useEffect + loading/error 状态管理必须替换为 TanStack Query（useQuery/useMutation/useInfiniteQuery），自动获得缓存/重试/去重/失效刷新"
+  - id: FE-O3
+    name: 样式迁移 TailwindCSS
+    rule: "内联 style 对象和独立 CSS 文件中的规则必须迁移为 TailwindCSS 等价类。重复样式块合并为 @apply 抽象。CSS Modules 保留仅在需要动态类名时"
+  - id: FE-O4
+    name: 语义化标签
+    rule: "div/span 必须替换为语义标签：header/main/section/nav/article/aside/footer/time/mark。仅当语义标签不适用时保留 div"
+  - id: FE-O5
+    name: 渲染性能
+    rule: "大列表必须虚拟化（react-window/react-virtuoso）；重渲染热点必须 React.memo/useMemo/useCallback 包裹；context 值必须 memo 化避免全树重渲染"
+
+optimize_tool_preferences:
+  - category: 状态/副作用
+    libraries:
+      - name: react-use
+        strengths:
+          [
+            useDebounce,
+            useThrottle,
+            useLocalStorage,
+            useToggle,
+            useCopyToClipboard,
+            useMedia,
+          ]
+      - name: ahooks
+        strengths:
+          [
+            useRequest,
+            useDebounceFn,
+            useThrottleFn,
+            useMemoizedFn,
+            useDeepCompareEffect,
+            useSize,
+            useClickAway,
+            useUpdateEffect,
+          ]
+    rule: "react-use 擅长简单原子 hook，ahooks 擅长复杂业务 hook。优先 ahooks 的 useRequest 替代手写请求逻辑；优先 react-use 的 useDebounce/useThrottle 替代手写防抖节流"
+  - category: 请求层
+    libraries:
+      - name: "@tanstack/react-query"
+        strengths: [useQuery, useMutation, useInfiniteQuery, useSuspenseQuery]
+    rule: "所有手写的 fetch+useState+useEffect+loading/error 模式必须替换为 TanStack Query"
+
+platform_optimizations:
+  - id: FE-P1
+    name: WebView 预加载
+    rule: "H5 内嵌原生 App 时，利用 WebView 预加载（prefetch DNS/预连接）：<link rel='dns-prefetch' href='//api.example.com'> <link rel='preconnect' href='//api.example.com'>"
+  - id: FE-P2
+    name: WebView 缓存策略
+    rule: "静态资源设置强缓存（Cache-Control: max-age=31536000），HTML 入口设置协商缓存，利用 WebView 的缓存机制减少重复请求"
+  - id: FE-P3
+    name: WebView 滚动优化
+    rule: "长列表滚动区域添加 -webkit-overflow-scrolling: touch 和 overflow-scroll-behavior: contain，启用 GPU 加速滚动"
+  - id: FE-P4
+    name: WebView 首屏加速
+    rule: "首屏关键 CSS 内联，非关键资源 defer/async 加载，图片使用 loading='lazy' + 考虑 WebP 格式，骨架屏替代 loading 动画"
+  - id: FE-P5
+    name: JSBridge 调用优化
+    rule: "原生 JSBridge 调用必须做超时兜底（3s），避免 WebView 卡死；频繁调用的 Bridge 必须做节流"

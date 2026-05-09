@@ -62,3 +62,21 @@ discipline_attack_mapping:
   - discipline: B-D3
     attack: B-A3
     relation: "重复请求是否产生脏数据？"
+
+optimize_disciplines:
+  - id: B-O1
+    name: 死代码清除
+    rule: "删除未使用的变量、函数、导入、类型定义。通过 grep 验证无引用后才可删除"
+  - id: B-O2
+    name: 冗余逻辑合并
+    rule: "可合并的条件分支必须合并；重复计算必须提取为变量；单次调用的包装函数必须内联"
+  - id: B-O3
+    name: 注释清理
+    rule: "删除无用的注释（如被注释掉的旧代码、显而易见的注释），保留核心 TSDoc/JSDoc"
+  - id: B-O4
+    name: 算法性能
+    rule: "识别 O(n²)→O(n) 机会、不必要的全量遍历、可 memo 化的重复计算"
+
+optimize_tool_preferences: []
+
+platform_optimizations: []

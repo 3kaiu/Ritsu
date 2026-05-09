@@ -4,7 +4,7 @@
 
 states:
   route:
-    next: [init, think, dev, hunt, review, triage]
+    next: [init, think, dev, hunt, review, optimize, triage]
   init:
     next: [route, think, dev]
     hint:
@@ -15,24 +15,32 @@ states:
     next: [dev, think]
     note: "循环允许（方案被否决时重新设计）"
   dev:
-    next: [review]
+    next: [review, optimize]
+    branches:
+      review: "开发完成，需审查"
+      optimize: "代码可用但需精简/提速"
   review:
-    next: [dev, think, triage]
+    next: [dev, think, optimize, triage]
     branches:
       dev: "单次 FAIL，必须修复"
       think: "连续两次 FAIL 触发熔断，重审架构"
+      optimize: "PASS 但有性能/精简空间"
       triage: "PASS + 有工单待处理（可选）"
+  optimize:
+    next: [review]
+    note: "优化后必须审查确认无功能回归"
   hunt:
     next: [dev, think]
     branches:
       dev: "简单修复"
       think: "架构级修复"
   triage:
-    next: [hunt, think, review]
+    next: [hunt, think, review, optimize]
     branches:
       hunt: "Bug 工单"
       think: "Feature 工单"
       review: "PR 工单"
+      optimize: "性能优化工单"
 
 circuit_breaker:
   skill: review
@@ -80,6 +88,12 @@ guidance:
     options:
       - "简单修复 → /r-dev [依据 diagnosis-{ts}.md 修复]"
       - "架构级修复 → /r-think [设计修复方案]"
+  optimize_done:
+    icon: "✅"
+    template: "律 (Ritsu) 优化完毕，报告已写入 .ritsu/optimize-report-{ts}.md。"
+    options:
+      - "进入审查确认无回归 → /r-review"
+      - "继续优化其他模块 → /r-opt [目标文件/模块]"
   triage_done:
     icon: "✅"
     template: "律 (Ritsu) 工单裁决完毕。"

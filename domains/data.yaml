@@ -45,3 +45,18 @@ discipline_attack_mapping:
   - discipline: DA-D2
     attack: null
     relation: "随机种子/超参数是否锁定？能否复现同一结果？"
+
+optimize_disciplines:
+  - id: DA-O1
+    name: 数据管线优化
+    rule: "ETL 串行步骤可并行的必须并行化；大表全量扫描必须改为增量抽取；中间结果必须缓存避免重复计算"
+  - id: DA-O2
+    name: 训练推理优化
+    rule: "模型推理热点必须量化（INT8/FP16）；批处理必须替代单条推理；ONNX/TensorRT 加速可评估时必须采用"
+  - id: DA-O3
+    name: 特征工程精简
+    rule: "低重要性特征必须剔除（基于 feature importance / correlation）；特征计算重复逻辑必须合并为共享 UDF"
+
+optimize_tool_preferences: []
+
+platform_optimizations: []

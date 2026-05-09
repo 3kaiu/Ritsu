@@ -29,3 +29,20 @@ discipline_attack_mapping:
   - discipline: FS-D2
     attack: FS-A2
     relation: "前端校验通过但后端绕过？"
+
+optimize_disciplines:
+  - id: FS-O1
+    name: 前后端契约精简
+    rule: "前端 TypeScript 类型与后端 API Schema 必须同步精简——删除未使用字段、合并重复接口"
+  - id: FS-O2
+    name: 传输层优化
+    rule: "接口响应必须做字段裁剪（GraphQL 选字段 / REST 只返回必要字段）；启用 gzip/brotli 压缩；大列表接口必须分页"
+
+optimize_tool_preferences:
+  - category: 前端
+    inherits: frontend
+  - category: 后端
+    inherits: backend
+
+platform_optimizations:
+  - inherits: frontend

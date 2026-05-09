@@ -45,3 +45,31 @@ discipline_attack_mapping:
   - discipline: BE-D2
     attack: B-A1
     relation: "异常是否被吞导致无日志可查？"
+
+optimize_disciplines:
+  - id: BE-O1
+    name: 查询优化
+    rule: "识别 N+1 查询、缺失索引、全表扫描。EXPLAIN 验证优化前后执行计划差异"
+  - id: BE-O2
+    name: 连接池与缓存
+    rule: "频繁创建的连接必须池化；重复计算的热数据必须缓存（Redis/内存），设置合理 TTL"
+  - id: BE-O3
+    name: 序列化优化
+    rule: "JSON 序列化热点必须换用高性能库（如 sonic/fjson）；大对象必须做字段裁剪避免过度序列化"
+  - id: BE-O4
+    name: 并发模型优化
+    rule: "串行可并行的 IO 必须改为并发（goroutine/asyncio/Promise.all）；锁粒度必须最小化"
+
+optimize_tool_preferences:
+  - category: 请求层
+    libraries:
+      - name: 连接池
+        strengths: [sqlx/pgxpool/hikari]
+    rule: "数据库连接必须使用连接池，禁止每次请求新建连接"
+  - category: 缓存
+    libraries:
+      - name: Redis
+        strengths: [热数据缓存, 会话存储, 分布式锁]
+    rule: "读多写少的热点查询必须加 Redis 缓存层"
+
+platform_optimizations: []

@@ -48,3 +48,18 @@ discipline_attack_mapping:
   - discipline: OP-D3
     attack: null
     relation: "变更后是否有对应的 Alert 规则？"
+
+optimize_disciplines:
+  - id: OP-O1
+    name: IaC 模板精简
+    rule: "Terraform/Ansible/Helm 中的重复资源声明必须抽取为 module/role/helper；硬编码值必须变量化"
+  - id: OP-O2
+    name: 镜像/构建优化
+    rule: "Dockerfile 必须多阶段构建；镜像必须使用 slim/alpine 基础镜像；.dockerignore 必须排除无关文件"
+  - id: OP-O3
+    name: CI/CD 流水线优化
+    rule: "识别可并行的串行步骤；利用缓存层（node_modules/pip cache/Go module cache）；不必要的全量测试必须改为增量测试"
+
+optimize_tool_preferences: []
+
+platform_optimizations: []

@@ -56,14 +56,15 @@ hard_constraints:
 3. 直接写代码 且 Handoff 已存在       → /r-dev [handoff路径]
 4. 有报错 / 找不到 Bug               → /r-hunt [报错信息]
 5. 写完代码 / 要合并                 → /r-review
-6. 有 Issue/PR 要处理               → /r-triage
+6. 优化/精简/提速/重构（不改功能）    → /r-opt [目标文件/模块]
+7. 有 Issue/PR 要处理               → /r-triage
 ```
 
 > **dev vs think 分叉依据**：调用 **`ritsu_list_artifacts`**（type=handoff）检查文件是否存在，而非依赖用户描述措辞。
 
 **多意图路由**（识别到 2+ 意图）：
 
-- 主任务优先级：`hunt > review > dev > think > triage > init`
+- 主任务优先级：`hunt > review > optimize > dev > think > triage > init`
 - 必须在输出中标注：`⚠️ 次要意图：{描述} → 主任务完成后执行 /r-{skill}`
 
 ### 4. 输出路由决策
