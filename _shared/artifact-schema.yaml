@@ -133,7 +133,7 @@ schemas:
         id: hard-stops
         fields:
           - name: hard_stops
-            format: "无 | P{N} — {描述}"
+            format: "无 | R-{N} — {描述}"
       - title: "领域发现"
         id: findings
         fields:
