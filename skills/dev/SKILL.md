@@ -92,6 +92,27 @@ hotfix 交付摘要格式：
 
 调用任何外部模块的函数/变量/组件前，**按以下协议执行（签名级校验）**：
 
+**TS/JS 项目优先（编译上下文校验，工程友好）**：
+
+若项目存在 `tsconfig.json`（或用户明确为 TS/JS 项目），在进行逐个标识符 grep 前，先调用一次：
+
+```
+调用 ritsu_ts_check({ tsconfig_path: "tsconfig.json", max_diagnostics: 20, timeout_ms: 60000 })
+```
+
+- `passed=true` → 继续执行下方的逐标识符校验
+- `passed=false` → 立即停止编码，输出 diagnostics 前若干条，并进入自愈诊断协议（失败 → 自动 hunt → 沙盒最多 3 次尝试 → 汇报）
+
+在 TS/JS 项目中，逐标识符校验时优先使用“类型系统查询”而不是纯文本 grep：
+
+```
+0. 调用 ritsu_ts_symbol_query({ symbol: "{标识符}", tsconfig_path: "tsconfig.json", file_hint: "{可选: 目标文件}", max_definitions: 10, max_references: 10 })
+   - 若 definitions_count>0：
+     - 必须读取 signature/type 字段（若存在）并据此校验自己的调用参数结构
+     - 若存在多定义/多重载且无法判定，应缩小 file_hint 或询问用户，禁止盲猜
+   - 若 definitions_count=0：回退到下方 grep 路径（用于兜底或非 TS 文件场景）
+```
+
 ```
 1. 调用 ritsu_exec({command: `grep -rnC 3 --max-count=10 "{标识符}" . --include="*{后缀}" --exclude-dir={node_modules,.git,dist}`})
 2. ✅ exists=true  → 必须阅读返回的 context 字段：
@@ -138,6 +159,26 @@ hotfix 交付摘要格式：
 
 - passed: true → 可以交付
 - passed: false → 查看 test.failures 定位失败用例，修复后重新执行，不允许带着失败交付
+
+当质量门禁连续失败或出现“无法稳定复现/环境不一致/疑似缓存污染”时，触发 **自愈诊断协议（失败 → 自动 hunt → 沙盒最多 3 次尝试 → 汇报）**：
+
+1. 调用 `ritsu_env_probe` 输出环境与 worktree 能力概况（用于判断是否具备沙盒条件）
+2. 进入 `/r-hunt`（在同一会话内自动切换思维模式，不改代码），并提供以下结构化上下文：
+   - quality_gates 的失败输出（lint/test output + failures 列表）
+   - 本次变更的 diff 摘要（优先调用 `ritsu_get_diff`）
+   - 当前执行目标 handoff（若存在）
+3. 沙盒最多 3 次尝试（同一个 `correlation_id`）：
+   - 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
+   - 针对失败项做“最小可复现命令”执行：
+     - lint 失败：`ritsu_sandbox_exec({ correlation_id, command: "npm run lint" })`（或项目实际 lint 命令）
+     - test 失败：`ritsu_sandbox_exec({ correlation_id, command: "npm test" })`（或项目实际 test 命令）
+   - 若需要多命令链路，必须拆成多次 `ritsu_sandbox_exec`（禁止管道/重定向）
+   - 每次尝试结束都必须调用 `ritsu_sandbox_cleanup({ correlation_id })`，确保不残留 worktree
+4. 输出汇报（强制）：
+   - “在沙盒中是否可复现”
+   - “复现的最小命令”
+   - “证据指向的最可能根因”
+   - “下一步建议”：继续 /r-hunt 深挖，或返回 /r-dev 继续修复
 
 ### 7. Handoff 契约自愈 (Handoff Drift Prevention)
 

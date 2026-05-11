@@ -49,6 +49,17 @@ hard_constraints:
 
 根据边界定义抓取证据，按当前领域已加载的 `hypothesis_directions` 确定优先排查方向（`domains/_base.yaml` + `domains/{domain}.yaml`）。
 
+当问题表现为“本地/CI 环境不一致、缓存污染、无法稳定复现、工作区状态不确定”时，优先执行 **沙盒复现协议（Git worktree）**，以隔离环境噪声：
+
+1. 调用 `ritsu_env_probe` 检查 git/worktree 与 .ritsu/temp 可用性
+2. 使用当前链路 `correlation_id`（若上游未提供则由 started 事件生成）
+3. 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
+4. 在沙盒中执行最小复现命令（拆成多次调用，禁止管道/重定向）：
+   - `ritsu_sandbox_exec({ correlation_id, command: "git status --porcelain" })`
+   - `ritsu_sandbox_exec({ correlation_id, command: "npm test" })` / `ritsu_sandbox_exec({ correlation_id, command: "npm run lint" })`（按问题类型选择）
+5. 无论成功/失败，最后必须调用 `ritsu_sandbox_cleanup({ correlation_id })`
+6. 记录“沙盒是否可复现”的结论，并将沙盒输出作为后续假设验证的关键证据来源
+
 ### 4. 建立 MECE 假设（HC-2 执行协议）
 
 `[Step 3 Complete]` 后进入步骤 4。

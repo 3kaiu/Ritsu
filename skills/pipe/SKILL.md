@@ -24,12 +24,12 @@ hard_constraints:
 
 引用 `_shared/state-machine.yaml` states.pipe.pipelines 定义：
 
-| 流水线名   | 触发场景             | 技能序列             |
-| ---------- | -------------------- | -------------------- |
+| 流水线名   | 触发场景                 | 技能序列             |
+| ---------- | ------------------------ | -------------------- |
 | `standard` | 新需求，需设计→开发→审查 | think → dev → review |
-| `bugfix`   | Bug 修复             | hunt → dev → review  |
-| `optimize` | 代码优化             | optimize → review    |
-| `test_add` | 补充测试             | test → review        |
+| `bugfix`   | Bug 修复                 | hunt → dev → review  |
+| `optimize` | 代码优化                 | optimize → review    |
+| `test_add` | 补充测试                 | test → review        |
 
 ## 执行流水线
 
@@ -77,16 +77,66 @@ hard_constraints:
    ✅ done → 输出技能交付摘要，推进到下一步
    ❌ failed → 暂停流水线（HC-2），向用户展示：
       "⚠️ /r-{skill} 执行失败：{error}
-       选择：[C]继续下一步 / [R]重试当前技能 / [T]熔断升维→/r-think / [A]终止流水线"
+       选择：[H]自愈诊断（自动 /r-hunt + 沙盒最多 3 次尝试→汇报）/ [R]重试当前技能 / [T]熔断升维→/r-think / [A]终止流水线"
    🔥 熔断 → 自动重定向至 /r-think（HC-3），流水线暂停
 ```
+
+当用户选择 **[H] 自愈诊断** 时：
+
+- 进入 `/r-hunt` 并按 hunt 的“沙盒复现协议（Git worktree）”执行
+- 同一个 `correlation_id` 下，沙盒最多尝试 3 次（prepare → exec → cleanup）
+- 输出“是否可复现/最小命令/最可能根因/下一步建议”的汇报后，流水线仍保持暂停状态，等待用户选择 [R]/[T]/[A]
+
+**[H] 自愈诊断 — 标准执行模板（强制）**：
+
+1. 环境嗅探（一次即可）：
+   - 调用 `ritsu_env_probe`，确认：
+     - git/worktree 可用
+     - `.ritsu/temp` 可写
+
+2. 生成“最小可复现命令”候选（优先从失败技能的输出中提取，而不是凭空猜测）：
+   - 对 `/r-dev` 或 `/r-test` 的失败：优先选 `ritsu_run_quality_gates` 中实际执行失败的那条命令
+   - 对 `/r-review` 的失败：优先选 `ritsu_get_diff` + 对应检查命令（如 lint/test）
+   - 必须拆分为**单命令**（禁止 `|`/`&&`/重定向/子 shell）
+
+3. 沙盒尝试循环（最多 3 次，必须同一 `correlation_id`）：
+
+   对 attempt = 1..3：
+   - 3.1 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
+   - 3.2 在沙盒内执行“最小可复现命令”（可多次调用，但每次必须是单命令）：
+     - `ritsu_sandbox_exec({ correlation_id, command: "git status --porcelain" })`
+     - `ritsu_sandbox_exec({ correlation_id, command: "{最小复现命令}" })`
+   - 3.3 证据采集：记录 attempt 编号、命令、`ok/output/cwd`
+   - 3.4 无论成功/失败，必须执行清理：
+     - `ritsu_sandbox_cleanup({ correlation_id })`
+
+   **提前停止条件**（命中任一即停止剩余 attempt）：
+   - 在沙盒中 **稳定可复现**（同一命令输出明确失败）
+   - 或确认 **不可复现且证据一致**（例如沙盒连续 2 次通过，但本地/CI 失败，且 env_probe 显示环境差异）
+
+4. 强制汇报（输出格式固定，不得省略）：
+
+   ```
+   ## 🧪 自愈诊断汇报（Pipe/H）
+   - correlation_id: {cid}
+   - 触发失败技能: /r-{skill}
+   - 沙盒可用性: ✅/❌（来自 ritsu_env_probe）
+   - 沙盒是否可复现: ✅/❌/不确定
+   - 最小复现命令: {command}
+   - attempt 记录:
+     - #1: ok={true|false}, 摘要={一行}, 关键证据={片段}
+     - #2: ...
+     - #3: ...
+   - 最可能根因: {一句话}
+   - 下一步建议: [R]重试当前技能 / [T]熔断→think / [A]终止
+   ```
 
 **上下文传递规则**：
 
 - 自动传递 `correlation_id` 和 `domain`，无需重新解析
 - 上游技能的产物文件自动作为下游技能的输入：
-  - think → handoff-*.md → dev 自动绑定
-  - hunt → diagnosis-*.md → dev 自动绑定
+  - think → handoff-\*.md → dev 自动绑定
+  - hunt → diagnosis-\*.md → dev 自动绑定
   - dev → 代码变更 → review 自动抓取 diff
   - optimize → 代码变更 → review 自动抓取 diff
   - test → 测试文件 → review 自动抓取 diff
@@ -102,12 +152,12 @@ hard_constraints:
 
 用户可在流水线执行过程中随时发出控制指令：
 
-| 指令 | 效果 |
-| --- | --- |
-| `/r-pipe --skip` | 跳过当前技能，推进到下一步 |
-| `/r-pipe --abort` | 终止流水线，输出已完成步骤摘要 |
-| `/r-pipe --fast` | 切换后续技能为 fast 模式 |
-| `/r-pipe --standard` | 切换后续技能为 standard 模式 |
+| 指令                 | 效果                           |
+| -------------------- | ------------------------------ |
+| `/r-pipe --skip`     | 跳过当前技能，推进到下一步     |
+| `/r-pipe --abort`    | 终止流水线，输出已完成步骤摘要 |
+| `/r-pipe --fast`     | 切换后续技能为 fast 模式       |
+| `/r-pipe --standard` | 切换后续技能为 standard 模式   |
 
 > 控制指令通过自然语言识别，用户无需精确输入指令格式。如"跳过这步"、"停"、"加速"均可识别。
 
@@ -118,11 +168,11 @@ hard_constraints:
 ```markdown
 ## 🔧 流水线交付总览: {pipeline_name}
 
-| Step | 技能 | 状态 | 关键产出 |
-| --- | --- | --- | --- |
+| Step  | 技能         | 状态  | 关键产出     |
+| ----- | ------------ | ----- | ------------ |
 | 1/{N} | /r-{skill_1} | ✅/❌ | {产物或摘要} |
 | 2/{N} | /r-{skill_2} | ✅/❌ | {产物或摘要} |
-| ... | ... | ... | ... |
+| ...   | ...          | ...   | ...          |
 
 - 总耗时技能: {N}
 - 成功: {M} | 失败: {K} | 跳过: {L}
