@@ -85,7 +85,7 @@ hard_constraints:
 配置内容：
 
 ```
-Ritsu Bundle v3.6 已激活。
+Ritsu Bundle v3.8 已激活。
 全局规则：~/.gemini/antigravity/skills/Ritsu/
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：
