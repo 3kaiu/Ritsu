@@ -38,6 +38,24 @@ hard_constraints:
 
 > 引用 `_shared/skill-common-steps.md` Step 1
 
+在确认重构目标后，必须执行一次全局影响分析（Impact Analysis），防止“顾头不顾腚”：
+
+- 调用 `ritsu_build_kg` 构建/刷新 `.ritsu/kg.json`
+- 若用户给的是文件级目标（如“重命名 src/a.ts”）：调用 `ritsu_query_kg({mode:"impact", target:"src/a.ts", depth:3})`
+- 若用户给的是符号级目标（如“重命名 class Foo”）：调用 `ritsu_query_kg({mode:"symbol", symbol:"Foo", depth:3})`
+
+输出格式：
+
+```
+## 🔎 Impact Analysis
+- 目标: {file/symbol}
+- 反向影响(Top N):
+  - {file1}
+  - {file2}
+- 风险: {为什么会挂}
+- 验证策略: {要跑哪些测试/怎么 spot-check}
+```
+
 `[Step 1 Complete]` 后确认重构目标：
 
 - **用户指定重构类型** → 直接执行

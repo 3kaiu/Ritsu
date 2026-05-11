@@ -223,6 +223,76 @@ tools:
         handoff_path: { type: string }
         cached: { type: boolean }
 
+  - name: ritsu_build_kg
+    description: 构建 Project Knowledge Graph（TS/JS）。抽取模块依赖（import/require）与 symbol 定义/引用关系，写入 .ritsu/kg.json，供影响分析使用。
+    call_template:
+      tool: ritsu_build_kg
+      params:
+        max_files: 2000
+      example:
+        max_files: 2000
+    input:
+      max_files:
+        type: number
+        required: false
+        description: "最多扫描文件数（默认 2000，上限 5000）"
+    output_schema:
+      type: object
+      required: [written, path, files_total, symbols_total, edges_total]
+      properties:
+        written: { type: boolean }
+        path: { type: string }
+        files_total: { type: integer }
+        symbols_total: { type: integer }
+        edges_total: { type: integer }
+        generated_at: { type: string }
+
+  - name: ritsu_query_kg
+    description: 查询 Project Knowledge Graph（影响分析）。支持 impact（反向依赖闭包）、deps（正向依赖闭包）、symbol（查符号的调用方）。
+    call_template:
+      tool: ritsu_query_kg
+      params:
+        mode: "impact"
+        target: "src/foo.ts"
+        depth: 3
+      example:
+        mode: "impact"
+        target: "src/foo.ts"
+        depth: 3
+    input:
+      mode:
+        type: enum
+        values: [impact, deps, symbol]
+        required: false
+        description: "查询模式（默认 impact）"
+      target:
+        type: string
+        required: false
+        description: "目标文件路径（相对项目根）"
+      depth:
+        type: number
+        required: false
+        description: "BFS 深度（默认 3，上限 10）"
+      symbol:
+        type: string
+        required: false
+        description: "当 mode=symbol 时必填"
+    output_schema:
+      type: object
+      properties:
+        mode: { type: string }
+        target: { type: string }
+        depth: { type: integer }
+        impacted: { type: array, items: { type: string } }
+        impacted_count: { type: integer }
+        deps: { type: array, items: { type: string } }
+        deps_count: { type: integer }
+        symbol: { type: string }
+        defined_in: { type: string }
+        callers: { type: array, items: { type: string } }
+        callers_count: { type: integer }
+        kg_generated_at: { type: string }
+
   - name: ritsu_write_artifact
     description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
     call_template:
