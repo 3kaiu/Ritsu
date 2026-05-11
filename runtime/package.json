@@ -1,12 +1,13 @@
 {
   "name": "ritsu-mcp-server",
   "version": "3.5.1",
-  "ritsu_protocol_version": "3.7.0",
+  "ritsu_protocol_version": "3.8.0",
   "description": "Ritsu MCP Server SDK — 结构化 I/O 原语，供 AI 技能调用",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "ritsu-mcp-server": "dist/index.js"
+    "ritsu-mcp-server": "dist/index.js",
+    "ritsu": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
