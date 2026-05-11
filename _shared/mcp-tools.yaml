@@ -30,17 +30,29 @@ tools:
     input:
       event_type:
         type: enum
-        values: [started, step_done, step_failed, approval_required, approval_granted, approval_denied, artifact_written, circuit_breaker, done, failed]
+        values:
+          [
+            started,
+            step_done,
+            step_failed,
+            approval_required,
+            approval_granted,
+            approval_denied,
+            artifact_written,
+            circuit_breaker,
+            done,
+            failed,
+          ]
         required: true
         description: "事件类型（对应 ctx-protocol.md status 枚举）"
       step:
         type: string
         required: false
-        description: "步骤进度，格式 N/M（step_done/step_failed/artifact_written 等时必填）"
+        description: "步骤进度，格式 N/M（started/step_done/step_failed/approval_*/artifact_written/circuit_breaker/done 时必填，由 Schema if-then 强制）"
       correlation_id:
         type: string
-        required: true
-        description: "任务链路关联 ID"
+        required: false
+        description: "任务链路关联 ID（不提供时自动生成）"
       skill:
         type: string
         required: false
@@ -102,14 +114,15 @@ tools:
           description: "回显写入的完整事件对象"
 
   - name: ritsu_read_ctx
-    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete（最后未完成任务）、last_completed（最后已完成任务）、recent_entries（最近 10 条）、pending_approvals（待审批事件）。支持 WASM 索引加速
+    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete（最后未完成任务）、last_completed（最后已完成任务）、recent_entries（最近 10 条）、pending_approvals（待审批事件）
     call_template:
       tool: ritsu_read_ctx
       params: {} # 无参数
     input: {}
     output_schema:
       type: object
-      required: [last_incomplete, last_completed, recent_entries, pending_approvals]
+      required:
+        [last_incomplete, last_completed, recent_entries, pending_approvals]
       properties:
         last_incomplete:
           type: object
@@ -220,18 +233,18 @@ tools:
           type: integer
 
   - name: ritsu_exec
-    description: 在项目根目录执行 shell 命令并返回结构化输出。内置安全边界（拦截危险命令）和输出截断。AI 应优先使用此工具而非自行构造 shell 命令，以获得统一的截断/超时/错误处理
+    description: 在项目根目录直接执行命令（不经 shell 解释）并返回结构化输出。只支持单命令执行，不支持管道/重定向/子shell。内置安全边界（白名单二进制 + 危险参数拦截 + shell 元字符阻断）和输出截断。需要管道时请多次调用
     call_template:
       tool: ritsu_exec
       params:
-        command: "{shell 命令}"
+        command: "{命令}"
       example:
         command: "git diff --name-only"
     input:
       command:
         type: string
         required: true
-        description: "要执行的 shell 命令"
+        description: "要执行的命令（单命令，不支持管道/重定向）"
       max_output_lines:
         type: integer
         required: false
@@ -240,7 +253,7 @@ tools:
         type: integer
         required: false
         description: "超时毫秒数（默认 30000）"
-    safety_boundary: "自动拦截 rm -rf / mkfs / dd / npm publish / git push --force 等危险命令"
+    safety_boundary: "三层防护：shell 元字符阻断（管道/重定向/子shell）+ 白名单二进制 + 危险参数/用法黑名单"
     output_schema:
       type: object
       required: [ok, output]
@@ -253,7 +266,7 @@ tools:
           description: "命令输出（截断后）"
 
   - name: ritsu_validate
-    description: 独立 Schema 校验工具。校验 JSON 数据是否符合指定 Schema。当前支持 ctx_event 类型。WASM 加速
+    description: 独立 Schema 校验工具。校验 JSON 数据是否符合指定 Schema。当前支持 ctx_event 类型
     call_template:
       tool: ritsu_validate
       params:

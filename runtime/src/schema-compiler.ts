@@ -16,16 +16,7 @@ interface CompiledTool {
   inputSchema: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
   callTemplate?: Record<string, unknown>;
-  commands?: string[];
-  commandTemplate?: string;
-  errorHandling?: Record<string, string>;
-  decision?: Record<string, string>;
-  fallback?: Record<string, string>;
-  steps?: string[];
   validation?: string;
-  concurrencyControl?: string;
-  maxOutputLines?: number;
-  truncation?: string;
 }
 
 interface YamlInputField {
@@ -101,16 +92,7 @@ export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
     // 保留非 MCP 协议字段供 handler 使用
     if (t.output_schema) tool.outputSchema = t.output_schema;
     if (t.call_template) tool.callTemplate = t.call_template;
-    if (t.commands) tool.commands = t.commands;
-    if (t.command_template) tool.commandTemplate = t.command_template;
-    if (t.error_handling) tool.errorHandling = t.error_handling;
-    if (t.decision) tool.decision = t.decision;
-    if (t.fallback) tool.fallback = t.fallback;
-    if (t.steps) tool.steps = t.steps;
     if (t.validation) tool.validation = t.validation;
-    if (t.concurrency_control) tool.concurrencyControl = t.concurrency_control;
-    if (t.max_output_lines) tool.maxOutputLines = t.max_output_lines;
-    if (t.truncation) tool.truncation = t.truncation;
 
     return tool;
   });

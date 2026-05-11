@@ -5,14 +5,14 @@
  * 架构：
  *   mcp-tools.yaml → schema-compiler.ts → MCP Tool definitions
  *   ctx-event-schema.json → ajv validator → 事件写入前校验
- *   各 tool handler → 实际执行（shell / fs / git）
+ *   各 tool handler → 实际执行（direct spawn / fs / git）
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { compileToolsFromYaml } from "./schema-compiler.js";
 import { registerHandlers } from "./handlers/index.js";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,6 +25,18 @@ const pkg = JSON.parse(
 const SERVER_VERSION: string = pkg.version;
 
 async function main() {
+  // 版本一致性校验 — package.json 版本必须与 ctx-event-schema.json 版本对齐
+  const schemaPath = resolve(__dirname, "../../_shared/ctx-event-schema.json");
+  if (existsSync(schemaPath)) {
+    const schemaContent = readFileSync(schemaPath, "utf-8");
+    const schemaVersionMatch = schemaContent.match(/v(3\.\d+\.\d+)/);
+    if (schemaVersionMatch && schemaVersionMatch[1] !== SERVER_VERSION) {
+      console.warn(
+        `[ritsu-mcp-server] ⚠️  version mismatch: package.json=${SERVER_VERSION} schema=${schemaVersionMatch[1]}`,
+      );
+    }
+  }
+
   const server = new McpServer({
     name: "ritsu-mcp-server",
     version: SERVER_VERSION,
@@ -57,11 +69,30 @@ main().catch((err) => {
   process.exit(1);
 });
 
-// 优雅关闭 — 清理残留锁文件
+// 优雅关闭 — 清理残留锁文件和临时文件
 function gracefulShutdown(signal: string) {
   console.error(`[ritsu-mcp-server] received ${signal}, shutting down...`);
-  // proper-lockfile 的锁文件会在 unlockSync 时自动删除
-  // 此处仅做日志，MCP SDK 会处理 transport 关闭
+
+  // 清理 .ritsu 目录中的残留锁文件和临时文件
+  const projectRoot = process.env.RITSU_PROJECT_ROOT ?? process.cwd();
+  const ritsuDir = resolve(projectRoot, ".ritsu");
+  if (existsSync(ritsuDir)) {
+    try {
+      for (const f of readdirSync(ritsuDir)) {
+        // proper-lockfile 残留锁
+        if (f.endsWith(".lock")) {
+          rmSync(resolve(ritsuDir, f), { force: true });
+        }
+        // 原子写入残留临时文件
+        if (f.startsWith(".tmp-")) {
+          rmSync(resolve(ritsuDir, f), { force: true });
+        }
+      }
+    } catch {
+      // 尽力清理，不阻塞关闭
+    }
+  }
+
   process.exit(0);
 }
 

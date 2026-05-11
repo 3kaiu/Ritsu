@@ -4,19 +4,75 @@ import {
   ALLOWED_BINARIES,
   DANGEROUS_ARGS,
   RESIDUAL_BLACKLIST,
+  SHELL_META_REJECT,
   MAX_BUFFER_MB_HARD_LIMIT,
   MAX_TIMEOUT_MS_HARD_LIMIT,
 } from "../shared.js";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 
+// ─── 命令解析器 ──────────────────────────────────────────────
+// 将命令字符串解析为 binary + args，支持引号和转义。
+// 不经过 shell 解释，从根本上消除命令注入风险。
+
+interface ParsedCommand {
+  binary: string;
+  args: string[];
+}
+
+function parseCommand(cmd: string): ParsedCommand | null {
+  const tokens: string[] = [];
+  let i = 0;
+  const len = cmd.length;
+
+  while (i < len) {
+    while (i < len && /\s/.test(cmd[i])) i++;
+    if (i >= len) break;
+
+    let token = "";
+
+    if (cmd[i] === '"') {
+      i++;
+      while (i < len && cmd[i] !== '"') {
+        if (cmd[i] === "\\" && i + 1 < len) {
+          i++;
+          token += cmd[i];
+        } else {
+          token += cmd[i];
+        }
+        i++;
+      }
+      if (i < len) i++;
+    } else if (cmd[i] === "'") {
+      i++;
+      while (i < len && cmd[i] !== "'") {
+        token += cmd[i];
+        i++;
+      }
+      if (i < len) i++;
+    } else {
+      while (i < len && !/\s/.test(cmd[i])) {
+        token += cmd[i];
+        i++;
+      }
+    }
+
+    if (token.length > 0) tokens.push(token);
+  }
+
+  if (tokens.length === 0) return null;
+  return { binary: tokens[0], args: tokens.slice(1) };
+}
+
+// ─── 直接执行模式 ────────────────────────────────────────────
+
 async function runCmd(
-  cmd: string,
+  parsed: ParsedCommand,
   maxLines = 200,
   timeoutMs = 30_000,
   maxBufferMb = 10,
 ): Promise<{ ok: boolean; output: string }> {
   return new Promise((resolve) => {
-    const child = spawn("sh", ["-c", cmd], {
+    const child = spawn(parsed.binary, parsed.args, {
       cwd: getProjectRoot(),
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -71,22 +127,28 @@ export async function ritsu_exec(
 
   if (!command) return errorResult("command is required");
 
-  // 安全边界：白名单 + 危险参数黑名单 + 残余黑名单
-  // 第一层：提取命令二进制名，只允许安全子集
   const trimmedCmd = command.trim();
 
-  // 提取命令链中所有二进制名（处理管道、&&、; 等分隔符）
-  const cmdParts = trimmedCmd.split(/\||&&|;|\|\||&/).map((s) => s.trim());
-  for (const part of cmdParts) {
-    // 去除前导环境变量赋值 (KEY=val cmd ...)
-    const stripped = part.replace(/^[A-Za-z_][A-Za-z0-9_]*=\S*\s*/, "").trim();
-    const binary = stripped.split(/\s+/)[0];
-    if (!binary) continue;
-    if (!ALLOWED_BINARIES.has(binary)) {
+  // 第零层：Shell 元字符拦截 — 拒绝管道/重定向/子shell/换行等
+  // ritsu_exec 只支持单命令直接执行，需要管道时请多次调用
+  for (const pattern of SHELL_META_REJECT) {
+    if (pattern.test(trimmedCmd)) {
       return errorResult(
-        `command blocked: '${binary}' is not in the allowed binaries list`,
+        `shell metacharacter blocked: ritsu_exec only supports single direct commands (no pipes/redirects/subshells). ` +
+          `Matched: ${pattern.source}. Chain multiple ritsu_exec calls instead.`,
       );
     }
+  }
+
+  // 解析命令为 binary + args（不经 shell 解释）
+  const parsed = parseCommand(trimmedCmd);
+  if (!parsed) return errorResult("empty command after parsing");
+
+  // 第一层：白名单校验 — 只允许安全二进制
+  if (!ALLOWED_BINARIES.has(parsed.binary)) {
+    return errorResult(
+      `command blocked: '${parsed.binary}' is not in the allowed binaries list`,
+    );
   }
 
   // 第二层：危险参数黑名单 — 拦截白名单二进制的代码注入/数据外泄用法
@@ -107,6 +169,6 @@ export async function ritsu_exec(
     }
   }
 
-  const r = await runCmd(command, maxLines, timeoutMs, maxBufferMb);
+  const r = await runCmd(parsed, maxLines, timeoutMs, maxBufferMb);
   return textResult(JSON.stringify({ ok: r.ok, output: r.output }));
 }

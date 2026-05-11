@@ -1,6 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { validateEvent as validateEventJs } from "../event-validator.js";
-import { validateEventWasm } from "../wasm-bridge.js";
+import { validateEvent } from "../event-validator.js";
 import { textResult, errorResult } from "./_utils.js";
 
 export async function ritsu_validate(
@@ -19,9 +18,7 @@ export async function ritsu_validate(
       return errorResult(`invalid JSON: ${e.message}`);
     }
 
-    const wasmResult = await validateEventWasm(data);
-    const validation = wasmResult ?? validateEventJs(data);
-
+    const validation = validateEvent(data);
     return textResult(JSON.stringify(validation));
   }
 

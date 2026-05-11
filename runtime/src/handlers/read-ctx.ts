@@ -1,60 +1,90 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { existsSync } from "node:fs";
 import {
   readRecentEntries,
   readLastCompleted,
   readLastIncomplete,
-} from "../ctx-store.js";
-import {
-  queryLastIncompleteWasm,
-  queryLastCompletedWasm,
-  queryPendingApprovalsWasm,
-  queryRecentWasm,
-} from "../wasm-bridge.js";
-import { getProjectRoot, textResult } from "./_utils.js";
-import { ensureWasmIndex } from "./emit-event.js";
+  readAllEntries,
+} from "../ctx-reader.js";
+import { getCtxPath } from "../ctx-path.js";
+import { getProjectRoot, textResult, warnResult } from "./_utils.js";
+
+const SUMMARY_THRESHOLD = 50;
+
+function computeSummary(
+  entries: Record<string, unknown>[],
+): Record<string, unknown> | null {
+  if (entries.length === 0) return null;
+
+  const skillsUsed: Record<string, number> = {};
+  const domains: Record<string, number> = {};
+  let tasksTotal = 0;
+  let tasksDone = 0;
+  let tasksFailed = 0;
+
+  // Track unique correlation_ids for task counting
+  const seenCids = new Set<string>();
+
+  for (const e of entries) {
+    const skill = String(e.skill ?? "unknown");
+    const domain = String(e.domain ?? "unknown");
+    skillsUsed[skill] = (skillsUsed[skill] ?? 0) + 1;
+    domains[domain] = (domains[domain] ?? 0) + 1;
+
+    const cid = String(e.correlation_id ?? "");
+    if (cid && !seenCids.has(cid)) {
+      seenCids.add(cid);
+      tasksTotal++;
+      if (e.status === "done") tasksDone++;
+      if (e.status === "failed") tasksFailed++;
+    }
+  }
+
+  const month = new Date().toISOString().slice(0, 7);
+  return {
+    month,
+    tasks_total: tasksTotal,
+    tasks_done: tasksDone,
+    tasks_failed: tasksFailed,
+    skills_used: skillsUsed,
+    domains,
+  };
+}
 
 export async function ritsu_read_ctx(): Promise<CallToolResult> {
   const root = getProjectRoot();
+  const ctxPath = getCtxPath(root);
 
-  // 首次查询时构建 WASM 索引
-  await ensureWasmIndex(root);
+  const data: Record<string, unknown> = {
+    last_incomplete: null,
+    last_completed: null,
+    recent_entries: [],
+    pending_approvals: [],
+  };
 
-  // WASM 加速路径
-  const wasmIncomplete = await queryLastIncompleteWasm();
-  const wasmCompleted = await queryLastCompletedWasm();
-  const wasmPending = await queryPendingApprovalsWasm();
-  const wasmRecent = await queryRecentWasm(10);
+  if (!existsSync(ctxPath)) {
+    return warnResult(data, "ctx file does not exist yet — no events recorded");
+  }
 
-  if (
-    wasmIncomplete !== null &&
-    wasmCompleted !== null &&
-    wasmPending !== null &&
-    wasmRecent !== null
-  ) {
-    return textResult(
-      JSON.stringify({
-        last_incomplete: wasmIncomplete,
-        last_completed: wasmCompleted,
-        recent_entries: wasmRecent,
-        pending_approvals: wasmPending,
-      }),
+  data.last_incomplete = readLastIncomplete(root);
+  data.last_completed = readLastCompleted(root);
+  data.recent_entries = readRecentEntries(root, 10);
+  data.pending_approvals = (
+    data.recent_entries as Record<string, unknown>[]
+  ).filter((e) => e.status === "approval_required");
+
+  if ((data.recent_entries as Record<string, unknown>[]).length === 0) {
+    return warnResult(
+      data,
+      "ctx file is empty — no events recorded this month",
     );
   }
 
-  // 纯 JS 回退
-  const lastIncomplete = readLastIncomplete(root);
-  const lastCompleted = readLastCompleted(root);
-  const recentEntries = readRecentEntries(root, 10);
-  const pendingApprovals = recentEntries.filter(
-    (e) => e.status === "approval_required",
-  );
+  // 月度摘要 — 当记录超过阈值时自动计算并附加
+  const allEntries = readAllEntries(root);
+  if (allEntries.length >= SUMMARY_THRESHOLD) {
+    data.summary = computeSummary(allEntries);
+  }
 
-  return textResult(
-    JSON.stringify({
-      last_incomplete: lastIncomplete,
-      last_completed: lastCompleted,
-      recent_entries: recentEntries,
-      pending_approvals: pendingApprovals,
-    }),
-  );
+  return textResult(JSON.stringify(data));
 }

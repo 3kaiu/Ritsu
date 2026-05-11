@@ -4,8 +4,11 @@ import {
   mkdirSync,
   statSync,
   writeFileSync,
+  renameSync,
+  rmSync,
 } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { ARTIFACT_VALID_TYPES, ARTIFACT_PREFIX_MAP } from "../shared.js";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 
@@ -75,14 +78,33 @@ export async function ritsu_write_artifact(
     }
   }
 
-  writeFileSync(mdPath, content, "utf-8");
+  // 原子写入 — write-to-temp + rename，防止崩溃时产生撕裂文件
+  const tmpPath = join(dir, `.tmp-${randomUUID()}`);
+  try {
+    writeFileSync(tmpPath, content, "utf-8");
+    renameSync(tmpPath, mdPath);
+  } catch (e: any) {
+    try {
+      rmSync(tmpPath, { force: true });
+    } catch {}
+    return errorResult(`atomic write failed: ${e.message}`);
+  }
   const sizeBytes = statSync(mdPath).size;
 
   let htmlPath: string | null = null;
   if (htmlContent && (type === "diagnosis" || type === "review-stamp")) {
     const htmlFilename = filename.replace(/\.(md|jsonl)$/, ".html");
     htmlPath = resolve(dir, htmlFilename);
-    writeFileSync(htmlPath, htmlContent, "utf-8");
+    const htmlTmp = join(dir, `.tmp-${randomUUID()}`);
+    try {
+      writeFileSync(htmlTmp, htmlContent, "utf-8");
+      renameSync(htmlTmp, htmlPath);
+    } catch (e: any) {
+      try {
+        rmSync(htmlTmp, { force: true });
+      } catch {}
+      return errorResult(`atomic html write failed: ${e.message}`);
+    }
   }
 
   return textResult(

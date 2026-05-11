@@ -1,56 +1,13 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import {
-  appendEvent,
-  syncLineCountFromCtxFile,
-  generateCorrelationId,
-} from "../ctx-store.js";
-import { validateEvent as validateEventJs } from "../event-validator.js";
-import { validateEventWasm, appendToIndexWasm } from "../wasm-bridge.js";
+import { appendEvent } from "../ctx-writer.js";
+import { validateEvent } from "../event-validator.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
-
-// WASM 索引是否已初始化（进程级单例）
-let _wasmIndexBuilt = false;
-let _wasmIndexMonth = "";
-
-// 简易异步互斥锁 — 防止并发 ensureWasmIndex 导致重复构建
-let _indexMutex: Promise<void> = Promise.resolve();
-
-export async function ensureWasmIndex(root: string): Promise<void> {
-  const { getCtxFilePath, resetLineCount } = await import("../ctx-store.js");
-  const { buildIndexFromCtxFile } = await import("../wasm-bridge.js");
-
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  if (_wasmIndexBuilt && _wasmIndexMonth === currentMonth) return;
-
-  let release: () => void = () => {};
-  _indexMutex = _indexMutex.then(
-    () =>
-      new Promise<void>((r) => {
-        release = r;
-      }),
-  );
-  await _indexMutex;
-
-  try {
-    if (_wasmIndexBuilt && _wasmIndexMonth === currentMonth) return;
-
-    const ctxPath = getCtxFilePath(root);
-    const count = await buildIndexFromCtxFile(ctxPath);
-    if (count !== null) {
-      resetLineCount(count);
-      _wasmIndexBuilt = true;
-      _wasmIndexMonth = currentMonth;
-    }
-  } finally {
-    release();
-  }
-}
 
 export async function ritsu_emit_event(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
   const eventType = String(params.event_type ?? "");
-  let correlationId = params.correlation_id
+  const correlationId = params.correlation_id
     ? String(params.correlation_id)
     : "";
   const step = params.step ? String(params.step) : undefined;
@@ -59,31 +16,18 @@ export async function ritsu_emit_event(
 
   const root = getProjectRoot();
 
-  // correlation_id: 若调用方提供则使用，否则在文件锁内原子生成（generateCorrelationId 已加锁）
-  if (!correlationId) {
-    correlationId = generateCorrelationId(root);
-  }
-
-  // 构造事件对象 — step/artifact/progress 仅在有值时设置，避免 null 违反 Schema pattern
+  // 构造事件对象 — correlation_id 若未提供，将在 appendEvent 的锁内原子生成
   const event: Record<string, unknown> = {
     ts: ts(),
-    correlation_id: correlationId,
+    ...(correlationId ? { correlation_id: correlationId } : {}),
     skill: String(params.skill ?? "unknown"),
     domain: String(params.domain ?? "unknown"),
     status: eventType,
   };
 
   if (step) event.step = step;
-  if (params.artifact !== undefined) {
-    event.artifact = params.artifact;
-  } else {
-    event.artifact = null;
-  }
-  if (params.progress !== undefined) {
-    event.progress = params.progress;
-  } else {
-    event.progress = null;
-  }
+  if (params.artifact !== undefined) event.artifact = params.artifact;
+  if (params.progress !== undefined) event.progress = params.progress;
   if (params.error) event.error = String(params.error);
   if (params.approval) event.approval = params.approval;
   if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
@@ -92,24 +36,26 @@ export async function ritsu_emit_event(
   if (params.transition) event.transition = params.transition;
   if (params.duration_ms) event.duration_ms = Number(params.duration_ms);
 
-  // Schema 校验 — WASM 优先，JS 回退
-  const wasmResult = await validateEventWasm(event);
-  const validation = wasmResult ?? validateEventJs(event);
-  if (!validation.valid) {
-    return errorResult(
-      `event validation failed: ${validation.errors?.join(", ")}`,
-    );
+  // Schema 校验（不含 correlation_id 时跳过，因为锁内才生成）
+  if (correlationId) {
+    const validation = validateEvent(event);
+    if (!validation.valid) {
+      return errorResult(
+        `event validation failed: ${validation.errors?.join(", ")}`,
+      );
+    }
   }
 
-  const result = appendEvent(root, event);
+  // 原子写入 — correlation_id 生成和追加在同一个异步锁内完成
+  const result = await appendEvent(root, event);
 
-  // WASM 索引增量更新 — 失败时从文件重算行数，保持 JS/WASM 一致
-  try {
-    await appendToIndexWasm(JSON.stringify(event));
-  } catch (e: any) {
-    console.warn(`[ritsu] WASM index append failed: ${e.message}`);
-    _wasmIndexBuilt = false;
-    syncLineCountFromCtxFile(root);
+  // 写入后校验完整事件（含锁内生成的 correlation_id）
+  const fullEvent = { ...event, correlation_id: result.correlation_id };
+  const postValidation = validateEvent(fullEvent);
+  if (!postValidation.valid) {
+    return errorResult(
+      `event written but validation failed: ${postValidation.errors?.join(", ")}`,
+    );
   }
 
   return textResult(
@@ -117,7 +63,7 @@ export async function ritsu_emit_event(
       written: true,
       line_count: result.lineCount,
       ts: event.ts,
-      correlation_id: event.correlation_id,
+      correlation_id: result.correlation_id,
     }),
   );
 }

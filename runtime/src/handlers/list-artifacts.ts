@@ -2,7 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { ARTIFACT_PREFIX_MAP } from "../shared.js";
-import { getProjectRoot, textResult } from "./_utils.js";
+import { getProjectRoot, textResult, warnResult } from "./_utils.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -14,7 +14,10 @@ export async function ritsu_list_artifacts(
   const dir = resolve(root, RITSU_DIR);
 
   if (!existsSync(dir))
-    return textResult(JSON.stringify({ files: [], total_count: 0 }));
+    return warnResult(
+      { files: [], total_count: 0 },
+      ".ritsu directory does not exist yet",
+    );
 
   const prefix = type === "all" ? "" : (ARTIFACT_PREFIX_MAP[type] ?? "");
   const entries = readdirSync(dir)

@@ -57,11 +57,11 @@
       "description": "格式 {current}/{total}，如 2/5"
     },
     "artifact": {
-      "type": ["string", "null"],
-      "description": "产物文件路径，无则为 null"
+      "type": "string",
+      "description": "产物文件路径（artifact_written 时必填）"
     },
     "progress": {
-      "type": ["string", "null"],
+      "type": "string",
       "description": "执行进度标记（如 dev:chunk2/5），仅 started 状态需要"
     },
     "duration_ms": {

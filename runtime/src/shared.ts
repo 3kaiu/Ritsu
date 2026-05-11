@@ -14,10 +14,6 @@ export function getSharedDir(): string {
   return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
 }
 
-export function getPkgDir(): string {
-  return process.env.RITSU_PKG_DIR ?? resolve(__dirname, "../pkg");
-}
-
 // ─── Artifact 常量 ──────────────────────────────────────────
 
 export const ARTIFACT_VALID_TYPES = [
@@ -98,6 +94,22 @@ export const ALLOWED_BINARIES = new Set([
   "gh",
 ]);
 
+// Shell 元字符拦截 — ritsu_exec 只支持单命令直接执行，拒绝所有 shell 特性
+export const SHELL_META_REJECT: RegExp[] = [
+  /\$\(/, // Command substitution $(...)
+  /`/, // Backtick substitution
+  /\n/, // Newline (multi-command injection)
+  /\r/, // Carriage return
+  /\|/, // Pipe
+  /&&/, // AND operator
+  /\|\|/, // OR operator
+  /;/, // Command separator
+  />>?/, // Output redirect
+  /<</, // Here-doc
+  /<(?!\w)/, // Input redirect (but allow < in args like -e "x < y")
+  /\(\)/, // Subshell
+];
+
 // 危险参数黑名单 — 拦截白名单二进制的代码注入/数据外泄用法
 export const DANGEROUS_ARGS: RegExp[] = [
   /\bnode\s+(-e|--eval|\s+-i|--interactive)\b/, // node -e "任意代码"
@@ -107,7 +119,6 @@ export const DANGEROUS_ARGS: RegExp[] = [
   /\bcurl\s+[^&]*--data-binary\s+@/, // curl --data-binary @文件
   /\bwget\s+[^&]*--post-file\s+/, // wget --post-file 数据外泄
   /\bgit\s+checkout\s+--\s+\.\s*$/, // git checkout -- . 丢弃所有工作区变更
-  /\bnpm\s+run\s+.*[;&|]/, // npm run 脚本名后接管道/链式命令
 ];
 
 export const RESIDUAL_BLACKLIST: RegExp[] = [
