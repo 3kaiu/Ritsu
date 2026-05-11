@@ -4,7 +4,6 @@ version: "3.8.0"
 description: "Ritsu 部署发布管道。预发布检查 → 部署执行 → 冒烟验证 → 回滚方案。"
 when_to_use: "/r-deploy, 部署, 发布, 上线, deploy, release, 推到生产"
 complexity_grading: true
-context_window_guidance: 6000
 total_steps: 5
 required_sections: [coding_disciplines]
 hard_constraints:

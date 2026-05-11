@@ -3,7 +3,6 @@ name: init
 version: "3.8.0"
 description: "Ritsu 初始化协议。扫描项目架构、提取技术栈与规范，生成 AGENTS.md。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
-context_window_guidance: 4000
 total_steps: 7
 hard_constraints:
   - id: HC-1
@@ -66,7 +65,7 @@ hard_constraints:
   ```markdown
   <!-- Ritsu Configuration Block -->
 
-  ritsu-version: 3.6.0
+  ritsu-version: 3.8.0
   domain: {推断出的领域值}
 
   <!-- End Ritsu Block -->

@@ -3,7 +3,6 @@ name: route
 version: "3.8.0"
 description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能或流水线，建立全局会话上下文。"
 when_to_use: "/r-route, 我不知道该用哪个命令, 帮我决定, 从哪开始"
-context_window_guidance: 3000
 total_steps: 5
 hard_constraints:
   - id: HC-1

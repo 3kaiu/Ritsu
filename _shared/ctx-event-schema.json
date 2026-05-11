@@ -67,7 +67,6 @@
             "diagnosis",
             "review-stamp",
             "optimize-report",
-            "decision-log",
             "ctx"
           ],
           "description": "产物类型"
@@ -82,18 +81,6 @@
         }
       },
       "required": ["type", "size_bytes", "summary"]
-    },
-    "summary": {
-      "type": "object",
-      "description": "月度摘要数据（仅 _summary 事件）",
-      "properties": {
-        "month": { "type": "string" },
-        "tasks_total": { "type": "integer" },
-        "tasks_done": { "type": "integer" },
-        "tasks_failed": { "type": "integer" },
-        "skills_used": { "type": "object" },
-        "domains": { "type": "object" }
-      }
     }
   },
   "allOf": [

@@ -4,7 +4,6 @@ version: "3.8.0"
 description: "Ritsu 领域自适应需求评审与架构设计。强制拆分为评审阶段和设计阶段，输出防腐 Handoff 文件。"
 when_to_use: "/r-think, 设计方案, 怎么做, 要不要做, 分析一下, 看看这个 PRD"
 complexity_grading: true
-context_window_guidance: 10000
 total_steps: 7
 required_sections: [hypothesis_directions, coding_disciplines]
 hard_constraints:

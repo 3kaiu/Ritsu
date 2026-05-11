@@ -18,11 +18,6 @@ schemas:
       - field: domain
         type: enum
         values: [frontend, backend, fullstack, infra, data]
-      - field: domain_extensions
-        type: object
-        description: "项目级领域扩展，允许声明混合技术栈和领域权重"
-        optional: true
-        example: "{ frontend: 70, infra: 30 }"
       - field: 技术栈底座.语言/运行时
         type: string
         placeholder: "待补充"
@@ -38,45 +33,6 @@ schemas:
         prefix: "<!-- Ritsu Configuration Block -->"
         fields: [ritsu-version, domain]
         suffix: "<!-- End Ritsu Block -->"
-
-  decision_log:
-    id: 5
-    path: ".ritsu/adr-{NNNN}-{kebab-slug}.md"
-    format: markdown
-    consumer: human_and_ai
-    description: "架构决策记录 (Architecture Decision Record)，跨会话知识沉淀"
-    required_sections:
-      - title: "决策"
-        id: decision
-        fields:
-          - name: title
-            format: "一句话决策描述"
-          - name: status
-            type: enum
-            values: [proposed, accepted, deprecated, superseded]
-          - name: date
-            format: "YYYY-MM-DD"
-      - title: "背景"
-        id: context
-        fields:
-          - name: context
-            format: "为什么需要做这个决策"
-      - title: "方案对比"
-        id: alternatives
-        type: table
-        columns: [方案, 优势, 劣势]
-      - title: "决策理由"
-        id: rationale
-        fields:
-          - name: rationale
-            format: "为什么选择当前方案"
-      - title: "影响"
-        id: consequences
-        fields:
-          - name: positive
-          - name: negative
-          - name: risks
-    placeholder_forbidden: true
 
   handoff:
     id: 1

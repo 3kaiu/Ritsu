@@ -154,8 +154,7 @@ tools:
     input:
       type:
         type: enum
-        values:
-          [handoff, diagnosis, review-stamp, optimize-report, decision-log]
+        values: [handoff, diagnosis, review-stamp, optimize-report]
         required: true
         description: "产物类型"
       filename:

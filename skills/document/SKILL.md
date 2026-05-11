@@ -4,7 +4,6 @@ version: "3.8.0"
 description: "Ritsu 文档维护技能。API 文档生成、README 更新、CHANGELOG 维护、JSDoc/TSDoc 补充。"
 when_to_use: "/r-doc, 写文档, 更新文档, API文档, CHANGELOG, README, JSDoc"
 complexity_grading: true
-context_window_guidance: 4000
 total_steps: 4
 required_sections: [coding_disciplines]
 hard_constraints:
