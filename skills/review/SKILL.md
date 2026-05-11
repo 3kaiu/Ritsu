@@ -3,9 +3,7 @@ name: review
 version: "3.8.0"
 description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
-complexity_grading: true
 total_steps: 5
-required_sections: [attack_vectors, coding_disciplines]
 hard_constraints:
   - id: HC-1
     rule: "Hard Stop 命中后立即写入 FAIL Stamp 并停止，不继续执行步骤 4"

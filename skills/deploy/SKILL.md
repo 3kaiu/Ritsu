@@ -3,9 +3,7 @@ name: deploy
 version: "3.8.0"
 description: "Ritsu 部署发布管道。预发布检查 → 部署执行 → 冒烟验证 → 回滚方案。"
 when_to_use: "/r-deploy, 部署, 发布, 上线, deploy, release, 推到生产"
-complexity_grading: true
 total_steps: 5
-required_sections: [coding_disciplines]
 hard_constraints:
   - id: HC-1
     rule: "部署前必须确认 review PASS 或用户明确跳过审查（风险已知悉）"

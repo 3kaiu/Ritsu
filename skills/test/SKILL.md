@@ -3,9 +3,7 @@ name: test
 version: "3.8.0"
 description: "Ritsu 测试工程技能。测试策略制定 → 用例编写 → 执行验证 → 覆盖率分析。"
 when_to_use: "/r-test, 写测试, 补测试, 测试覆盖, test, 单测, 集成测试"
-complexity_grading: true
 total_steps: 5
-required_sections: [coding_disciplines, attack_vectors]
 hard_constraints:
   - id: HC-1
     rule: "ref AP-4: 测试代码不得修改被测业务代码"

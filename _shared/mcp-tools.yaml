@@ -246,10 +246,6 @@ tools:
           type: string
           description: "命令输出（截断后）"
 
-  # ritsu_validate 已移除（v3.7.0）
-  # 原因：ritsu_emit_event 写入时已自动校验，无 skill 在流程中调用独立校验。
-  # 如需调试，可直接读取 _shared/ctx-event-schema.json 手动校验。
-
   - name: ritsu_get_changed_files
     description: 获取 Git 工作区和暂存区的变更文件列表，自动推断领域。返回每个变更文件的路径、状态、扩展名，以及基于文件后缀的领域推断结果。替代 ritsu_exec("git diff --name-only") 的裸命令调用
     call_template:

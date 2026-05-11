@@ -3,9 +3,7 @@ name: dev
 version: "3.8.0"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
-complexity_grading: true
 total_steps: 7
-required_sections: [coding_disciplines, attack_vectors]
 hard_constraints:
   - id: HC-1
     rule: "外部标识符引用前必须调用 ritsu_exec 执行 grep 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐（≈AP-2）"

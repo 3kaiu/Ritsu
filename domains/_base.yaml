@@ -1,13 +1,5 @@
 # Domain: Base (通用基线) v3.8.0
-# 所有领域配置隐式继承本基线。领域文件中不得重复声明以下内容。
-
-domain_interface_contract:
-  order:
-    - hypothesis_directions
-    - coding_disciplines
-    - attack_vectors
-    - pr_requirements
-  rule: "领域文件仅声明增量内容，与 _base.yaml 重复的禁止出现"
+# 所有领域配置隐式继承本基线。领域文件仅声明增量内容，与 _base.yaml 重复的禁止出现。
 
 hypothesis_directions:
   - id: B-H1
