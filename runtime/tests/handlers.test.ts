@@ -173,12 +173,16 @@ describe("validateEvent (JS ajv)", () => {
 describe("semantic index handlers integration", () => {
   let indexBuild: (params: Record<string, unknown>) => Promise<any>;
   let semanticSearch: (params: Record<string, unknown>) => Promise<any>;
+  let semanticGraphRerank: (params: Record<string, unknown>) => Promise<any>;
 
   beforeAll(async () => {
     indexBuild = (await import("../src/handlers/semantic-index-build.js"))
       .ritsu_semantic_index_build;
     semanticSearch = (await import("../src/handlers/semantic-search.js"))
       .ritsu_semantic_search;
+    semanticGraphRerank = (
+      await import("../src/handlers/semantic-graph-rerank.js")
+    ).ritsu_semantic_graph_rerank;
   });
 
   it("should build index and search (hash backend)", async () => {
@@ -219,6 +223,47 @@ describe("semantic index handlers integration", () => {
     expect(Array.isArray(sd.matches)).toBe(true);
     expect(sd.matches.length).toBeGreaterThan(0);
     expect(typeof sd.matches[0].heading).toBe("string");
+
+    delete process.env.RITSU_PROJECT_ROOT;
+    delete process.env.RITSU_EMBEDDINGS_BACKEND;
+  });
+
+  it("should rerank with KG signal when kg.json exists (hash backend)", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    process.env.RITSU_EMBEDDINGS_BACKEND = "hash";
+
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "kg.json"),
+      JSON.stringify({
+        version: "0.1",
+        generated_at: new Date().toISOString(),
+        root: TEST_ROOT,
+        files: ["src/app.ts"],
+        edges: [{ from: "src/app.ts", to: "src/config.ts", type: "imports" }],
+      }),
+      "utf-8",
+    );
+
+    await indexBuild({ chunk_size: 200, chunk_overlap: 20, max_files: 50 });
+
+    const r = await semanticGraphRerank({
+      query: "cache poisoned",
+      top_k: 3,
+      types: ["diagnosis"],
+      focus_paths: ["src/app.ts"],
+      semantic_weight: 0.7,
+      kg_weight: 0.3,
+      kg_depth: 4,
+    });
+
+    expect(r.isError).toBeFalsy();
+    const rd = JSON.parse(r.content[0].text);
+    expect(rd.ok).toBe(true);
+    expect(Array.isArray(rd.matches)).toBe(true);
+    if (rd.matches.length > 0) {
+      expect(typeof rd.matches[0].semantic_score).toBe("number");
+      expect(typeof rd.matches[0].kg_score).toBe("number");
+    }
 
     delete process.env.RITSU_PROJECT_ROOT;
     delete process.env.RITSU_EMBEDDINGS_BACKEND;

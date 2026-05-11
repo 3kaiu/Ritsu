@@ -30,6 +30,7 @@ import { ritsu_ts_check } from "./ts-check.js";
 import { ritsu_ts_symbol_query } from "./ts-symbol-query.js";
 import { ritsu_semantic_index_build } from "./semantic-index-build.js";
 import { ritsu_semantic_search } from "./semantic-search.js";
+import { ritsu_semantic_graph_rerank } from "./semantic-graph-rerank.js";
 import { ritsu_write_artifact } from "./write-artifact.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
@@ -57,6 +58,7 @@ export const registerHandlers: Record<
   ritsu_ts_symbol_query,
   ritsu_semantic_index_build,
   ritsu_semantic_search,
+  ritsu_semantic_graph_rerank,
   ritsu_write_artifact,
   ritsu_list_artifacts,
   ritsu_exec,

@@ -657,6 +657,97 @@ tools:
               heading: { type: string }
               snippet: { type: string }
 
+  - name: ritsu_semantic_graph_rerank
+    description: Vectorized Graph RAG（MVP）：在语义索引的候选上叠加 KG 相关性重排。语义相似度为主，KG 关联（基于 .ritsu/kg.json 的最短链路深度）为辅，用于把“相似”且“与当前关注文件/模块相关”的历史记录排到更前。
+    call_template:
+      tool: ritsu_semantic_graph_rerank
+      params:
+        query: "{natural_language_query}"
+        top_k: 5
+        types: [diagnosis, review-stamp]
+        focus_paths: ["{可选: 当前错误涉及的文件路径}"]
+        semantic_weight: 0.7
+        kg_weight: 0.3
+        kg_depth: 4
+      example:
+        query: "CI 与本地不一致，怀疑缓存污染"
+        top_k: 5
+        types: [diagnosis, review-stamp]
+        focus_paths: ["src/app/app.tsx"]
+        semantic_weight: 0.7
+        kg_weight: 0.3
+        kg_depth: 4
+    input:
+      query:
+        type: string
+        required: true
+        description: "自然语言查询（必填）"
+      top_k:
+        type: integer
+        required: false
+        description: "返回匹配条数（默认 5，上限 50）"
+      types:
+        type: list
+        required: false
+        description: "产物类型过滤（handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+      focus_paths:
+        type: list
+        required: false
+        description: "当前关注的文件路径（相对项目根）。用于 KG 相关性计算（可为空）"
+      semantic_weight:
+        type: number
+        required: false
+        description: "语义相似度权重（默认 0.7）"
+      kg_weight:
+        type: number
+        required: false
+        description: "KG 相关性权重（默认 0.3）"
+      kg_depth:
+        type: integer
+        required: false
+        description: "KG BFS 最大深度（默认 4，上限 10）"
+      chunk_size:
+        type: integer
+        required: false
+        description: "用于生成 snippet 的分块大小（默认 1200）"
+      chunk_overlap:
+        type: integer
+        required: false
+        description: "用于生成 snippet 的分块重叠（默认 200）"
+    output_schema:
+      type: object
+      required: [ok, query, matches]
+      properties:
+        ok: { type: boolean }
+        query: { type: string }
+        top_k: { type: integer }
+        focus_paths:
+          type: array
+          items: { type: string }
+        index_path: { type: string }
+        kg_path: { type: string }
+        embedder_model: { type: string }
+        semantic_weight: { type: number }
+        kg_weight: { type: number }
+        kg_depth: { type: integer }
+        total_index_entries: { type: integer }
+        matches:
+          type: array
+          items:
+            type: object
+            properties:
+              score: { type: number }
+              semantic_score: { type: number }
+              kg_score: { type: number }
+              path: { type: string }
+              artifact_type: { type: string }
+              chunk_index: { type: integer }
+              heading: { type: string }
+              snippet: { type: string }
+              kg_best_path:
+                type: array
+                items: { type: string }
+
   - name: ritsu_write_artifact
     description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
     call_template:
