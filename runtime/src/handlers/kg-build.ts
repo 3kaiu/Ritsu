@@ -29,7 +29,6 @@ type Kg = {
 };
 
 type TsPathMapping = {
-  pattern: string;
   prefix: string;
   suffix: string;
   targets: string[];
@@ -116,7 +115,7 @@ function readTsImportResolver(root: string): TsImportResolver | null {
       ) as string[];
       if (targets.length === 0) continue;
 
-      mappings.push({ pattern, prefix, suffix, targets });
+      mappings.push({ prefix, suffix, targets });
     }
 
     return { baseUrlAbs, mappings };

@@ -1,6 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { spawn } from "node:child_process";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
+import { runGit } from "./_git-utils.js";
 
 interface DiffFile {
   path: string;
@@ -13,25 +13,6 @@ interface NewIdentifier {
   name: string;
   file: string;
   line: number;
-}
-
-function runGit(args: string[], cwd: string): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolve) => {
-    const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    const maxBytes = 5 * 1024 * 1024;
-    child.stdout.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBytes) stdout += chunk.toString("utf-8");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBytes) stderr += chunk.toString("utf-8");
-    });
-    child.on("close", (code) => {
-      resolve({ ok: code === 0, output: (code === 0 ? stdout : stderr || stdout).trim() });
-    });
-    child.on("error", (err) => resolve({ ok: false, output: err.message }));
-  });
 }
 
 function parseStat(statOutput: string): DiffFile[] {
@@ -86,9 +67,7 @@ export async function ritsu_get_diff(
   const cached = params.cached === true;
   const maxLines = Number(params.max_output_lines ?? 500);
 
-  const diffArgs = cached
-    ? ["diff", "--stat", "--cached"]
-    : ["diff", "--stat"];
+  const diffArgs = cached ? ["diff", "--stat", "--cached"] : ["diff", "--stat"];
   const statR = await runGit(diffArgs, root);
   if (!statR.ok) return errorResult(`git diff --stat failed: ${statR.output}`);
 
@@ -104,8 +83,9 @@ export async function ritsu_get_diff(
 
   const lines = patchR.output.split("\n");
   const truncated = lines.length > maxLines;
-  const patch =
-    (truncated ? lines.slice(0, maxLines).join("\n") + "\n⚠️ diff truncated" : patchR.output);
+  const patch = truncated
+    ? lines.slice(0, maxLines).join("\n") + "\n⚠️ diff truncated"
+    : patchR.output;
 
   return textResult(
     JSON.stringify({
