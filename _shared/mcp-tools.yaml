@@ -596,6 +596,7 @@ tools:
         ok: { type: boolean }
         index_path: { type: string }
         embedder_model: { type: string }
+        generated_at: { type: string }
         files_scanned: { type: integer }
         entries_total: { type: integer }
         entries_added: { type: integer }

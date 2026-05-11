@@ -34,6 +34,7 @@ type IndexEntry = {
 
 type SemanticIndexFile = {
   version: 1;
+  generated_at: string;
   embedder_model: string;
   dim: number;
   entries: IndexEntry[];
@@ -279,9 +280,11 @@ export async function ritsu_semantic_index_build(
 
   const mergedEntries = [...reused, ...newEntries];
   const dim = mergedEntries.length > 0 ? mergedEntries[0].embedding.length : 0;
+  const generatedAt = nowIso();
 
   const out: SemanticIndexFile = {
     version: 1,
+    generated_at: generatedAt,
     embedder_model: embedder.model_id,
     dim,
     entries: mergedEntries,
@@ -295,6 +298,7 @@ export async function ritsu_semantic_index_build(
       ok: true,
       index_path: indexPath,
       embedder_model: embedder.model_id,
+      generated_at: generatedAt,
       files_scanned: files.length,
       entries_total: mergedEntries.length,
       entries_added: newEntries.length,

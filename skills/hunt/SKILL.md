@@ -43,7 +43,7 @@ hard_constraints:
 
 在进入证据抓取前，执行一次 **历史相似案例召回（长期工程记忆）**：
 
-1. 若 `.ritsu/semantic-index.json` 尚不存在或内容明显过旧，先调用一次增量构建：
+1. 每次进入“历史相似案例召回”都先调用一次增量构建（工具会按 content_hash 复用旧条目，成本可控）：
    - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
 2. 若 `.ritsu/kg.json` 存在（或你已知当前项目依赖图对定位很关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
    - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）

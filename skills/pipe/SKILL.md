@@ -86,7 +86,7 @@ hard_constraints:
 - 立即停止继续执行后续 steps。
 - 调用 `ritsu_env_probe` 输出环境与 worktree 能力概况。
 - 执行一次 **历史相似案例召回（长期工程记忆）**（用于快速定位可能的配置/入口/修复策略）：
-  - 若 `.ritsu/semantic-index.json` 尚不存在或明显过旧，先调用：
+  - 每次进入“历史相似案例召回”都先调用一次增量构建（工具会按 content_hash 复用旧条目，成本可控）：
     - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
   - 若 `.ritsu/kg.json` 存在（或你已知依赖图对定位关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
     - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）
