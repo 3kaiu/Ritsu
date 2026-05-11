@@ -12,6 +12,8 @@ import { getProjectRoot, textResult, warnResult } from "./_utils.js";
 
 const SUMMARY_THRESHOLD = 50;
 
+const PRUNED_RECENT_LIMIT = 10;
+
 function computeSummary(
   entries: Record<string, unknown>[],
 ): Record<string, unknown> | null {
@@ -49,6 +51,75 @@ function computeSummary(
     skills_used: skillsUsed,
     domains,
   };
+}
+
+function statusWeight(status: string): number {
+  if (status === "artifact_written") return 4;
+  if (status === "done") return 3;
+  if (status === "started") return 2;
+  if (status === "failed") return 1;
+  return 0;
+}
+
+function pruneRecentEntries(
+  entries: Record<string, unknown>[],
+  limit: number,
+): Record<string, unknown>[] {
+  if (entries.length <= limit) return entries;
+
+  // Prefer important statuses, but keep recency: score = weight + recency bonus
+  const scored = entries.map((e, idx) => {
+    const s = String(e.status ?? "");
+    const w = statusWeight(s);
+    // recency bonus: last entries get slightly higher
+    const recency = idx / Math.max(1, entries.length - 1);
+    const score = w + recency;
+    return { e, score, idx };
+  });
+
+  const picked = scored
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    // keep chronological order for readability
+    .sort((a, b) => a.idx - b.idx)
+    .map((x) => x.e);
+
+  return picked;
+}
+
+function summarizeFailedEntries(
+  entries: Record<string, unknown>[],
+): Record<string, unknown> {
+  const bySkill: Record<
+    string,
+    { count: number; last_error: string; last_ts: string; last_cid: string }
+  > = {};
+
+  for (const e of entries) {
+    if (e.status !== "failed") continue;
+    const skill = String(e.skill ?? "unknown");
+    const ts = String(e.ts ?? "");
+    const cid = String(e.correlation_id ?? "");
+    const err = String(e.error ?? "");
+
+    const cur = bySkill[skill] ?? {
+      count: 0,
+      last_error: "",
+      last_ts: "",
+      last_cid: "",
+    };
+    cur.count += 1;
+    // keep last (most recent) failure info
+    if (!cur.last_ts || ts > cur.last_ts) {
+      cur.last_ts = ts;
+      cur.last_error = err;
+      cur.last_cid = cid;
+    }
+    bySkill[skill] = cur;
+  }
+
+  const totalFailed = Object.values(bySkill).reduce((a, b) => a + b.count, 0);
+  return { total_failed: totalFailed, by_skill: bySkill };
 }
 
 // ─── 现实对账：检查 last_completed 的 artifact 是否仍存在 ───
@@ -189,10 +260,17 @@ export async function ritsu_read_ctx(): Promise<CallToolResult> {
   const lastIncomplete = readLastIncomplete(root);
   const lastCompleted = readLastCompleted(root);
   const recentEntries = readRecentEntries(root, 10);
+  const recentEntriesPruned = pruneRecentEntries(
+    allEntries,
+    PRUNED_RECENT_LIMIT,
+  );
+  const failedSummary = summarizeFailedEntries(allEntries);
 
   data.last_incomplete = lastIncomplete;
   data.last_completed = lastCompleted;
   data.recent_entries = recentEntries;
+  data.recent_entries_pruned = recentEntriesPruned;
+  data.failed_summary = failedSummary;
 
   data.recovery_context = buildRecoveryContext(
     lastIncomplete,

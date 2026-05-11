@@ -114,6 +114,14 @@ tools:
           description: "最近 10 条事件"
           items:
             type: object
+        recent_entries_pruned:
+          type: array
+          description: "剪枝后的最近事件（优先 done/artifact_written，failed 聚合到 failed_summary）"
+          items:
+            type: object
+        failed_summary:
+          type: object
+          description: "failed 事件摘要压缩（按 skill 聚合），用于节省 token"
         recovery_context:
           type: object
           description: "可操作恢复上下文（仅 last_incomplete 存在时非 null）"
