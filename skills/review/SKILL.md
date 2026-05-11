@@ -1,8 +1,9 @@
 ---
 name: review
-version: "3.5.1"
+version: "3.6.0"
 description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
+complexity_grading: true
 token_budget: 6000
 total_steps: 5
 required_sections: [attack_vectors, coding_disciplines]
@@ -32,7 +33,7 @@ hard_constraints:
 
 `[Step 1 Complete]` 后进入步骤 2。
 
-调用 **`ritsu_exec`** 执行 `git diff` 获取完整变更内容。
+调用 **`ritsu_get_diff`** 获取结构化变更分析（含文件统计、新增标识符列表、完整 diff）。
 
 ⚠️ **安全反制协议 (Anti-Prompt-Injection)**：
 
@@ -46,7 +47,7 @@ hard_constraints:
   - 发现偏离（接口契约变动 / 遗漏 PRD 状态 / 擅自改变架构层级）→ 以 **P0 级别**进入 Hard Stop 流程
 - **不存在** → Review Stamp 注明"无 Handoff 溯源"，继续
 
-读取 AGENTS.md 获取 Lint/Test 命令，调用 **`ritsu_exec`** 执行，记录结果。
+调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
 
 ### 3. Hard Stop 检查（HC-1 执行协议）
 
@@ -58,25 +59,25 @@ hard_constraints:
 检查 P1：明文凭证泄露
   grep -r "token\|secret\|password\|api_key" . --include="*.{ext}" -i
   ✅ 无匹配 → 继续 P2
-  ❌ 有匹配 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-1, severity:FATAL, pattern:"Credential leak", evidence:"发现明文凭证"})`，写入 FAIL Stamp，停止
+  ❌ 有匹配 → 写入 FAIL Stamp（附 R-1 违规详情），停止
 
 检查 P2：不明标识符
-  对 diff 中新增的每个标识符调用 ritsu_exec (grep) 验证
+  使用 `ritsu_get_diff` 返回的 `new_identifiers` 列表，对每个标识符调用 ritsu_exec (grep) 验证
   ✅ 全部存在 → 继续 P3
-  ❌ 存在未定义 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-2, severity:FATAL, pattern:"Undefined identifier", evidence:"标识符未在代码库中找到定义"})`，写入 FAIL Stamp，停止
+  ❌ 存在未定义 → 写入 FAIL Stamp（附 R-2 违规详情），停止
 
 检查 P3：破坏性契约变更
   检查 API 路由/参数/响应结构是否变更，若变更则检查是否有迁移/双写方案
   ✅ 无变更或有方案 → 继续 P4
-  ❌ 变更且无方案 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-3, severity:FATAL, pattern:"Breaking contract change", evidence:"契约变更无迁移方案"})`，写入 FAIL Stamp，停止
+  ❌ 变更且无方案 → 写入 FAIL Stamp（附 R-3 违规详情），停止
 
 检查 P4：版本号割裂
   比对 package.json 与 lockfile 版本一致性
   ✅ 一致 → 进入步骤 4
-  ❌ 不一致 → 追加 `ritsu_emit_event(event_type=step_failed, violation={id:R-4, severity:WARN, pattern:"Version drift", evidence:"lockfile 与 package.json 版本不一致"})`，写入 FAIL Stamp，停止
+  ❌ 不一致 → 写入 FAIL Stamp（附 R-4 违规详情），停止
 ```
 
-Hard Stop FAIL 后，调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"Hard Stop 后续动作", options:["修复后重新审查 → /r-dev", "熔断重审架构 → /r-think", "终止审查"]})` 等待用户选择。
+Hard Stop FAIL 后，向用户展示后续选项："修复后重新审查 → /r-dev / 熔断重审架构 → /r-think / 终止审查"，等待用户选择。
 
 ### 4. 领域语义审查（聚焦需要理解力的逻辑漏洞）
 
@@ -102,18 +103,17 @@ Hard Stop FAIL 后，调用 `ritsu_emit_event(event_type=approval_required, appr
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-调用 **`ritsu_write_artifact`**（type=review-stamp），同时写入 md 和 html 双文件：
+调用 **`ritsu_write_artifact`**（type=review-stamp）写入 md 文件：
 
 - md 路径：`.ritsu/review-stamp-{YYYYMMDD-HHMMSS}.md`（Schema 3，AI 消费）
-- html 路径：`.ritsu/review-stamp-{YYYYMMDD-HHMMSS}.html`（Schema 5，人类可视化）
 
 按 `_shared/artifact-schema.yaml` Schema 3 格式写入，同时在会话末尾内联输出。
 
 **⚠️ 熔断检测 (Circuit Breaker)**：
 
-- 如果本次审查结果为 FAIL，必须通过 `ritsu_list_artifacts` 和 `ritsu_read_ctx` 检查对该 Handoff 的审查历史。
-- 若发现**连续两次 FAIL**（包含本次），触发死循环熔断！禁止再打回给 dev，必须引导至 `/r-think` 重新审视架构设计，或要求人类介入。
-- 若发现**同一 handoff 的 dev→review 循环超过 3 次**（含 PASS 后又回来修），触发循环熔断！必须引导至 `/r-think`，反复修补说明设计有根本缺陷。
+- 如果本次审查结果为 FAIL，检查 `ritsu_read_ctx` 返回的 `circuit_breaker_status`。
+- 若 `consecutive_fails >= 2`，触发熔断！禁止再打回给 dev，必须引导至 `/r-think` 重新审视架构设计，或要求人类介入。
+- 若发现**同一 handoff 的 dev→review 循环超过 3 次**（含 PASS 后又回来修），触发循环熔断！必须引导至 `/r-think`。
 
 写入 ctx-{YYYY-MM}.jsonl：
 

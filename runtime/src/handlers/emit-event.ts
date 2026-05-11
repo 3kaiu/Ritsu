@@ -27,14 +27,8 @@ export async function ritsu_emit_event(
 
   if (step) event.step = step;
   if (params.artifact !== undefined) event.artifact = params.artifact;
-  if (params.progress !== undefined) event.progress = params.progress;
   if (params.error) event.error = String(params.error);
-  if (params.approval) event.approval = params.approval;
   if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
-  if (params.violation) event.violation = params.violation;
-  if (params.redirect) event.redirect = String(params.redirect);
-  if (params.transition) event.transition = params.transition;
-  if (params.duration_ms) event.duration_ms = Number(params.duration_ms);
 
   // Schema 校验（不含 correlation_id 时跳过，因为锁内才生成）
   if (correlationId) {

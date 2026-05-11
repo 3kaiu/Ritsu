@@ -1,6 +1,6 @@
 # Ritsu MCP Server Runtime
 
-> v3.5.0 · 将 `_shared/mcp-tools.yaml` 协议声明编译为可运行的 MCP 工具服务
+> v3.6.0 · 将 `_shared/mcp-tools.yaml` 协议声明编译为可运行的 MCP 工具服务
 
 ## 快速开始
 
@@ -67,22 +67,22 @@ runtime/src/
 
 ## 工具清单
 
-| 工具 | 功能 |
-|------|------|
-| `ritsu_emit_event` | 事件写入 + Schema 校验（v3.5.0 新增） |
-| `ritsu_read_ctx` | 读取 ctx 状态（last_incomplete/last_completed/pending_approvals） |
-| `ritsu_write_artifact` | 产物写入 + 占位符拦截 + html 双格式 |
-| `ritsu_get_changed_files` | git diff 双区合并 |
-| `ritsu_get_diff` | git diff 内容获取 |
-| `ritsu_grep_identifier` | grep -rnC 标识符搜索 |
-| `ritsu_run_quality_gates` | AGENTS.md lint/test 命令执行 |
-| `ritsu_list_artifacts` | .ritsu/ 目录扫描 + 类型过滤 |
-| `ritsu_retrieve_memory` | grep 本地 RAG 搜索 |
+| 工具                      | 功能                                            |
+| ------------------------- | ----------------------------------------------- |
+| `ritsu_emit_event`        | 事件写入 + Schema 校验（4 种核心事件）          |
+| `ritsu_read_ctx`          | ctx 状态查询 + 恢复上下文 + 现实对账 + 熔断状态 |
+| `ritsu_write_artifact`    | 产物写入 + 占位符拦截（统一 Markdown）          |
+| `ritsu_list_artifacts`    | .ritsu/ 目录扫描 + 类型过滤                     |
+| `ritsu_exec`              | 通用命令执行（白名单 + 截断/超时）              |
+| `ritsu_validate`          | 独立 Schema 校验                                |
+| `ritsu_get_changed_files` | 变更文件列表 + 领域推断                         |
+| `ritsu_get_diff`          | 结构化 diff 分析 + 新增标识符提取               |
+| `ritsu_run_quality_gates` | Lint + Test 质量门禁 + 失败用例解析             |
 
 ## 环境变量
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
+| 变量                 | 默认值          | 说明           |
+| -------------------- | --------------- | -------------- |
 | `RITSU_PROJECT_ROOT` | `process.cwd()` | 目标项目根目录 |
 
 ## 开发

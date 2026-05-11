@@ -95,9 +95,8 @@ schemas:
   diagnosis:
     id: 2
     md_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md"
-    html_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.html"
-    format: dual
-    consumer: ai_and_human
+    format: markdown
+    consumer: ai
     required_sections:
       - title: "根因确诊"
         id: root-cause
@@ -134,9 +133,8 @@ schemas:
   review_stamp:
     id: 3
     md_path: ".ritsu/review-stamp-{YYYYMMDD-HHMMSS}.md"
-    html_path: ".ritsu/review-stamp-{YYYYMMDD-HHMMSS}.html"
-    format: dual
-    consumer: ai_and_human
+    format: markdown
+    consumer: ai
     must_write_file: true
     must_inline_output: true
     required_sections:
@@ -204,18 +202,9 @@ schemas:
             format: "✅ 通过 | ❌ 失败"
 
 dual_format_protocol:
-  version: "3.3.0"
+  version: "3.6.0"
   principle:
     md_consumer: "AI（grep / RAG 检索）"
-    html_consumer: "人类（浏览器直接打开）"
     md_write: always
-    html_write: "diagnosis + review-stamp only"
-    handoff_html: false
-    ctx_html: false
-  html_requirements:
-    - rule: "自包含：所有 CSS/JS 内联，不引用外部资源（离线可打开）"
-    - rule: "语义锚点：关键区块必须带 id 属性（如 id='root-cause'、id='hard-stops'），供 AI 精准定位"
-    - rule: "暗色主题：默认暗色背景（#1a1a2e），对齐开发者审美"
-    - rule: "可折叠：证据链、Hard Stop 详情等长区块使用 details/summary 折叠"
-    - rule: "状态徽章：PASS/FAIL、严重度等级使用颜色徽章（绿/红/黄）醒目标注"
-    - rule: "元数据注入：head 中嵌入 meta name='ritsu-artifact' 和 meta name='ritsu-timestamp'，供工具识别"
+    html_write: "removed — AI 直接内联输出，无需 html 双格式"
+  note: "v3.6 移除 html 双格式输出，减少产物体积和写入开销。AI 在会话末尾内联输出即可满足人类阅读需求。"

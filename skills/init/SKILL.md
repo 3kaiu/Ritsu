@@ -1,6 +1,6 @@
 ---
 name: init
-version: "3.5.1"
+version: "3.6.0"
 description: "Ritsu 初始化协议。扫描项目架构、提取技术栈与规范，生成 AGENTS.md。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
 token_budget: 4000
@@ -66,7 +66,7 @@ hard_constraints:
   ```markdown
   <!-- Ritsu Configuration Block -->
 
-  ritsu-version: 3.5.0
+  ritsu-version: 3.6.0
   domain: {推断出的领域值}
 
   <!-- End Ritsu Block -->
@@ -86,7 +86,7 @@ hard_constraints:
 配置内容：
 
 ```
-Ritsu Bundle v3.5 已激活。
+Ritsu Bundle v3.6 已激活。
 全局规则：~/.gemini/antigravity/skills/Ritsu/
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：

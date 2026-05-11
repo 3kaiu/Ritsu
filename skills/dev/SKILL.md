@@ -1,8 +1,9 @@
 ---
 name: dev
-version: "3.5.1"
+version: "3.6.0"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
+complexity_grading: true
 token_budget: 8000
 total_steps: 7
 required_sections: [coding_disciplines, attack_vectors]
@@ -69,6 +70,8 @@ hard_constraints:
 3. ❌ exists=false → 停止编写该调用，输出错误提示并等待指示
 ```
 
+> 💡 `ritsu_get_diff` 的 `new_identifiers` 字段已自动提取 diff 中新增的标识符，review 时可直接使用，无需逐个 grep。
+
 ### 4. 降维分块执行与测试先行 (Chunked Execution)
 
 `[Step 3 Complete]` 后进入步骤 4。
@@ -78,25 +81,25 @@ hard_constraints:
 - **若清单项 ≤ 3**：可全量执行，但在编写业务逻辑前，先写出验证手段（单测用例、curl 或 UI 验证步骤）。
 - **若清单项 > 3**（触发 HC-4 强制约束）：
   1. **截断**：仅选取前 1-2 项核心逻辑执行。
-  2. **验证**：读取 AGENTS.md 获取 Lint/Test 命令，调用 `ritsu_exec` 执行。
-  3. **断点确认**：调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"分块断点确认", options:["继续下一批次", "暂停并审查", "回滚当前批次"]})`，等待用户选择后追加 `approval_granted` 或 `approval_denied` 事件。严禁一次性输出所有代码导致幻觉翻车。
+  2. **验证**：调用 `ritsu_run_quality_gates` 执行 Lint + Test。
+  3. **断点确认**：向用户展示当前批次结果，询问"继续下一批次 / 暂停审查 / 回滚当前批次"，等待用户回复。严禁一次性输出所有代码导致幻觉翻车。
 
 ### 5. 沙盒自查清单（按优先级）
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-- [ ] HC-1：所有外部标识符均已通过 `ritsu_exec` (grep) 验证 — 违反时追加 `ritsu_emit_event(event_type=step_failed, violation={id:AP-2, severity:FATAL, pattern:"Hallucinate paths", evidence:"grep 返回 0 matches"})`
-- [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理 — 违反时追加 `ritsu_emit_event(event_type=step_failed, violation={id:AP-6, severity:FATAL, pattern:"Placeholder promise", evidence:"发现占位符文本"})`
+- [ ] HC-1：所有外部标识符均已通过 `ritsu_exec` (grep) 验证 — 违反时输出错误提示并停止
+- [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理 — 违反时输出错误提示并停止
 - [ ] 无孤儿引用，无未使用的残余变量
 
 ### 6. 质量门禁
 
 `[Step 5 Complete]` 后进入步骤 6。
 
-读取 AGENTS.md 获取 Lint/Test 命令，调用 **`ritsu_exec`** 执行，等待结果：
+调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，等待结果：
 
-- Lint ✅ + Test ✅ → 可以交付
-- 任何 ❌ → 修复后重新执行，不允许带着失败交付
+- passed: true → 可以交付
+- passed: false → 查看 test.failures 定位失败用例，修复后重新执行，不允许带着失败交付
 
 ### 7. Handoff 契约自愈 (Handoff Drift Prevention)
 
@@ -118,7 +121,7 @@ hard_constraints:
 - Lint: ✅/❌ | Test: ✅/❌
 ```
 
-写入 ctx-{YYYY-MM}.jsonl：
+写入 ctx（started + done 事件）：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=dev, artifact=null）
 

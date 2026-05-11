@@ -1,6 +1,6 @@
 ---
 name: route
-version: "3.5.1"
+version: "3.6.0"
 description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能，建立全局会话上下文。"
 when_to_use: "/r-route, 我不知道该用哪个命令, 帮我决定, 从哪开始"
 token_budget: 3000
@@ -24,20 +24,26 @@ hard_constraints:
 
 调用 **`ritsu_read_ctx`** 工具解析历史任务状态：
 
-⚠️ **现实对账机制 (Temporal Desync Check)**：
+⚠️ **现实对账机制**：`ritsu_read_ctx` 自动计算 `reality_check` 字段：
 
-- 如果 ctx 记录上一任务为 `done`（例如开发完成），但你通过文件探查或 Git 状态发现代码实际上并不存在（用户可能执行了 `git reset --hard` 时间回退）。
-- **必须触发状态机回拨**：向用户提示"检测到 Git 时空错位，代码已回滚"，主动忽略该 `done` 记录，将状态机自适应拨回 `started`，并询问是否重新执行该任务。
+- `desync_detected: true` → 向用户提示"检测到 Git 时空错位，产物文件已丢失"，主动忽略该 `done` 记录，将状态机自适应拨回 `started`，并询问是否重新执行该任务。
+- `desync_detected: false` → 按正常逻辑提示。
 
-如果没有发生时空错位，按正常逻辑提示：
+同时检查 `recovery_context`：
 
-- 发现未完成任务 → 告知用户"检测到未完成任务"，询问是否继续或开启新任务
+- 存在未完成任务 → 告知用户"检测到未完成任务"，展示 `recovery_context.resume_hint`，询问是否继续或开启新任务
 - 发现已完成任务 → 告知上一任务结论，推荐下一步
 - 无记录 → 正常继续
+
+同时检查 `circuit_breaker_status`：
+
+- `should_redirect` 非空 → 告知用户"检测到熔断状态（连续 {consecutive_fails} 次失败）"，建议先执行 `/r-think`
 
 ### 2. 领域解析
 
 > 引用 `_shared/skill-common-steps.md` Step 1
+
+> 💡 优先调用 `ritsu_get_changed_files` 获取 `domain_hint`，作为领域解析的 P2 依据。
 
 ### 3. 意图识别与路由
 
@@ -71,30 +77,9 @@ hard_constraints:
 请执行：**`/r-{skill} [...]`**
 ```
 
-### 5. 写入 transition_event + ctx
+### 5. 写入 ctx
 
-路由决策确定后，先写入状态机流转事件（供 UI 渲染状态动画），再写入 ctx：
-
-**transition_event**（追加到 ctx，status=started）：
-
-```jsonl
-{
-  "ts": "{YYYYMMDD-HHMMSS}",
-  "correlation_id": "{cid}",
-  "skill": "route",
-  "domain": "{value}",
-  "status": "started",
-  "step": "5/5",
-  "artifact": null,
-  "progress": null,
-  "transition": {
-    "from": "route",
-    "to": "{target_skill}",
-    "event": "{state-machine event name}",
-    "ui_hint": "{state-machine ui_hint}"
-  }
-}
-```
+路由决策确定后，写入 ctx：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null, correlation_id=步骤4生成的值）
 

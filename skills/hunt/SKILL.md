@@ -1,8 +1,9 @@
 ---
 name: hunt
-version: "3.5.1"
+version: "3.6.0"
 description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
+complexity_grading: true
 token_budget: 8000
 total_steps: 6
 required_sections: [hypothesis_directions]
@@ -109,10 +110,9 @@ hard_constraints:
       ↳ 物理根因：[数据迁移脚本不完整]
 ```
 
-基于 5-Whys 的最终结论，调用 **`ritsu_write_artifact`**（type=diagnosis），同时写入 md 和 html 双文件：
+基于 5-Whys 的最终结论，调用 **`ritsu_write_artifact`**（type=diagnosis）写入 md 文件：
 
 - md 路径：`.ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`（Schema 2，AI 消费）
-- html 路径：`.ritsu/diagnosis-{YYYYMMDD-HHMMSS}.html`（Schema 4，人类可视化）
 
 按 `_shared/artifact-schema.yaml` Schema 2 格式写入（将其中的 Root Cause 替换为 5-Whys 提炼的物理根因）。
 

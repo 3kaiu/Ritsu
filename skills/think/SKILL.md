@@ -1,8 +1,9 @@
 ---
 name: think
-version: "3.5.1"
+version: "3.6.0"
 description: "Ritsu 领域自适应需求评审与架构设计。强制拆分为评审阶段和设计阶段，输出防腐 Handoff 文件。"
 when_to_use: "/r-think, 设计方案, 怎么做, 要不要做, 分析一下, 看看这个 PRD"
+complexity_grading: true
 token_budget: 10000
 total_steps: 7
 required_sections: [hypothesis_directions, coding_disciplines]
@@ -108,7 +109,7 @@ hard_constraints:
 **请逐条确认：采用推荐方案 / 切换备选方案 / 自定义方案。**
 ```
 
-调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"漏洞清单逐条确认", options:每条漏洞的推荐/备选/自定义})`，等待用户逐条选择后追加 `approval_granted` 事件。**收到确认前，不进入 Phase B。**
+向用户展示漏洞清单，要求逐条确认：采用推荐方案 / 切换备选方案 / 自定义方案。**收到确认前，不进入 Phase B。**
 
 ---
 
@@ -124,7 +125,7 @@ hard_constraints:
 
 `[Step B1 Complete]` 后进入 B2。
 
-提供 2 套方案，使用强制对比表格，并调用 `ritsu_emit_event(event_type=approval_required, approval={type:choose, title:"架构方案选择", options:["方案A", "方案B"]})` 等待用户选择：
+提供 2 套方案，使用强制对比表格，并询问用户选择：
 | 维度 | 方案 A | 方案 B |
 |------|-------|-------|
 | 核心依赖 | | |

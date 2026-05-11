@@ -20,7 +20,6 @@ export async function ritsu_write_artifact(
   const type = String(params.type ?? "");
   const filename = String(params.filename ?? "");
   const content = String(params.content ?? "");
-  const htmlContent = params.html_content ? String(params.html_content) : null;
   const artifactMeta = params.artifact_meta as
     | Record<string, unknown>
     | undefined;
@@ -91,26 +90,9 @@ export async function ritsu_write_artifact(
   }
   const sizeBytes = statSync(mdPath).size;
 
-  let htmlPath: string | null = null;
-  if (htmlContent && (type === "diagnosis" || type === "review-stamp")) {
-    const htmlFilename = filename.replace(/\.(md|jsonl)$/, ".html");
-    htmlPath = resolve(dir, htmlFilename);
-    const htmlTmp = join(dir, `.tmp-${randomUUID()}`);
-    try {
-      writeFileSync(htmlTmp, htmlContent, "utf-8");
-      renameSync(htmlTmp, htmlPath);
-    } catch (e: any) {
-      try {
-        rmSync(htmlTmp, { force: true });
-      } catch {}
-      return errorResult(`atomic html write failed: ${e.message}`);
-    }
-  }
-
   return textResult(
     JSON.stringify({
       path: mdPath,
-      html_path: htmlPath,
       size_bytes: sizeBytes,
       artifact_meta: artifactMeta ?? null,
     }),

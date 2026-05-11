@@ -1,4 +1,4 @@
-# Skill 公共步骤模板 v3.5.0
+# Skill 公共步骤模板 v3.6.0
 
 > 所有 SKILL.md 中重复出现的三个步骤，统一引用此模板，禁止各自重写。
 > 引用方式：`> 引用 _shared/skill-common-steps.md Step N`
@@ -6,38 +6,34 @@
 
 ---
 
-## Step 0: 结构化输出协议 (Structured Output Protocol)
+## Step 0: 复杂度分级 (Complexity Grading)
 
-每个技能的输出必须遵循以下格式约束，禁止自由格式输出：
+每个技能在执行前，必须先判断任务复杂度，选择对应的执行级别：
 
-1. **步骤输出**：每个 `[Step N Complete]` 后必须输出该步骤的结论摘要（≤3 行），禁止输出中间推理过程
-2. **步骤事件**：每个 `[Step N Complete]` 标记同时，必须追加 `step_done` 事件到 ctx（见 Step 2）。`[Step N Complete]` 是人读锚点，`step_done` 是机读事件，两者必须成对出现
-3. **交付输出**：技能结束时必须输出标准交付块（见各 SKILL.md 末尾的交付摘要模板）
-4. **错误输出**：遇到失败时必须输出结构化错误块：
-   ```
-   ❌ [{skill}] Step {N} 失败
-   - 原因: {一句话描述}
-   - 已执行: {已完成的步骤列表}
-   - 建议恢复: {下一步动作}
-   ```
-5. **禁止冗余**：不重复 frontmatter 中已声明的 HC，不重复引用已完成的步骤内容
+| 级别        | 条件                           | 流程简化                                                                                          |
+| ----------- | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| **L0 微调** | ≤10 行变更，单文件，无架构影响 | 跳过 think/review，dev 直接执行 + `ritsu_run_quality_gates` 自测                                  |
+| **L1 常规** | ≤50 行变更，1-3 文件           | think 精简版（只输出实施清单，不做多维轰炸/事前验尸），review 快速版（只跑 Hard Stop + 质量门禁） |
+| **L2 标准** | >50 行或涉及架构变更           | 完整流程（当前 SKILL.md 定义的完整步骤）                                                          |
 
-### 审批协议 (Approval Protocol)
+**分级依据**（按优先级）：
 
-当技能执行中需要人类确认时，必须通过结构化审批事件而非纯文本询问：
+1. 用户提供的手动指定（如 `/r-dev --L0`）
+2. 变更文件数 + 预估变更行数（通过 `ritsu_get_changed_files` 获取）
+3. handoff 实施清单项数（≤1 项→L0，≤3 项→L1，>3 项→L2）
 
-1. 追加 `approval_required` 事件到 ctx（含 `approval.type`/`title`/`options`/`context`）
-2. 向用户展示审批选项（UI 可渲染为 ApprovalDialog 组件）
-3. 收到用户选择后追加 `approval_granted` 或 `approval_denied` 事件
-4. 被拒绝时按用户指示回退或终止
+**L0 快速通道执行规范**：
 
-**审批类型**：
+- 只调用 `ritsu_emit_event(event_type=started)` + `ritsu_emit_event(event_type=done)` 两个事件
+- 直接调用 `ritsu_run_quality_gates` 验证
+- 输出精简交付摘要（涉及文件 + Lint/Test 结果）
+- 不写 handoff/diagnosis/review-stamp 产物
 
-| type               | 场景          | options 示例                   |
-| ------------------ | ------------- | ------------------------------ |
-| `confirm`          | 简单是/否确认 | ["确认", "取消"]               |
-| `choose`           | 多选一决策    | ["方案A", "方案B", "跳过"]     |
-| `review_dangerous` | 危险操作审查  | ["执行", "修改后执行", "取消"] |
+**L1 常规通道执行规范**：
+
+- think 只输出实施清单 + 边界契约，跳过多维轰炸（A2）和事前验尸（A3）
+- review 跳过领域语义审查（Step 4），只跑 Hard Stop + `ritsu_run_quality_gates`
+- 事件写入：started + artifact_written（如有产物）+ done/failed
 
 ---
 
@@ -46,147 +42,81 @@
 按以下优先级解析领域，**首个命中即停止**，输出 `[RITSU_CTX: domain={value}]`：
 
 1. **P1**：读取项目根 `AGENTS.md` 的 `domain:` 字段。合法值：frontend / backend / fullstack / infra / data
-2. **P2**：分析变更文件后缀推断（.tsx/.vue→frontend, .go/.java→backend, 混合→fullstack, .tf/.yml→infra, .py/.ipynb→data）
+2. **P2**：调用 `ritsu_get_changed_files`，使用返回的 `domain_hint` 字段
 3. **P3**：P1/P2 均无法判断时，**强制询问用户**，不得自行猜测
 
-解析完成后，调用 `ritsu_emit_event` 追加：
+解析完成后，调用 `ritsu_emit_event` 追加 started 事件：
 
-```jsonl
-{
-  "ts": "{YYYYMMDD-HHMMSS}",
-  "correlation_id": "{cid}",
-  "skill": "{skill_name}",
-  "domain": "{value}",
-  "status": "started",
-  "step": "1/{N}",
-  "artifact": null,
-  "progress": "{skill_name}:chunk{N}/{M}"
-}
 ```
-
-`step` 格式为 `{current}/{total}`（如 `1/5`），`progress` 仅分块执行时填写（如 dev:chunk2/5、optimize:item3/8），否则为 `null`。
-`correlation_id` 由 route 技能生成（格式 `cid-{YYYYMMDD}-{seq}`），同链路技能继承此 ID，用于 UI 关联同一任务链路的所有事件。
+ritsu_emit_event({
+  event_type: "started",
+  step: "1/{N}",
+  correlation_id: "{cid}",
+  skill: "{skill_name}",
+  domain: "{value}"
+})
+```
 
 **correlation_id 继承规则**：
 
 - 若当前技能由 `/r-route` 路由触发 → 从 route 输出的 `[RITSU_CTX: ... cid={value}]` 中提取
-- 若用户直接调用 `/r-{skill}`（跳过 route）→ 从 `ritsu_read_ctx` 返回的 `last_completed.correlation_id` 或 `last_incomplete.correlation_id` 中继承
+- 若用户直接调用 `/r-{skill}`（跳过 route）→ 从 `ritsu_read_ctx` 返回的 `recovery_context.correlation_id` 或 `last_completed.correlation_id` 中继承
 - 若为新链路（无历史且未经过 route）→ 自行生成 `cid-{YYYYMMDD}-1`
 
 ---
 
-## Step 2: ctx 写入（步骤/完成/失败时）
+## Step 2: ctx 写入（仅 4 种核心事件）
 
-### 步骤完成时
+### 技能完成时
 
-每个步骤完成后，调用 `ritsu_emit_event` 追加：
-
-```jsonl
-{"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"step_done","step":"{N}/{M}","artifact":null,"progress":null,"duration_ms":{耗时毫秒}}
+```
+ritsu_emit_event({
+  event_type: "done",
+  step: "{M}/{M}",
+  correlation_id: "{cid}",
+  skill: "{skill_name}",
+  domain: "{value}",
+  artifact: "{产物路径或null}"
+})
 ```
 
 ### 产物写入时
 
 调用 `ritsu_write_artifact` 写入产物文件后，追加：
 
-```jsonl
-{"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"artifact_written","step":"{N}/{M}","artifact":"{产物路径}","progress":null,"artifact_meta":{"type":"{产物类型}","size_bytes":{大小},"summary":"{一句话摘要}"}}
 ```
-
-### 步骤失败时
-
-```jsonl
-{
-  "ts": "{YYYYMMDD-HHMMSS}",
-  "correlation_id": "{cid}",
-  "skill": "{skill_name}",
-  "domain": "{value}",
-  "status": "step_failed",
-  "step": "{N}/{M}",
-  "artifact": null,
-  "progress": null,
-  "error": "{一句话错误描述}"
-}
-```
-
-若由 anti-pattern 触发，增加 `violation` 字段：
-
-```jsonl
-{
-  "ts": "...",
-  "skill": "...",
-  "domain": "...",
-  "status": "step_failed",
-  "step": "2/5",
-  "artifact": null,
-  "progress": null,
-  "error": "AP-2: 引用未验证标识符",
-  "violation": {
-    "id": "AP-2",
-    "severity": "FATAL",
-    "pattern": "Hallucinate paths",
-    "evidence": "grep 返回 0 matches"
-  }
-}
-```
-
-### 技能完成时
-
-```jsonl
-{"ts":"{YYYYMMDD-HHMMSS}","correlation_id":"{cid}","skill":"{skill_name}","domain":"{value}","status":"done","step":"{M}/{M}","artifact":"{产物路径或null}","progress":null,"duration_ms":{总耗时毫秒}}
+ritsu_emit_event({
+  event_type: "artifact_written",
+  step: "{N}/{M}",
+  correlation_id: "{cid}",
+  skill: "{skill_name}",
+  domain: "{value}",
+  artifact: "{产物路径}",
+  artifact_meta: { type: "{产物类型}", size_bytes: {大小}, summary: "{一句话摘要}" }
+})
 ```
 
 ### 技能失败时
 
-```jsonl
-{
-  "ts": "{YYYYMMDD-HHMMSS}",
-  "correlation_id": "{cid}",
-  "skill": "{skill_name}",
-  "domain": "{value}",
-  "status": "failed",
-  "step": "{N}/{M}",
-  "artifact": null,
-  "progress": null,
-  "error": "{一句话错误描述}"
-}
 ```
+ritsu_emit_event({
+  event_type: "failed",
+  correlation_id: "{cid}",
+  skill: "{skill_name}",
+  domain: "{value}",
+  error: "{一句话错误描述}"
+})
+```
+
+> ⚠️ **精简原则**：不再写入 step*done / approval*\* / circuit_breaker / transition 事件。
+> 审批、步骤进度、熔断告警等通过 AI 自然语言输出传达给用户，不写入 JSONL。
+> 熔断状态由 `ritsu_read_ctx` 的 `circuit_breaker_status` 字段自动计算。
 
 ---
 
-## Step 3: 关联流转 + 状态机引导 + transition_event
+## Step 3: 关联流转 + 状态机引导
 
-完成后按 `_shared/state-machine.yaml` 输出引导语，**并写入 transition_event**。
-
-**transition_event 写入规则**：
-
-每个技能完成时（done 事件之前），必须追加一条含 `transition` 字段的事件，标记当前技能的流转出口：
-
-```jsonl
-{
-  "ts": "{YYYYMMDD-HHMMSS}",
-  "correlation_id": "{cid}",
-  "skill": "{skill_name}",
-  "domain": "{value}",
-  "status": "step_done",
-  "step": "{M}/{M}",
-  "artifact": null,
-  "progress": null,
-  "transition": {
-    "from": "{当前技能}",
-    "to": "{下一技能}",
-    "event": "{state-machine.yaml 中的 event 名}",
-    "ui_hint": "{state-machine.yaml 中的 ui_hint}"
-  }
-}
-```
-
-- `from` = 当前技能名
-- `to` = 推荐的下一技能名（按 state-machine.yaml states.{current}.next 匹配）
-- `event` = 触发流转的事件名（如 `handoff_written`、`dev_complete`、`review_fail` 等）
-- `ui_hint` = UI 渲染提示（如 `show_dev_summary`、`show_review_fail_items` 等）
-
-**多出口场景**（如 review 有 4 个 next）：写入用户实际选择的流转方向，不写所有可能方向。
+完成后按 `_shared/state-machine.yaml` 输出引导语。
 
 关键流转路径：
 
@@ -203,23 +133,8 @@ triage → hunt / think / review / optimize
 
 **熔断规则**（任一命中即引导至 `/r-think`）：
 
-- review 连续两次 FAIL
+- review 连续两次 FAIL（`ritsu_read_ctx` 的 `circuit_breaker_status.consecutive_fails >= 2` 时自动检测）
 - 同一 handoff 的 dev→review 循环 >3 次
 - 同一模块的 optimize→review 循环 >2 次
 
-熔断触发时追加 `circuit_breaker` 事件：
-
-```jsonl
-{
-  "ts": "{YYYYMMDD-HHMMSS}",
-  "correlation_id": "{cid}",
-  "skill": "{skill_name}",
-  "domain": "{value}",
-  "status": "circuit_breaker",
-  "step": "{N}/{M}",
-  "artifact": null,
-  "progress": null,
-  "error": "{熔断原因}",
-  "redirect": "think"
-}
-```
+熔断触发时，AI 直接输出告警并引导至 `/r-think`，不写入 circuit_breaker 事件。

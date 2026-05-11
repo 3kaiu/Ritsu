@@ -66,7 +66,32 @@ describe("validateEvent (JS ajv)", () => {
     expect(result.valid).toBe(true);
   });
 
-  it("should accept step_done with step field", () => {
+  it("should accept done with step field", () => {
+    const result = validateEvent({
+      ts: "20260509-171500",
+      correlation_id: "cid-20260509-001",
+      skill: "dev",
+      domain: "frontend",
+      status: "done",
+      step: "2/5",
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it("should reject done with step=null — Ajv2020 correctly blocks null for required string+pattern", () => {
+    const result = validateEvent({
+      ts: "20260509-171500",
+      correlation_id: "cid-20260509-001",
+      skill: "dev",
+      domain: "frontend",
+      status: "done",
+      step: null,
+    });
+    // Ajv2020 + draft 2020-12 正确拒绝 null — 语义漏洞已被修复
+    expect(result.valid).toBe(false);
+  });
+
+  it("should reject step_done as invalid status (removed in v3.6)", () => {
     const result = validateEvent({
       ts: "20260509-171500",
       correlation_id: "cid-20260509-001",
@@ -75,19 +100,6 @@ describe("validateEvent (JS ajv)", () => {
       status: "step_done",
       step: "2/5",
     });
-    expect(result.valid).toBe(true);
-  });
-
-  it("should reject step_done with step=null — Ajv2020 correctly blocks null for required string+pattern", () => {
-    const result = validateEvent({
-      ts: "20260509-171500",
-      correlation_id: "cid-20260509-001",
-      skill: "dev",
-      domain: "frontend",
-      status: "step_done",
-      step: null,
-    });
-    // Ajv2020 + draft 2020-12 正确拒绝 null — 语义漏洞已被修复
     expect(result.valid).toBe(false);
   });
 
@@ -501,7 +513,7 @@ describe("ritsu_emit_event handler integration", () => {
   it("should use provided correlation_id", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     const result = await emitEvent({
-      event_type: "step_done",
+      event_type: "done",
       step: "2/3",
       correlation_id: "cid-20260509-042",
       skill: "dev",
@@ -649,6 +661,88 @@ describe("ritsu_list_artifacts handler integration", () => {
     const data = JSON.parse(result.content[0].text);
     expect(data.files).toBeDefined();
     expect(typeof data.total_count).toBe("number");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── ritsu_get_changed_files handler 集成测试 ────────────────────────
+
+describe("ritsu_get_changed_files handler integration", () => {
+  let getChangedFiles: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    const mod = await import("../src/handlers/get-changed-files.js");
+    getChangedFiles = mod.ritsu_get_changed_files;
+  });
+
+  it("should return files and domain_hint in a git repo", async () => {
+    // Use the actual project root (a git repo) since TEST_ROOT is not a git repo
+    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu";
+    const result = await getChangedFiles({ staged: true, unstaged: true });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(Array.isArray(data.files)).toBe(true);
+    expect(typeof data.total).toBe("number");
+    expect(typeof data.domain_hint).toBe("string");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should return error in non-git directory", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await getChangedFiles({ staged: true, unstaged: true });
+    expect(result.isError).toBe(true);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── ritsu_get_diff handler 集成测试 ────────────────────────
+
+describe("ritsu_get_diff handler integration", () => {
+  let getDiff: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    const mod = await import("../src/handlers/get-diff.js");
+    getDiff = mod.ritsu_get_diff;
+  });
+
+  it("should return diff structure in a git repo", async () => {
+    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu";
+    const result = await getDiff({ cached: false });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(Array.isArray(data.files)).toBe(true);
+    expect(typeof data.total_files).toBe("number");
+    expect(Array.isArray(data.new_identifiers)).toBe(true);
+    expect(typeof data.diff).toBe("string");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should return error in non-git directory", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await getDiff({ cached: false });
+    expect(result.isError).toBe(true);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── ritsu_run_quality_gates handler 集成测试 ────────────────────────
+
+describe("ritsu_run_quality_gates handler integration", () => {
+  let runQualityGates: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    const mod = await import("../src/handlers/run-quality-gates.js");
+    runQualityGates = mod.ritsu_run_quality_gates;
+  });
+
+  it("should return quality gates result with lint and test", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await runQualityGates({ skip_lint: true, skip_test: true });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(typeof data.passed).toBe("boolean");
+    expect(data.lint).toBeDefined();
+    expect(data.test).toBeDefined();
     delete process.env.RITSU_PROJECT_ROOT;
   });
 });

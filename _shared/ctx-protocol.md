@@ -1,8 +1,8 @@
 # 情景记忆持久化协议 (Context Protocol)
 
-> Ritsu Bundle 共享协议 v3.5.0
+> Ritsu Bundle 共享协议 v3.6.0
 > 解决问题：会话重置后 AI 丢失当前任务上下文（任务在哪一步、领域是什么、产物在哪里）
-> v3.5.0 扩展：从 3 态记录（started/done/failed）演进为全生命周期事件流，支持 UI 渲染
+> v3.6.0 精简：事件流从 10 种收敛为 4 种核心类型，审批/熔断/进度改为 AI 自然语言输出
 
 ---
 
@@ -14,41 +14,26 @@
 
 ### 事件类型 (status 枚举)
 
-| status              | 触发时机                   | 必填附加字段                        | UI 渲染建议                |
-| ------------------- | -------------------------- | ----------------------------------- | -------------------------- |
-| `started`           | 技能启动（领域解析完成后） | `step`                              | SkillTimeline 起始节点     |
-| `step_done`         | 单个步骤完成               | `step`, `duration_ms`               | 进度条推进 + 耗时标注      |
-| `step_failed`       | 单个步骤失败               | `step`, `error`                     | 红色错误节点 + 错误描述    |
-| `approval_required` | 需要人类审批               | `step`, `approval`                  | ApprovalDialog 弹出        |
-| `approval_granted`  | 人类批准                   | `step`, `approval`                  | ApprovalDialog 关闭        |
-| `approval_denied`   | 人类拒绝                   | `step`, `approval`                  | ApprovalDialog 关闭 + 回退 |
-| `artifact_written`  | 产物文件写入完成           | `step`, `artifact`, `artifact_meta` | 产物预览卡片               |
-| `circuit_breaker`   | 熔断触发                   | `step`, `error`                     | 红色告警 + 重定向提示      |
-| `done`              | 技能完成                   | `artifact`, `duration_ms`           | SkillTimeline 终止节点     |
-| `failed`            | 技能失败                   | `error`                             | 红色终止节点               |
+| status             | 触发时机                   | 必填附加字段                        |
+| ------------------ | -------------------------- | ----------------------------------- |
+| `started`          | 技能启动（领域解析完成后） | `step`                              |
+| `done`             | 技能完成                   | `step`, `artifact`                  |
+| `failed`           | 技能失败                   | `step`, `error`                     |
+| `artifact_written` | 产物文件写入完成           | `step`, `artifact`, `artifact_meta` |
 
-> ⚠️ **向后兼容**：旧 LLM 忽略新增 status 值和附加字段，只读 `started/done/failed` 仍可正常工作。
+> v3.6 移除的事件类型：`step_done`/`step_failed`/`approval_required`/`approval_granted`/`approval_denied`/`circuit_breaker`。审批由 AI 自然语言输出，熔断状态由 `ritsu_read_ctx` 的 `circuit_breaker_status` 自动计算。
 
 ### 记录格式（JSONL，每行一个 JSON 对象，追加不覆盖）
 
-**基础示例（3 态，向后兼容）**：
+**基础示例（4 种核心事件）**：
 
 ```jsonl
-{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started","step":"1/4","artifact":null,"progress":null}
-{"ts":"20260509-145010","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"step_done","step":"1/4","artifact":null,"progress":null,"duration_ms":500}
-{"ts":"20260509-145020","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"step_done","step":"2/4","artifact":null,"progress":null,"duration_ms":1200}
-{"ts":"20260509-145030","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"artifact_written","step":"3/4","artifact":".ritsu/handoff-user-login-flow.md","progress":null,"artifact_meta":{"type":"handoff","size_bytes":2340,"summary":"用户登录流程设计，含 5 个实施项"}}
-{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"done","step":"4/4","artifact":".ritsu/handoff-user-login-flow.md","progress":null,"duration_ms":3200}
+{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started","step":"1/4"}
+{"ts":"20260509-145030","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"artifact_written","step":"3/4","artifact":".ritsu/handoff-user-login-flow.md","artifact_meta":{"type":"handoff","size_bytes":2340,"summary":"用户登录流程设计，含 5 个实施项"}}
+{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"done","step":"4/4","artifact":".ritsu/handoff-user-login-flow.md"}
 ```
 
-**审批事件示例**：
-
-```jsonl
-{"ts":"20260509-145030","correlation_id":"cid-20260509-001","skill":"dev","domain":"backend","status":"approval_required","step":"3/5","artifact":null,"progress":null,"approval":{"type":"confirm","title":"确认删除以下未引用文件","options":["全部确认","仅删除安全项","取消"],"context":{"files":["utils/old-helper.ts","types/deprecated.d.ts"]}}}
-{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"dev","domain":"backend","status":"approval_granted","step":"3/5","artifact":null,"progress":null,"approval":{"choice":"全部确认"}}
-```
-
-**熔断事件示例**：
+**失败事件示例**：
 
 ```jsonl
 {
@@ -56,67 +41,25 @@
   "correlation_id": "cid-20260509-001",
   "skill": "review",
   "domain": "backend",
-  "status": "circuit_breaker",
+  "status": "failed",
   "step": "2/3",
-  "artifact": null,
-  "progress": null,
-  "error": "连续两次 FAIL，熔断触发",
-  "redirect": "think"
-}
-```
-
-**violation 事件示例**：
-
-```jsonl
-{
-  "ts": "20260509-145030",
-  "correlation_id": "cid-20260509-001",
-  "skill": "dev",
-  "domain": "backend",
-  "status": "step_failed",
-  "step": "2/5",
-  "artifact": null,
-  "progress": null,
-  "error": "AP-2: 引用未验证标识符 'useAuth'",
-  "violation": {
-    "id": "AP-2",
-    "severity": "FATAL",
-    "pattern": "Hallucinate paths",
-    "evidence": "grep 返回 0 matches for useAuth"
-  }
+  "error": "Hard Stop: AP-2 引用未验证标识符 'useAuth'"
 }
 ```
 
 **字段说明**：
 
-| 字段             | 类型         | 必填 | 说明                                                                                            |
-| ---------------- | ------------ | ---- | ----------------------------------------------------------------------------------------------- |
-| `ts`             | string       | ✅   | `YYYYMMDD-HHMMSS` 格式时间戳                                                                    |
-| `correlation_id` | string       | ✅   | 任务链路关联 ID（格式 `cid-{YYYYMMDD}-{seq}`），由 route 生成，同链路技能继承                   |
-| `skill`          | string       | ✅   | 技能名：route/init/think/dev/optimize/review/hunt/triage                                        |
-| `domain`         | string       | ✅   | 领域值：frontend/backend/fullstack/infra/data                                                   |
-| `status`         | enum         | ✅   | 见上方事件类型表                                                                                |
-| `step`           | string       | ⚠️   | 格式 `{current}/{total}`（如 `2/5`），step*done/step_failed/approval*\*/artifact_written 时必填 |
-| `artifact`       | string\|null | ✅   | 产物文件路径，无则为 `null`                                                                     |
-| `progress`       | string\|null |      | 执行进度标记（如 `dev:chunk2/5`），仅 `started` 状态需要，`done`/`failed` 时为 `null`           |
-| `duration_ms`    | number       |      | 步骤/技能耗时毫秒，step_done/done 时可选                                                        |
-| `error`          | string       |      | step_failed/failed/circuit_breaker 时必填，一句话错误描述                                       |
-| `approval`       | object       |      | approval_required/granted/denied 时必填，见审批协议                                             |
-| `artifact_meta`  | object       |      | artifact_written 时必填，见产物元数据                                                           |
-| `violation`      | object       |      | step_failed 且由 anti-pattern 触发时可选，见 violation 协议                                     |
-| `redirect`       | string       |      | circuit_breaker 时必填，重定向目标技能名                                                        |
-| `transition`     | object       |      | 状态机流转事件时可选（含 from/to/event/ui_hint），供 UI 渲染状态动画                            |
-
-**审批协议字段 (approval)**：
-
-| 子字段    | 类型     | 必填           | 说明                                                                       |
-| --------- | -------- | -------------- | -------------------------------------------------------------------------- |
-| `type`    | enum     | ✅             | `confirm`（是/否）/ `choose`（多选一）/ `review_dangerous`（危险操作审查） |
-| `title`   | string   | ✅             | 审批标题（UI 渲染为对话框标题）                                            |
-| `options` | string[] | ✅             | 可选项列表                                                                 |
-| `context` | object   |                | 审批上下文数据（如文件列表、diff 摘要）                                    |
-| `choice`  | string   | granted 时必填 | 用户选择的选项                                                             |
-| `reason`  | string   | denied 时可选  | 用户拒绝原因                                                               |
+| 字段             | 类型         | 必填 | 说明                                                                              |
+| ---------------- | ------------ | ---- | --------------------------------------------------------------------------------- |
+| `ts`             | string       | ✅   | `YYYYMMDD-HHMMSS` 格式时间戳                                                      |
+| `correlation_id` | string       | ✅   | 任务链路关联 ID（格式 `cid-{YYYYMMDD}-{seq}`），由 route 生成，同链路技能继承     |
+| `skill`          | string       | ✅   | 技能名：route/init/think/dev/optimize/review/hunt/triage                          |
+| `domain`         | string       | ✅   | 领域值：frontend/backend/fullstack/infra/data                                     |
+| `status`         | enum         | ✅   | 见上方事件类型表                                                                  |
+| `step`           | string       | ⚠️   | 格式 `{current}/{total}`（如 `2/5`），started/done/failed/artifact_written 时必填 |
+| `artifact`       | string\|null |      | 产物文件路径，done/artifact_written 时必填                                        |
+| `error`          | string       |      | failed 时必填，一句话错误描述                                                     |
+| `artifact_meta`  | object       |      | artifact_written 时必填，见产物元数据                                             |
 
 **产物元数据字段 (artifact_meta)**：
 
@@ -125,24 +68,6 @@
 | `type`       | enum   | ✅   | handoff/diagnosis/review-stamp/optimize-report/ctx |
 | `size_bytes` | number | ✅   | 文件大小                                           |
 | `summary`    | string | ✅   | 一句话摘要（UI 渲染为预览卡片标题）                |
-
-**violation 字段**：
-
-| 子字段     | 类型   | 必填 | 说明                            |
-| ---------- | ------ | ---- | ------------------------------- |
-| `id`       | string | ✅   | anti-pattern ID（如 AP-2、R-3） |
-| `severity` | enum   | ✅   | FATAL/WARN/HARD_STOP            |
-| `pattern`  | string | ✅   | 违反的模式名称                  |
-| `evidence` | string | ✅   | 具体证据描述                    |
-
-**transition 字段**：
-
-| 子字段    | 类型   | 必填 | 说明                                              |
-| --------- | ------ | ---- | ------------------------------------------------- |
-| `from`    | string | ✅   | 源技能名（如 route）                              |
-| `to`      | string | ✅   | 目标技能名（如 dev）                              |
-| `event`   | string | ✅   | 触发事件名（对应 state-machine.yaml transitions） |
-| `ui_hint` | string | ✅   | UI 渲染提示（如 show_dev_entry）                  |
 
 **机器可读 Schema**：本协议的完整 JSON Schema 见 `_shared/ctx-event-schema.json`，可用于 TypeScript 类型生成、运行时校验和 UI 组件 props 推导。
 
@@ -169,11 +94,10 @@
 
 当检测到未完成任务并用户确认继续时，按以下规则恢复：
 
-1. **定位断点**：读取未完成记录的 `skill`、`step` 和 `progress` 字段
-2. **step 级恢复**：查找该 skill 的最后一条 `step_done` 事件，从其 `step` 的下一步开始（如最后完成 `step_done step=2/5`，则从 Step 3 开始）
-3. **progress 级恢复**：若 `progress` 标记了 chunk（如 `dev:chunk2/5`），则从 chunk 3 开始
-4. **无 step/progress 时**：从该 skill 的 Step 1 重新开始（保守策略，避免跳步导致状态不一致）
-5. **恢复后首行输出**：
+1. **定位断点**：`ritsu_read_ctx` 返回 `recovery_context`，包含未完成任务的 skill/domain/step 信息
+2. **现实对账**：`ritsu_read_ctx` 返回 `reality_check`，检查 handoff/diagnosis 等产物文件是否仍存在于磁盘（git reset --hard 后文件可能丢失）
+3. **熔断检测**：`ritsu_read_ctx` 返回 `circuit_breaker_status`，若连续 failed ≥ 2 则 `should_redirect=think`，AI 应先升维再继续
+4. **恢复后首行输出**：
    ```
    🔄 会话恢复: /r-{skill} | 断点: step {N}/{M} | 领域: {domain}
    ```
@@ -182,7 +106,7 @@
 
 - `.ritsu/ctx-{YYYY-MM}.jsonl` 只追加，不修改历史记录（append-only）。
 - **天然防膨胀**：因采用按月分片路由（Time-based Sharding），单文件体积得到物理遏制。
-- **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。必须调用 `ritsu_exec` 执行 `grep -rni "{关键字}" .ritsu/ --include="*.md" --include="*.html" --include="*.jsonl"`，通过底层检索抓取相关的 `handoff`、`diagnosis` 碎片，实现本地 RAG 问答。
+- **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。必须调用 `ritsu_exec` 执行 `grep -rni "{关键字}" .ritsu/ --include="*.md" --include="*.jsonl"`，通过底层检索抓取相关的 `handoff`、`diagnosis` 碎片，实现本地 RAG 问答。
 
 ### 月度摘要机制 (Monthly Summary)
 

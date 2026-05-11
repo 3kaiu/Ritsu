@@ -1,9 +1,9 @@
-# Ritsu MCP Tool Schema 声明 v3.5.1
+# Ritsu MCP Tool Schema 声明 v3.6.0
 # 所有技能中的工具调用必须引用此文件中声明的工具名，禁止用自然语言描述工具调用行为。
 # AI 执行时应将此文件视为"可用工具菜单"，按 Schema 构造调用参数。
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
 #
-# ⚠️ SDK 模式：MCP Server 只提供结构化 I/O 原语，不做业务决策。
+# ⚠️ SDK + 业务工具模式：MCP Server 提供 SDK 原语 + 高频业务封装。
 # SKILL.md = 程序，AI = CPU，MCP 工具 = 系统调用。
 #
 # ⚠️ 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
@@ -12,43 +12,31 @@
 
 tools:
   - name: ritsu_emit_event
-    description: 向当月 ctx 文件追加一条结构化事件记录。写入前自动校验是否符合 ctx-event-schema.json。此工具替代 ritsu_write_artifact(type=ctx)，职责更单一——仅处理事件流写入
+    description: 向当月 ctx 文件追加一条结构化事件记录。写入前自动校验是否符合 ctx-event-schema.json。仅支持 4 种核心事件类型（started/done/failed/artifact_written），审批/步骤进度/熔断等通过 AI 自然语言输出
     call_template:
       tool: ritsu_emit_event
       params:
-        event_type: "{started|step_done|step_failed|approval_required|approval_granted|approval_denied|artifact_written|circuit_breaker|done|failed}"
+        event_type: "{started|done|failed|artifact_written}"
         step: "{N}/{M}"
         correlation_id: "{cid}"
         skill: "{skill_name}"
         domain: "{value}"
       example:
-        event_type: "step_done"
-        step: "3/7"
+        event_type: "done"
+        step: "7/7"
         correlation_id: "cid-20260509-001"
         skill: "dev"
         domain: "frontend"
     input:
       event_type:
         type: enum
-        values:
-          [
-            started,
-            step_done,
-            step_failed,
-            approval_required,
-            approval_granted,
-            approval_denied,
-            artifact_written,
-            circuit_breaker,
-            done,
-            failed,
-          ]
+        values: [started, done, failed, artifact_written]
         required: true
-        description: "事件类型（对应 ctx-protocol.md status 枚举）"
+        description: "事件类型（精简为 4 种核心类型：started=会话恢复, done/failed=状态判定, artifact_written=产物追踪）"
       step:
         type: string
         required: false
-        description: "步骤进度，格式 N/M（started/step_done/step_failed/approval_*/artifact_written/circuit_breaker/done 时必填，由 Schema if-then 强制）"
+        description: "步骤进度，格式 N/M（started/done/artifact_written 时必填）"
       correlation_id:
         type: string
         required: false
@@ -65,38 +53,14 @@ tools:
         type: string
         required: false
         description: "产物文件路径（artifact_written 时必填）"
-      progress:
-        type: string
-        required: false
-        description: "执行进度标记（如 dev:chunk2/5）"
       error:
         type: string
         required: false
-        description: "step_failed/failed/circuit_breaker 时必填"
-      approval:
-        type: object
-        required: false
-        description: "approval_* 事件时必填"
+        description: "failed 时必填"
       artifact_meta:
         type: object
         required: false
         description: "artifact_written 事件时必填"
-      violation:
-        type: object
-        required: false
-        description: "anti-pattern 触发时可选"
-      redirect:
-        type: string
-        required: false
-        description: "circuit_breaker 时必填"
-      transition:
-        type: object
-        required: false
-        description: "状态机流转事件时可选（含 from/to/event/ui_hint）"
-      duration_ms:
-        type: integer
-        required: false
-        description: "step_done/done 时可选"
     validation: "写入前校验事件是否符合 _shared/ctx-event-schema.json 的 if-then 条件"
     concurrency_control: "原子追加锁"
     output_schema:
@@ -109,20 +73,27 @@ tools:
         line_count:
           type: integer
           description: "当前 ctx 文件总行数（写入后）"
-        event:
-          type: object
-          description: "回显写入的完整事件对象"
+        correlation_id:
+          type: string
+          description: "事件关联 ID"
 
   - name: ritsu_read_ctx
-    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete（最后未完成任务）、last_completed（最后已完成任务）、recent_entries（最近 10 条）、pending_approvals（待审批事件）
+    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete、last_completed、recent_entries，以及自动计算的 recovery_context（可操作恢复上下文）、reality_check（现实对账）、circuit_breaker_status（熔断状态）
     call_template:
       tool: ritsu_read_ctx
-      params: {} # 无参数
+      params: {}
     input: {}
     output_schema:
       type: object
       required:
-        [last_incomplete, last_completed, recent_entries, pending_approvals]
+        [
+          last_incomplete,
+          last_completed,
+          recent_entries,
+          recovery_context,
+          reality_check,
+          circuit_breaker_status,
+        ]
       properties:
         last_incomplete:
           type: object
@@ -145,14 +116,33 @@ tools:
           description: "最近 10 条事件"
           items:
             type: object
-        pending_approvals:
-          type: array
-          description: "待审批事件列表"
-          items:
-            type: object
+        recovery_context:
+          type: object
+          description: "可操作恢复上下文（仅 last_incomplete 存在时非 null）"
+          properties:
+            skill: { type: string }
+            domain: { type: string }
+            step: { type: string }
+            correlation_id: { type: string }
+            last_artifact: { type: string }
+            resume_hint: { type: string }
+        reality_check:
+          type: object
+          description: "现实对账结果（检查 artifact 是否仍存在）"
+          properties:
+            desync_detected: { type: boolean }
+            missing_artifacts: { type: array, items: { type: string } }
+        circuit_breaker_status:
+          type: object
+          description: "熔断状态（连续 failed >=2 时 should_redirect=think）"
+          properties:
+            consecutive_fails: { type: integer }
+            should_redirect: { type: string }
+            last_failed_skill: { type: string }
+            last_failed_cid: { type: string }
 
   - name: ritsu_write_artifact
-    description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。diagnosis/review-stamp 类型支持 md+html 双格式
+    description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
     call_template:
       tool: ritsu_write_artifact
       params:
@@ -177,10 +167,6 @@ tools:
         type: string
         required: true
         description: "文件内容（Markdown 格式）"
-      html_content:
-        type: string
-        required: false
-        description: "HTML 格式内容（仅 diagnosis/review-stamp 时可选，自动生成双格式）"
       artifact_meta:
         type: object
         required: false
@@ -193,9 +179,6 @@ tools:
         path:
           type: string
           description: "写入文件绝对路径"
-        html_path:
-          type: string
-          description: "HTML 格式文件路径（仅双格式产物）"
         size_bytes:
           type: integer
           description: "文件大小"
@@ -296,3 +279,127 @@ tools:
           items:
             type: string
           description: "校验错误列表"
+
+  - name: ritsu_get_changed_files
+    description: 获取 Git 工作区和暂存区的变更文件列表，自动推断领域。返回每个变更文件的路径、状态、扩展名，以及基于文件后缀的领域推断结果。替代 ritsu_exec("git diff --name-only") 的裸命令调用
+    call_template:
+      tool: ritsu_get_changed_files
+      params:
+        staged: true
+        unstaged: true
+    input:
+      staged:
+        type: boolean
+        required: false
+        description: "是否包含暂存区变更（默认 true）"
+      unstaged:
+        type: boolean
+        required: false
+        description: "是否包含未暂存变更（默认 true）"
+    output_schema:
+      type: object
+      required: [files, total, domain_hint]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              status: { type: string }
+              extension: { type: string }
+        total:
+          type: integer
+        domain_hint:
+          type: string
+
+  - name: ritsu_get_diff
+    description: 获取 Git diff 的结构化分析结果。包含文件级统计、新增标识符提取、完整 diff 文本。替代 ritsu_exec("git diff") 的裸命令调用，review 技能的核心数据源
+    call_template:
+      tool: ritsu_get_diff
+      params:
+        cached: false
+    input:
+      cached:
+        type: boolean
+        required: false
+        description: "是否查看暂存区 diff（默认 false）"
+      max_output_lines:
+        type: integer
+        required: false
+        description: "diff 文本最大行数（默认 500）"
+    output_schema:
+      type: object
+      required: [files, total_files, new_identifiers, diff]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              additions: { type: integer }
+              deletions: { type: integer }
+              patch_summary: { type: string }
+        total_files:
+          type: integer
+        new_identifiers:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              file: { type: string }
+              line: { type: integer }
+        diff:
+          type: string
+        truncated:
+          type: boolean
+
+  - name: ritsu_run_quality_gates
+    description: 执行项目 Lint 和 Test 质量门禁，返回结构化结果。自动从 AGENTS.md 或 package.json 解析命令。测试失败时解析失败用例列表。替代 ritsu_exec("npm run lint") + ritsu_exec("npm test") 的裸命令调用
+    call_template:
+      tool: ritsu_run_quality_gates
+      params:
+        skip_lint: false
+        skip_test: false
+    input:
+      skip_lint:
+        type: boolean
+        required: false
+        description: "跳过 Lint 检查（默认 false）"
+      skip_test:
+        type: boolean
+        required: false
+        description: "跳过 Test 检查（默认 false）"
+      timeout_ms:
+        type: integer
+        required: false
+        description: "超时毫秒数（默认 60000）"
+    output_schema:
+      type: object
+      required: [passed, lint, test]
+      properties:
+        passed:
+          type: boolean
+          description: "Lint + Test 是否全部通过"
+        lint:
+          type: object
+          properties:
+            passed: { type: boolean }
+            output: { type: string }
+        test:
+          type: object
+          properties:
+            passed: { type: boolean }
+            total: { type: integer }
+            failures:
+              type: array
+              items:
+                type: object
+                properties:
+                  suite: { type: string }
+                  test: { type: string }
+                  error: { type: string }
+                  file_hint: { type: string }
+            output: { type: string }
