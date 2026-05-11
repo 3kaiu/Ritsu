@@ -88,7 +88,10 @@ hard_constraints:
 - 执行一次 **历史相似案例召回（长期工程记忆）**（用于快速定位可能的配置/入口/修复策略）：
   - 若 `.ritsu/semantic-index.json` 尚不存在或明显过旧，先调用：
     - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
-  - 调用语义检索：
+  - 若 `.ritsu/kg.json` 存在（或你已知依赖图对定位关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
+    - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）
+    - `ritsu_semantic_graph_rerank({ query: "{失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{可选: 当前涉及的关键文件路径}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
+  - 否则回退到纯语义检索：
     - `ritsu_semantic_search({ query: "{失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
   - 输出命中的历史文件路径 + heading + snippet，并强调其仅为线索，后续必须用当前证据验证
 - 自动进入 `/r-hunt`：

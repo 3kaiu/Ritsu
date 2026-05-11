@@ -45,12 +45,15 @@ hard_constraints:
 
 1. 若 `.ritsu/semantic-index.json` 尚不存在或内容明显过旧，先调用一次增量构建：
    - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
-2. 调用语义检索（优先诊断/审查结论，不要把 handoff 当作“答案”）：
+2. 若 `.ritsu/kg.json` 存在（或你已知当前项目依赖图对定位很关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
+   - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）
+   - `ritsu_semantic_graph_rerank({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{可选: 当前涉及的关键文件路径}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
+3. 否则回退到纯语义检索（优先诊断/审查结论，不要把 handoff 当作“答案”）：
    - `ritsu_semantic_search({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
-3. 将匹配结果作为“线索”，输出：
+4. 将匹配结果作为“线索”，输出：
    - 命中的历史文件路径 + heading + snippet
    - 当时的修复入口/配置文件/关键命令（若 snippet 中可直接读出）
-4. 约束：
+5. 约束：
    - 召回结果 **只能作为假设线索**，不得直接当作根因结论
    - 后续必须在步骤 3/5 用当前项目的证据验证（不允许“凭记忆直接改”）
 
