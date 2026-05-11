@@ -1,9 +1,9 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, relative, dirname } from "node:path";
-import { spawn } from "node:child_process";
 import { getProjectRoot, errorResult, textResult } from "./_utils.js";
 import { readTsImportResolver, resolveImport } from "./_ts-resolve-utils.js";
+import { runRg, parseRgFilePaths } from "./_rg-utils.js";
 
 type EdgeType = "imports" | "references";
 
@@ -31,54 +31,6 @@ type Kg = {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function runRg(
-  pattern: string,
-  cwd: string,
-  globs: string[] = [],
-): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolvePromise) => {
-    const args = [
-      "--no-heading",
-      "--line-number",
-      "--color",
-      "never",
-      pattern,
-      ".",
-    ];
-    for (const g of globs) args.unshift("--glob", g);
-
-    const child = spawn("rg", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    const maxBytes = 10 * 1024 * 1024;
-    child.stdout.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBytes) stdout += chunk.toString("utf-8");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBytes) stderr += chunk.toString("utf-8");
-    });
-    child.on("close", (code) => {
-      resolvePromise({
-        ok: code === 0 || code === 1,
-        output: (code === 0 || code === 1 ? stdout : stderr || stdout).trim(),
-      });
-    });
-    child.on("error", (err) =>
-      resolvePromise({ ok: false, output: err.message }),
-    );
-  });
-}
-
-function parseRgFilePaths(output: string): string[] {
-  const files = new Set<string>();
-  for (const line of output.split("\n")) {
-    if (!line.trim()) continue;
-    const m = line.match(/^([^:]+):\d+:/);
-    if (m) files.add(m[1]);
-  }
-  return Array.from(files);
 }
 
 function extractImports(content: string): string[] {
