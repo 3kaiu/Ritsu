@@ -43,6 +43,37 @@ hard_constraints:
 - **架构模式**：采样 3-5 个核心文件，判断分层结构
 - **质量门禁**：读取 `Makefile` / `.github/workflows/` / `package.json scripts`，找不到则填 `待补充`
 
+### 2.1 技术栈特征自动嗅探（Deep Fingerprinting）
+
+目标：识别“领域内的子生态/关键库/工程约束”，并将更细粒度的检查规则写入 `AGENTS.md`，避免领域规则永远静态。
+
+允许使用的信号源（按优先级）：
+
+- **依赖信号**：从 `package.json` dependencies/devDependencies 精确识别（如 `zustand`/`next`/`vite`）
+- **目录结构信号**：如 `.github/workflows/`、`app/` vs `pages/`、`src/`、`infra/`、`prisma/` 等
+- **文件/代码信号**：如 `components.json`（shadcn/ui）、`tailwind.config.*`、`zustand` store 文件命名习惯、`import create from 'zustand'` 等
+
+输出两类结果：
+
+1. **tech_fingerprints**：列出命中的特征（仅用于可读性）
+2. **rules_overrides**：将特征对应的硬红线/纪律以项目级规则形式注入（用于后续技能执行）
+
+Zustand 示例（若命中 `zustand`）：在 `AGENTS.md` 追加：
+
+```yaml
+规则覆盖:
+  rules_overrides:
+    add:
+      - id: "PROJ-FE-ZUSTAND-1"
+        name: "Zustand 状态不可变性"
+        scope: "dev"
+        rule: "对 Zustand store 的状态更新必须保持不可变性（禁止原地 mutate），并避免在 selector 中创建新对象导致无效重渲染"
+      - id: "PROJ-FE-ZUSTAND-2"
+        name: "Zustand Selector 性能"
+        scope: "review"
+        rule: "对 Zustand selector 必须关注 referential equality；需要时使用 shallow/自定义比较，禁止 selector 每次返回新引用"
+```
+
 ### 3. 领域解析（结合扫描结果）
 
 > 引用 `_shared/skill-common-steps.md` Step 1
@@ -58,7 +89,14 @@ hard_constraints:
 根据步骤 1 用户的选择执行不同写入策略：
 
 - **若是全新生成 / 用户选择【强行覆盖】**：
-  严格按 `_shared/artifact-schema.yaml` Schema 0 输出，将步骤 2/3 的扫描值填入。任何无法确定的字段填 `待补充`，不允许留空。调用 `ritsu_write_artifact` 写入全量内容。
+  严格按 `_shared/artifact-schema.yaml` Schema 0 输出，将步骤 2/3 的扫描值填入。任何无法确定的字段填 `待补充`，不允许留空。
+
+  若步骤 2.1 命中指纹特征：
+  - 追加 `技术栈特征`（tech_fingerprints）可读清单
+  - 追加 `规则覆盖.rules_overrides`（仅使用 add/disable/downgrade 三类操作）
+
+  调用 `ritsu_write_artifact` 写入全量内容。
+
 - **若是用户选择【无损注入】**：
   在现有的 `AGENTS.md` 最顶部追加 Ritsu Block：
 

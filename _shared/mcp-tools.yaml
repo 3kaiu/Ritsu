@@ -139,6 +139,54 @@ tools:
             last_failed_skill: { type: string }
             last_failed_cid: { type: string }
 
+  - name: ritsu_read_agents
+    description: 读取并解析项目根 AGENTS.md，返回结构化的 domain、ritsu_version、tech_fingerprints 以及 rules_overrides（项目级规则覆盖：disable/downgrade/add）
+    call_template:
+      tool: ritsu_read_agents
+      params: {}
+    input: {}
+    output_schema:
+      type: object
+      required: [path, domain]
+      properties:
+        path:
+          type: string
+          description: "AGENTS.md 绝对路径"
+        ritsu_version:
+          type: string
+          description: "AGENTS.md 中的 ritsu-version（若存在）"
+        domain:
+          type: string
+          description: "AGENTS.md 中的 domain"
+        tech_fingerprints:
+          type: array
+          description: "项目嗅探到的技术栈特征（可选）"
+          items:
+            type: string
+        rules_overrides:
+          type: object
+          description: "项目级规则覆盖（可选）"
+          properties:
+            disable:
+              type: array
+              items: { type: string }
+            downgrade:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  severity: { type: string }
+            add:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  name: { type: string }
+                  scope: { type: string }
+                  rule: { type: string }
+
   - name: ritsu_write_artifact
     description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
     call_template:

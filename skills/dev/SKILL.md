@@ -63,6 +63,14 @@ hotfix 交付摘要格式：
 
 `[Step 1 Complete]` 后进入步骤 2。
 
+读取项目级规则覆盖（Domain Adaptive 强化）：
+
+- 调用 `ritsu_read_agents` 获取 `rules_overrides.add`
+- 过滤 `scope=dev` 的规则（如 `PROJ-FE-ZUSTAND-*`）
+- 将其视为本次 dev 的额外硬约束：
+  - 与领域 `coding_disciplines` 同级执行
+  - 命中时必须停止并要求修正
+
 **隐式绑定优先**：首先检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何 `handoff-*.md` 或 `diagnosis-*.md` 文件。
 
 - **若有** → 直接将其认定为本次 `dev` 的执行目标，跳过询问！并在输出中注明"已根据 IDE 焦点自动锁定目标文件"。

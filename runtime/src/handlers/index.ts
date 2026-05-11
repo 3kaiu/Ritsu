@@ -18,6 +18,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ritsu_emit_event } from "./emit-event.js";
 import { ritsu_read_ctx } from "./read-ctx.js";
+import { ritsu_read_agents } from "./read-agents.js";
 import { ritsu_write_artifact } from "./write-artifact.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
@@ -33,6 +34,7 @@ export const registerHandlers: Record<
 > = {
   ritsu_emit_event,
   ritsu_read_ctx,
+  ritsu_read_agents,
   ritsu_write_artifact,
   ritsu_list_artifacts,
   ritsu_exec,
