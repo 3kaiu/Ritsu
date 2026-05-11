@@ -9,6 +9,9 @@ type IndexEntry = {
   artifact_type: string;
   path: string;
   chunk_index: number;
+  heading?: string;
+  chunk_start?: number;
+  chunk_end?: number;
   content_hash: string;
   embedding: number[];
   created_at: string;
@@ -26,6 +29,7 @@ type Match = {
   path: string;
   artifact_type: string;
   chunk_index: number;
+  heading?: string;
   snippet: string;
 };
 
@@ -38,7 +42,12 @@ function loadIndex(indexPath: string): SemanticIndexFile {
   return parsed;
 }
 
-function getSnippet(path: string, chunkIndex: number, chunkSize: number, overlap: number): string {
+function getSnippet(
+  path: string,
+  chunkIndex: number,
+  chunkSize: number,
+  overlap: number,
+): string {
   if (!existsSync(path)) return "";
   const content = readFileSync(path, "utf-8");
   const clean = content.trim();
@@ -48,6 +57,14 @@ function getSnippet(path: string, chunkIndex: number, chunkSize: number, overlap
   const start = Math.max(0, chunkIndex * step);
   const end = Math.min(clean.length, start + chunkSize);
   return clean.slice(start, end).replace(/\s+/g, " ").trim();
+}
+
+function getSnippetByOffset(path: string, start: number, end: number): string {
+  if (!existsSync(path)) return "";
+  const content = readFileSync(path, "utf-8");
+  const s = Math.max(0, Math.min(start, content.length));
+  const e = Math.max(s, Math.min(end, content.length));
+  return content.slice(s, e).replace(/\s+/g, " ").trim();
 }
 
 export async function ritsu_semantic_search(
@@ -67,7 +84,9 @@ export async function ritsu_semantic_search(
 
   const indexPath = resolve(root, ".ritsu", "semantic-index.json");
   if (!existsSync(indexPath)) {
-    return errorResult(`semantic index not found: ${indexPath}. Run ritsu_semantic_index_build first.`);
+    return errorResult(
+      `semantic index not found: ${indexPath}. Run ritsu_semantic_index_build first.`,
+    );
   }
 
   let index: SemanticIndexFile;
@@ -80,6 +99,11 @@ export async function ritsu_semantic_search(
   const embedder = await getEmbedder();
   const q = await embedder.embed(query);
 
+  const entryMap = new Map<string, IndexEntry>();
+  for (const e of index.entries) {
+    entryMap.set(`${e.path}#${e.chunk_index}`, e);
+  }
+
   const matches: Match[] = [];
 
   for (const e of index.entries) {
@@ -90,15 +114,22 @@ export async function ritsu_semantic_search(
       path: e.path,
       artifact_type: e.artifact_type,
       chunk_index: e.chunk_index,
+      heading: e.heading,
       snippet: "",
     });
   }
 
   matches.sort((a, b) => b.score - a.score);
-  const top = matches.slice(0, topK).map((m) => ({
-    ...m,
-    snippet: getSnippet(m.path, m.chunk_index, chunkSize, overlap),
-  }));
+  const top = matches.slice(0, topK).map((m) => {
+    const entry = entryMap.get(`${m.path}#${m.chunk_index}`);
+    const snippet =
+      entry &&
+      typeof entry.chunk_start === "number" &&
+      typeof entry.chunk_end === "number"
+        ? getSnippetByOffset(m.path, entry.chunk_start, entry.chunk_end)
+        : getSnippet(m.path, m.chunk_index, chunkSize, overlap);
+    return { ...m, snippet };
+  });
 
   return textResult(
     JSON.stringify({

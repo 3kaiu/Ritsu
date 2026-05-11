@@ -83,36 +83,31 @@ hard_constraints:
 
 当用户选择 **[H] 自愈诊断** 时：
 
-- 进入 `/r-hunt` 并按 hunt 的“沙盒复现协议（Git worktree）”执行
-- 同一个 `correlation_id` 下，沙盒最多尝试 3 次（prepare → exec → cleanup）
-- 输出“是否可复现/最小命令/最可能根因/下一步建议”的汇报后，流水线仍保持暂停状态，等待用户选择 [R]/[T]/[A]
+- 立即停止继续执行后续 steps。
+- 调用 `ritsu_env_probe` 输出环境与 worktree 能力概况。
+- 执行一次 **历史相似案例召回（长期工程记忆）**（用于快速定位可能的配置/入口/修复策略）：
+  - 若 `.ritsu/semantic-index.json` 尚不存在或明显过旧，先调用：
+    - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
+  - 调用语义检索：
+    - `ritsu_semantic_search({ query: "{失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
+  - 输出命中的历史文件路径 + heading + snippet，并强调其仅为线索，后续必须用当前证据验证
+- 自动进入 `/r-hunt`：
+  - 必须输出【边界定义】与【MECE 假设列表】
+  - 禁止改代码
+- 进入沙盒重试循环（最多 3 次）：
 
-**[H] 自愈诊断 — 标准执行模板（强制）**：
+  对 attempt = 1..3：
+  - 4.1 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
+  - 4.2 在沙盒内执行“最小可复现命令”（可多次调用，但每次必须是单命令）：
+    - `ritsu_sandbox_exec({ correlation_id, command: "git status --porcelain" })`
+    - `ritsu_sandbox_exec({ correlation_id, command: "{最小复现命令}" })`
+  - 4.3 证据采集：记录 attempt 编号、命令、`ok/output/cwd`
+  - 4.4 当某个 step 失败时，必须做出选择并显式执行其一：
+    - `ritsu_sandbox_cleanup({ correlation_id })`
 
-1. 环境嗅探（一次即可）：
-   - 调用 `ritsu_env_probe`，确认：
-     - git/worktree 可用
-     - `.ritsu/temp` 可写
-
-2. 生成“最小可复现命令”候选（优先从失败技能的输出中提取，而不是凭空猜测）：
-   - 对 `/r-dev` 或 `/r-test` 的失败：优先选 `ritsu_run_quality_gates` 中实际执行失败的那条命令
-   - 对 `/r-review` 的失败：优先选 `ritsu_get_diff` + 对应检查命令（如 lint/test）
-   - 必须拆分为**单命令**（禁止 `|`/`&&`/重定向/子 shell）
-
-3. 沙盒尝试循环（最多 3 次，必须同一 `correlation_id`）：
-
-   对 attempt = 1..3：
-   - 3.1 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
-   - 3.2 在沙盒内执行“最小可复现命令”（可多次调用，但每次必须是单命令）：
-     - `ritsu_sandbox_exec({ correlation_id, command: "git status --porcelain" })`
-     - `ritsu_sandbox_exec({ correlation_id, command: "{最小复现命令}" })`
-   - 3.3 证据采集：记录 attempt 编号、命令、`ok/output/cwd`
-   - 3.4 无论成功/失败，必须执行清理：
-     - `ritsu_sandbox_cleanup({ correlation_id })`
-
-   **提前停止条件**（命中任一即停止剩余 attempt）：
-   - 在沙盒中 **稳定可复现**（同一命令输出明确失败）
-   - 或确认 **不可复现且证据一致**（例如沙盒连续 2 次通过，但本地/CI 失败，且 env_probe 显示环境差异）
+  **提前停止条件**（命中任一即停止剩余 attempt）：
+  - 在沙盒中 **稳定可复现**（同一命令输出明确失败）
+  - 或确认 **不可复现且证据一致**（例如沙盒连续 2 次通过，但本地/CI 失败，且 env_probe 显示环境差异）
 
 4. 强制汇报（输出格式固定，不得省略）：
 

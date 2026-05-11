@@ -41,6 +41,19 @@ hard_constraints:
 
 - **若有** → 直接读取当前激活的焦点文件内容作为诊断的初始上下文，跳过向用户索要报错信息，并在输出中注明"已根据 IDE 焦点自动提取报错上下文"。
 
+在进入证据抓取前，执行一次 **历史相似案例召回（长期工程记忆）**：
+
+1. 若 `.ritsu/semantic-index.json` 尚不存在或内容明显过旧，先调用一次增量构建：
+   - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
+2. 调用语义检索（优先诊断/审查结论，不要把 handoff 当作“答案”）：
+   - `ritsu_semantic_search({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
+3. 将匹配结果作为“线索”，输出：
+   - 命中的历史文件路径 + heading + snippet
+   - 当时的修复入口/配置文件/关键命令（若 snippet 中可直接读出）
+4. 约束：
+   - 召回结果 **只能作为假设线索**，不得直接当作根因结论
+   - 后续必须在步骤 3/5 用当前项目的证据验证（不允许“凭记忆直接改”）
+
 ### 3. 证据抓取与边界扫描 (Boundary Scan)
 
 `[Step 2 Complete]` 后进入步骤 3。

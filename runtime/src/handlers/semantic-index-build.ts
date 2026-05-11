@@ -1,17 +1,30 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { getEmbedder } from "./_semantic-embed.js";
 
-type ArtifactType = "handoff" | "diagnosis" | "review-stamp" | "optimize-report";
+type ArtifactType =
+  | "handoff"
+  | "diagnosis"
+  | "review-stamp"
+  | "optimize-report";
 
 type IndexEntry = {
   id: string;
   artifact_type: ArtifactType;
   path: string;
   chunk_index: number;
+  heading?: string;
+  chunk_start?: number;
+  chunk_end?: number;
   content_hash: string;
   embedding: number[];
   created_at: string;
@@ -40,16 +53,63 @@ function detectArtifactType(fileName: string): ArtifactType | null {
   return null;
 }
 
-function chunkText(text: string, chunkSize: number, overlap: number): string[] {
-  const clean = text.trim();
-  if (!clean) return [];
-  const out: string[] = [];
+type Section = {
+  heading: string;
+  start: number;
+  end: number;
+};
+
+function splitMarkdownSections(text: string): Section[] {
+  const clean = text;
+  if (!clean.trim()) return [];
+
+  const headingRe = /^(#{1,6})\s+(.+)$/gm;
+  const hits: Array<{ start: number; heading: string }> = [];
+  let m: RegExpExecArray | null;
+  while ((m = headingRe.exec(clean)) !== null) {
+    hits.push({ start: m.index, heading: `${m[1]} ${m[2].trim()}` });
+  }
+
+  // No headings: treat whole file as a single section.
+  if (hits.length === 0) {
+    return [{ heading: "(document)", start: 0, end: clean.length }];
+  }
+
+  const sections: Section[] = [];
+  for (let i = 0; i < hits.length; i++) {
+    const start = hits[i].start;
+    const end = i + 1 < hits.length ? hits[i + 1].start : clean.length;
+    sections.push({ heading: hits[i].heading, start, end });
+  }
+  return sections;
+}
+
+function chunkRange(
+  text: string,
+  start: number,
+  end: number,
+  chunkSize: number,
+  overlap: number,
+): Array<{ start: number; end: number; text: string }> {
+  const out: Array<{ start: number; end: number; text: string }> = [];
+  const section = text.slice(start, end).trim();
+  if (!section) return out;
+
+  // Map trimmed section back to absolute offsets.
+  const leadingWs = text.slice(start, end).indexOf(section[0]);
+  const absStart = start + Math.max(0, leadingWs);
   let i = 0;
-  while (i < clean.length) {
-    const end = Math.min(clean.length, i + chunkSize);
-    out.push(clean.slice(i, end));
-    if (end >= clean.length) break;
-    i = Math.max(0, end - overlap);
+  while (i < section.length) {
+    const relEnd = Math.min(section.length, i + chunkSize);
+    const absChunkStart = absStart + i;
+    const absChunkEnd = absStart + relEnd;
+    out.push({
+      start: absChunkStart,
+      end: absChunkEnd,
+      text: section.slice(i, relEnd),
+    });
+    if (relEnd >= section.length) break;
+    i = Math.max(0, relEnd - overlap);
   }
   return out;
 }
@@ -59,7 +119,8 @@ function loadExistingIndex(path: string): SemanticIndexFile | null {
   try {
     const raw = readFileSync(path, "utf-8");
     const parsed = JSON.parse(raw) as SemanticIndexFile;
-    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.entries)) return null;
+    if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.entries))
+      return null;
     return parsed;
   } catch {
     return null;
@@ -122,18 +183,26 @@ export async function ritsu_semantic_index_build(
       continue;
     }
 
-    const chunks = chunkText(content, chunkSize, overlap);
-    for (let i = 0; i < chunks.length; i++) {
-      const emb = await embedder.embed(chunks[i]);
-      newEntries.push({
-        id: `se-${sha256(`${abs}:${contentHash}:${i}`).slice(0, 16)}`,
-        artifact_type: t,
-        path: abs,
-        chunk_index: i,
-        content_hash: contentHash,
-        embedding: emb,
-        created_at: nowIso(),
-      });
+    const sections = splitMarkdownSections(content);
+    let chunkIndex = 0;
+    for (const s of sections) {
+      const chunks = chunkRange(content, s.start, s.end, chunkSize, overlap);
+      for (const c of chunks) {
+        const emb = await embedder.embed(c.text);
+        newEntries.push({
+          id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
+          artifact_type: t,
+          path: abs,
+          chunk_index: chunkIndex,
+          heading: s.heading,
+          chunk_start: c.start,
+          chunk_end: c.end,
+          content_hash: contentHash,
+          embedding: emb,
+          created_at: nowIso(),
+        });
+        chunkIndex++;
+      }
     }
   }
 

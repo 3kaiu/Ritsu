@@ -654,6 +654,7 @@ tools:
               path: { type: string }
               artifact_type: { type: string }
               chunk_index: { type: integer }
+              heading: { type: string }
               snippet: { type: string }
 
   - name: ritsu_write_artifact

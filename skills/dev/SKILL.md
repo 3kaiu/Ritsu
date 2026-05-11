@@ -163,18 +163,24 @@ hotfix 交付摘要格式：
 当质量门禁连续失败或出现“无法稳定复现/环境不一致/疑似缓存污染”时，触发 **自愈诊断协议（失败 → 自动 hunt → 沙盒最多 3 次尝试 → 汇报）**：
 
 1. 调用 `ritsu_env_probe` 输出环境与 worktree 能力概况（用于判断是否具备沙盒条件）
-2. 进入 `/r-hunt`（在同一会话内自动切换思维模式，不改代码），并提供以下结构化上下文：
+2. 执行一次 **历史相似案例召回（长期工程记忆）**（用于快速定位可能的配置/入口/修复策略）：
+   - 若 `.ritsu/semantic-index.json` 尚不存在或明显过旧，先调用：
+     - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
+   - 调用语义检索：
+     - `ritsu_semantic_search({ query: "{质量门禁失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
+   - 输出命中的历史文件路径 + heading + snippet，并强调其仅为线索，后续必须用当前证据验证
+3. 进入 `/r-hunt`（在同一会话内自动切换思维模式，不改代码），并提供以下结构化上下文：
    - quality_gates 的失败输出（lint/test output + failures 列表）
    - 本次变更的 diff 摘要（优先调用 `ritsu_get_diff`）
    - 当前执行目标 handoff（若存在）
-3. 沙盒最多 3 次尝试（同一个 `correlation_id`）：
+4. 沙盒最多 3 次尝试（同一个 `correlation_id`）：
    - 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
    - 针对失败项做“最小可复现命令”执行：
      - lint 失败：`ritsu_sandbox_exec({ correlation_id, command: "npm run lint" })`（或项目实际 lint 命令）
      - test 失败：`ritsu_sandbox_exec({ correlation_id, command: "npm test" })`（或项目实际 test 命令）
    - 若需要多命令链路，必须拆成多次 `ritsu_sandbox_exec`（禁止管道/重定向）
    - 每次尝试结束都必须调用 `ritsu_sandbox_cleanup({ correlation_id })`，确保不残留 worktree
-4. 输出汇报（强制）：
+5. 输出汇报（强制）：
    - “在沙盒中是否可复现”
    - “复现的最小命令”
    - “证据指向的最可能根因”
