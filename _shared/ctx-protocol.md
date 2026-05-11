@@ -16,29 +16,11 @@
 
 4 种核心事件：`started` / `done` / `failed` / `artifact_written`
 
-> 完整字段定义、类型约束和条件必填规则见 `_shared/ctx-event-schema.json`（单一真相源）。
-> 本文件不再重复声明字段说明，避免双源维护。
+> 完整字段定义、类型约束和条件必填规则见 `_shared/ctx-event-schema.json`（单一真相源）。本文件不再重复声明。
 
-### 记录格式（JSONL，每行一个 JSON 对象，追加不覆盖）
+### 记录格式
 
-**示例**：
-
-```jsonl
-{"ts":"20260509-145000","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"started","step":"1/4"}
-{"ts":"20260509-145030","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"artifact_written","step":"3/4","artifact":".ritsu/handoff-user-login-flow.md","artifact_meta":{"type":"handoff","size_bytes":2340,"summary":"用户登录流程设计，含 5 个实施项"}}
-{"ts":"20260509-145040","correlation_id":"cid-20260509-001","skill":"think","domain":"backend","status":"done","step":"4/4","artifact":".ritsu/handoff-user-login-flow.md"}
-{"ts":"20260509-152000","correlation_id":"cid-20260509-001","skill":"review","domain":"backend","status":"failed","step":"2/3","error":"Hard Stop: AP-2 引用未验证标识符 'useAuth'"}
-```
-
-**JSONL 优势**：
-
-- **原子追加**：每行是完整 JSON，不存在行撕裂问题（天然 append-only）
-- **流式读取**：`tail -f` + 逐行 JSON.parse，无需等文件完整
-- **结构化查询**：`jq 'select(.skill=="review" and .status=="done")'` 精确过滤
-
-### 向后兼容
-
-若检测到旧版 `.ritsu/ctx-{YYYY-MM}.md`（pipe-delimited 格式）存在，`ritsu_read_ctx` 工具应同时读取两种格式并合并结果。新写入一律使用 JSONL 格式。
+JSONL（每行一个 JSON 对象，追加不覆盖）。示例见 `_shared/ctx-event-schema.json`。
 
 ### 读取时机
 

@@ -7,7 +7,6 @@ schemas:
   agents_md:
     id: 0
     path: "{项目根}/AGENTS.md"
-    format: markdown
     placeholder_allowed: true
     placeholder_note: "AGENTS.md 为 init 阶段半成品，'待补充' 占位符在此 Schema 中豁免 AP-6。后续技能执行时若发现'待补充'字段，应提示用户补充而非拒绝"
     required_fields:
@@ -36,7 +35,6 @@ schemas:
   handoff:
     id: 1
     path: ".ritsu/handoff-{kebab-slug}.md"
-    format: markdown
     slug_rule: "取需求描述的前 3 个有效英文关键词，转 kebab-case 小写"
     slug_conflict: "追加序号，如 handoff-user-login-flow-2.md"
     required_sections:
@@ -88,7 +86,6 @@ schemas:
   diagnosis:
     id: 2
     md_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md"
-    format: markdown
     required_sections:
       - title: "根因确诊"
         id: root-cause
@@ -125,7 +122,6 @@ schemas:
   review_stamp:
     id: 3
     md_path: ".ritsu/review-stamp-{YYYYMMDD-HHMMSS}.md"
-    format: markdown
     required_sections:
       - title: "结论"
         id: verdict
@@ -159,7 +155,6 @@ schemas:
   optimize_report:
     id: 4
     path: ".ritsu/optimize-report-{YYYYMMDD-HHMMSS}.md"
-    format: markdown
     required_sections:
       - title: "执行摘要"
         id: summary
