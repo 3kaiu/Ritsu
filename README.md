@@ -64,7 +64,7 @@ skills/Ritsu/
 │   ├── package.json
 │   └── tsconfig.json
 │
-└── skills/                     # 12 个可调用技能
+└── skills/                     # 13 个可调用技能
     ├── route/                  # 调度入口：分析意图，路由至正确技能
     ├── init/                   # 项目初始化：扫描技术栈，生成 AGENTS.md + 多 IDE ignore 自动注入
     ├── read/                   # 代码阅读：只读不写，解释逻辑、回答技术问题
@@ -76,6 +76,7 @@ skills/Ritsu/
     ├── review/                 # 对抗审查：Hard Stop 拦截 + 领域语义审查
     ├── hunt/                   # 根因诊断：MECE 假设 + 探针验证
     ├── deploy/                 # 部署发布：预发布检查 → 部署执行 → 冒烟验证 → 回滚方案
+    ├── document/               # 文档维护：API 文档、README、CHANGELOG、JSDoc/TSDoc
     └── triage/                 # 工单裁决：Issue/PR 分类路由，不做技术诊断
 
 ---
