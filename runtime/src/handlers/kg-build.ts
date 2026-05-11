@@ -21,6 +21,7 @@ type SymbolDef = {
 type Kg = {
   version: "0.1";
   generated_at: string;
+  engine: "regex" | "ts-ast";
   root: string;
   files: string[];
   edges: KgEdge[];
@@ -224,6 +225,101 @@ function extractSymbolRefs(content: string): string[] {
   return Array.from(tokens);
 }
 
+async function tryLoadTypeScript(): Promise<any | null> {
+  try {
+    const mod = await import("typescript");
+    return (mod as any).default ?? mod;
+  } catch {
+    return null;
+  }
+}
+
+function isTsExported(node: any, ts: any): boolean {
+  const modifiers = node.modifiers as any[] | undefined;
+  if (!modifiers) return false;
+  return modifiers.some((m) => m.kind === ts.SyntaxKind.ExportKeyword);
+}
+
+function tsKindToSymbolKind(kind: number, ts: any): SymbolDef["kind"] | null {
+  switch (kind) {
+    case ts.SyntaxKind.FunctionDeclaration:
+      return "function";
+    case ts.SyntaxKind.ClassDeclaration:
+      return "class";
+    case ts.SyntaxKind.InterfaceDeclaration:
+      return "interface";
+    case ts.SyntaxKind.TypeAliasDeclaration:
+      return "type";
+    case ts.SyntaxKind.EnumDeclaration:
+      return "enum";
+    case ts.SyntaxKind.VariableStatement:
+      return "const";
+    default:
+      return null;
+  }
+}
+
+function extractSymbolDefsTsAst(
+  content: string,
+  fileRel: string,
+  ts: any,
+): SymbolDef[] {
+  const out: SymbolDef[] = [];
+  const sf = ts.createSourceFile(
+    fileRel,
+    content,
+    ts.ScriptTarget.Latest,
+    false,
+  );
+
+  for (const st of sf.statements) {
+    const k = tsKindToSymbolKind(st.kind, ts);
+    if (!k) continue;
+
+    if (st.kind === ts.SyntaxKind.VariableStatement) {
+      if (!isTsExported(st, ts)) continue;
+      for (const decl of st.declarationList.declarations ?? []) {
+        const name = decl.name?.text;
+        if (typeof name === "string" && name) {
+          out.push({ name, kind: "const", file: fileRel });
+        }
+      }
+      continue;
+    }
+
+    if (!isTsExported(st, ts)) continue;
+    const name = (st.name && st.name.text) || "";
+    if (name) out.push({ name, kind: k, file: fileRel });
+  }
+
+  return out;
+}
+
+function extractSymbolRefsTsAst(
+  content: string,
+  fileRel: string,
+  ts: any,
+): string[] {
+  const tokens = new Set<string>();
+  const sf = ts.createSourceFile(
+    fileRel,
+    content,
+    ts.ScriptTarget.Latest,
+    false,
+  );
+
+  function visit(n: any) {
+    if (n.kind === ts.SyntaxKind.Identifier) {
+      const t = n.text as string;
+      if (typeof t === "string" && t.length >= 3) tokens.add(t);
+    }
+    ts.forEachChild(n, visit);
+  }
+
+  visit(sf);
+  return Array.from(tokens);
+}
+
 export async function ritsu_build_kg(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
@@ -234,6 +330,8 @@ export async function ritsu_build_kg(
   );
 
   const tsResolver = readTsImportResolver(root);
+  const ts = await tryLoadTypeScript();
+  const engine: Kg["engine"] = ts ? "ts-ast" : "regex";
 
   const rgR = await runRg("(export\\s+|import\\s+|require\\()", root, [
     "*.ts",
@@ -260,7 +358,9 @@ export async function ritsu_build_kg(
     const rel = relative(root, abs);
     const content = readFileSync(abs, "utf-8");
 
-    const defs = extractSymbolDefs(content, rel);
+    const defs = ts
+      ? extractSymbolDefsTsAst(content, rel, ts)
+      : extractSymbolDefs(content, rel);
     for (const d of defs) {
       symbols.push(d);
       if (!symbolToFile.has(d.name)) symbolToFile.set(d.name, d.file);
@@ -282,7 +382,9 @@ export async function ritsu_build_kg(
     const rel = relative(root, abs);
     const content = readFileSync(abs, "utf-8");
 
-    const refs = extractSymbolRefs(content);
+    const refs = ts
+      ? extractSymbolRefsTsAst(content, rel, ts)
+      : extractSymbolRefs(content);
     for (const r of refs) {
       const defFile = symbolToFile.get(r);
       if (!defFile) continue;
@@ -294,6 +396,7 @@ export async function ritsu_build_kg(
   const kg: Kg = {
     version: "0.1",
     generated_at: nowIso(),
+    engine,
     root,
     files: fileRelPaths,
     edges,
