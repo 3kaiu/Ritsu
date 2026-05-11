@@ -273,6 +273,10 @@ tools:
         type: number
         required: false
         description: "BFS 深度（默认 3，上限 10）"
+      top_n:
+        type: number
+        required: false
+        description: "返回的 impacted/deps 截断数量（默认 15，上限 50）"
       symbol:
         type: string
         required: false
@@ -287,6 +291,14 @@ tools:
         impacted_count: { type: integer }
         deps: { type: array, items: { type: string } }
         deps_count: { type: integer }
+        paths:
+          type: array
+          description: "可解释的最短链路列表"
+          items:
+            type: object
+            properties:
+              node: { type: string }
+              path: { type: array, items: { type: string } }
         symbol: { type: string }
         defined_in: { type: string }
         callers: { type: array, items: { type: string } }
