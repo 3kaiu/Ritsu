@@ -26,12 +26,9 @@
 - `circuit_breaker_status.should_redirect` 非空 → 提示"检测到熔断状态"，建议先执行 `/r-think`
 - `reality_check.desync_detected` 为 true → 提示"检测到 Git 时空错位"，自动忽略失效记录
 
-### 0.3 环境与依赖确认
+### 0.3 环境确认
 
-并发执行：
-
-- **环境配置**：通过读取 `package.json`/`.env`/`pom.xml` 等真实配置文件，抓取项目的**真实框架版本和运行端口**，禁止背诵"常见配置"
-- **依赖收束**：确认技能执行时只使用 `AGENTS.md` 规定的技术栈；新增依赖须检查版本兼容性、安全漏洞、License 合规性
+- 通过读取 `package.json`/`.env`/`pom.xml` 等真实配置文件，抓取项目的**真实框架版本和运行端口**，禁止背诵"常见配置"
 
 ### 0.4 执行模式选择
 

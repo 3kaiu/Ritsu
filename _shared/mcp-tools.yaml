@@ -169,7 +169,7 @@ tools:
         type: object
         required: false
         description: "产物元数据（type/size_bytes/summary）"
-    placeholder_check: "自动检测并拒绝写入含以下模式的产物（ctx 类型豁免）：1) 占位符：TODO/待定/暂不处理/后续补充（=AP-6）；2) 幻觉路径：./src/... 等未验证的相对路径引用（=AP-2）；3) 未验证标识符：引用未通过 grep 验证的函数/类名（≈AP-2）"
+    placeholder_check: "自动检测并拒绝写入含占位符模式的产物（ctx 类型豁免）：TODO/待定/暂不处理/后续补充（=AP-6）。幻觉路径和未验证标识符属于 AI 行为层约束，由 SKILL.md HC 规则执行，工具层不拦截"
     output_schema:
       type: object
       required: [path, size_bytes]

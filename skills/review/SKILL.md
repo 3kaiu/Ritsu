@@ -48,53 +48,39 @@ hard_constraints:
 
 `[Step 2 Complete]` 后进入步骤 3。
 
-**按优先级逐条检查，每条命中后立即执行 FAIL 流程，不继续后续条目**：
+**按优先级逐条检查 `_shared/anti-patterns.yaml` review 红线 R-1~R-6，每条命中后立即执行 FAIL 流程，不继续后续条目**：
 
 ```
-检查 P1：明文凭证泄露
+检查 R-3：明文凭证泄露
   grep -r "token\|secret\|password\|api_key" . --include="*.{ext}" -i
-  ✅ 无匹配 → 继续 P2
-  ❌ 有匹配 → 写入 FAIL Stamp（附 R-1 违规详情），停止
+  ✅ 无匹配 → 继续 R-1
+  ❌ 有匹配 → 写入 FAIL Stamp（附 R-3 违规详情），停止
 
-检查 P2：不明标识符
+检查 R-1：不明标识符
   使用 `ritsu_get_diff` 返回的 `new_identifiers` 列表，对每个标识符调用 ritsu_exec (grep) 验证
-  ✅ 全部存在 → 继续 P3
-  ❌ 存在未定义 → 写入 FAIL Stamp（附 R-2 违规详情），停止
+  ✅ 全部存在 → 继续 R-4
+  ❌ 存在未定义 → 写入 FAIL Stamp（附 R-1 违规详情），停止
 
-检查 P3：破坏性契约变更
+检查 R-4：破坏性契约变更
   检查 API 路由/参数/响应结构是否变更，若变更则检查是否有迁移/双写方案
-  ✅ 无变更或有方案 → 继续 P4
-  ❌ 变更且无方案 → 写入 FAIL Stamp（附 R-3 违规详情），停止
+  ✅ 无变更或有方案 → 继续 R-2
+  ❌ 变更且无方案 → 写入 FAIL Stamp（附 R-4 违规详情），停止
 
-检查 P4：版本号割裂
+检查 R-2：版本号割裂
   比对 package.json 与 lockfile 版本一致性
   ✅ 一致 → 进入步骤 4
-  ❌ 不一致 → 写入 FAIL Stamp（附 R-4 违规详情），停止
+  ❌ 不一致 → 写入 FAIL Stamp（附 R-2 违规详情），停止
 ```
 
 Hard Stop FAIL 后，向用户展示后续选项："修复后重新审查 → /r-dev / 熔断重审架构 → /r-think / 终止审查"，等待用户选择。
 
 Review PASS 后，向用户展示后续选项："部署上线 → /r-deploy / 补充测试 → /r-test / 代码优化 → /r-opt / 处理工单 → /r-triage / 直接合并"。
 
-### 4. 领域语义审查（聚焦需要理解力的逻辑漏洞）
+### 4. 领域语义审查
 
 `[Step 3 Complete]` 后进入步骤 4。
 
-**backend**（业务逻辑安全）：
-
-- 越权：接口是否仅凭 ID 就能访问他人数据？
-- 竞态：是否存在非原子的"先查后改"窗口期漏洞？
-- 异常链路：catch 块中 DB 连接是否释放？事务是否正确回滚？
-
-**frontend**（客户端安全与体验）：
-
-- XSS：用户输入是否 sanitize 后再渲染到 DOM？
-- 状态完整性：前端状态是否可被 DevTools 篡改并绕过业务校验？
-- 渲染边界：大列表是否虚拟化？
-
-**fullstack**：两套均覆盖。
-
-**infra/data**：变更幂等？权限最小化？生产状态文件变更有备份？
+按当前领域已加载的 `attack_vectors` 逐条审查（`domains/_base.yaml` + `domains/{domain}.yaml`）。对每条 attack_vector 的 `check` 字段进行验证，发现违规记录到 findings 中。
 
 ### 5. 写入 Review Stamp（HC-2 执行）
 

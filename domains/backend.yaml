@@ -53,15 +53,9 @@ optimize_disciplines:
     rule: "串行可并行的 IO 必须改为并发（goroutine/asyncio/Promise.all）；锁粒度必须最小化"
 
 optimize_tool_preferences:
-  - category: 请求层
-    libraries:
-      - name: 连接池
-        strengths: [sqlx/pgxpool/hikari]
-    rule: "数据库连接必须使用连接池，禁止每次请求新建连接"
+  - category: 连接池
+    rule: "数据库连接必须使用连接池，禁止每次请求新建连接。优先使用项目已有的连接池方案"
   - category: 缓存
-    libraries:
-      - name: Redis
-        strengths: [热数据缓存, 会话存储, 分布式锁]
-    rule: "读多写少的热点查询必须加 Redis 缓存层"
+    rule: "读多写少的热点查询必须加缓存层。优先使用项目已有的缓存方案"
 
 platform_optimizations: []

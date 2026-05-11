@@ -46,13 +46,7 @@ hard_constraints:
 
 ### 2. 领域专属编码纪律
 
-**backend**：事务边界（多表写必须包裹事务）/ 日志规范（禁止吞异常不打日志，改为：必须在 catch 块中先打日志再决定是否重抛）/ 资源释放（必须在 finally/defer 中释放连接）
-
-**frontend**：重渲染控制（状态变更必须最小粒度，禁用全局状态，改为：必须将可共享状态隔离至最近公共祖先组件）/ 竞态（异步请求必须实现取消或防抖，在组件中使用 AbortController 或 cleanup 函数）/ 内存泄漏（全局监听必须在组件销毁钩子中注销）
-
-**fullstack**：以上两套同时适用
-
-**infra/data**：变更幂等性 / 最小权限 / 状态文件备份确认
+按当前领域已加载的 `coding_disciplines` 执行（`domains/_base.yaml` + `domains/{domain}.yaml`）。对每条 discipline 的 `rule` 字段严格遵守，违反即停止编码。
 
 ### 3. 标识符验证（HC-1 执行协议）
 
@@ -108,8 +102,7 @@ hard_constraints:
 
 - 对比最终落盘的代码与步骤 1 溯源到的 `handoff-*.md` 文件。
 - 如果在 Bug 修复或需求变更过程中，**实际代码的逻辑、接口结构、或架构层级推翻了原 Handoff 的契约**：
-  - 必须主动调用 `ritsu_write_artifact` 修改原 `handoff-*.md` 文件。
-  - 在文件对应位置修改契约，并在末尾 `Changelog` 区块追加条目（格式：`- [{timestamp}] /r-dev: {变更摘要}（偏离原因：{why}）`），**禁止删除已有 Changelog 条目**，确保文档与代码保持绝对同构且变更可追溯。
+  - 必须主动调用 `ritsu_write_artifact` 修改原 `handoff-*.md` 文件对应位置的契约内容，确保文档与代码保持一致。
 
 **交付摘要**（强制输出）：
 
