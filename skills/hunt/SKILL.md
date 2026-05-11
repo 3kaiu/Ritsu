@@ -47,7 +47,10 @@ hard_constraints:
    - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
 2. 若 `.ritsu/kg.json` 存在（或你已知当前项目依赖图对定位很关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
    - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）
-   - `ritsu_semantic_graph_rerank({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{可选: 当前涉及的关键文件路径}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
+   - `focus_paths` 必须尽量自动化获取：
+     - 优先从 `ritsu_get_changed_files().files` 或 `ritsu_get_diff().changed_files` 取前 5-10 个（相对项目根）
+     - 若当前为纯线上/日志排障无 diff，则可从报错堆栈/日志中提取到的文件路径补充
+   - `ritsu_semantic_graph_rerank({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{changed_files[0..N]}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
 3. 否则回退到纯语义检索（优先诊断/审查结论，不要把 handoff 当作“答案”）：
    - `ritsu_semantic_search({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
 4. 将匹配结果作为“线索”，输出：

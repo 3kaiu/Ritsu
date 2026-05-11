@@ -168,7 +168,10 @@ hotfix 交付摘要格式：
      - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
    - 若 `.ritsu/kg.json` 存在（或你已知依赖图对定位关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
      - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）
-     - `ritsu_semantic_graph_rerank({ query: "{质量门禁失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{可选: 当前涉及的关键文件路径}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
+     - `focus_paths` 必须尽量自动化获取：
+       - 优先调用 `ritsu_get_diff`，从其 `changed_files` 取前 5-10 个（相对项目根）
+       - 若 diff 不可用，则调用 `ritsu_get_changed_files` 取 `files` 作为降级
+     - `ritsu_semantic_graph_rerank({ query: "{质量门禁失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{changed_files[0..N]}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
    - 否则回退到纯语义检索：
      - `ritsu_semantic_search({ query: "{质量门禁失败摘要/报错信息的 1-2 句概括}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
    - 输出命中的历史文件路径 + heading + snippet，并强调其仅为线索，后续必须用当前证据验证
