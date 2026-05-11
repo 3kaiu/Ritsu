@@ -1,4 +1,4 @@
-# Ritsu MCP Tool Schema 声明 v3.6.0
+# Ritsu MCP Tool Schema 声明 v3.8.0
 # 所有技能中的工具调用必须引用此文件中声明的工具名，禁止用自然语言描述工具调用行为。
 # AI 执行时应将此文件视为"可用工具菜单"，按 Schema 构造调用参数。
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
@@ -18,13 +18,11 @@ tools:
       params:
         event_type: "{started|done|failed|artifact_written}"
         step: "{N}/{M}"
-        correlation_id: "{cid}"
         skill: "{skill_name}"
         domain: "{value}"
       example:
         event_type: "done"
         step: "7/7"
-        correlation_id: "cid-20260509-001"
         skill: "dev"
         domain: "frontend"
     input:
@@ -40,7 +38,7 @@ tools:
       correlation_id:
         type: string
         required: false
-        description: "任务链路关联 ID（不提供时自动生成）"
+        description: "任务链路关联 ID（自动生成，格式 cid-{YYYYMMDD}-{seq}，同链路自动继承，通常无需手动指定）"
       skill:
         type: string
         required: false
@@ -156,7 +154,8 @@ tools:
     input:
       type:
         type: enum
-        values: [handoff, diagnosis, review-stamp, optimize-report]
+        values:
+          [handoff, diagnosis, review-stamp, optimize-report, decision-log]
         required: true
         description: "产物类型"
       filename:
@@ -171,7 +170,7 @@ tools:
         type: object
         required: false
         description: "产物元数据（type/size_bytes/summary）"
-    placeholder_check: "自动检测 TODO/待定/暂不处理 占位符并拒绝写入（ctx 类型豁免）"
+    placeholder_check: "自动检测并拒绝写入含以下模式的产物（ctx 类型豁免）：1) 占位符：TODO/待定/暂不处理/后续补充（=AP-6）；2) 幻觉路径：./src/... 等未验证的相对路径引用（=AP-2）；3) 未验证标识符：引用未通过 grep 验证的函数/类名（≈AP-2）"
     output_schema:
       type: object
       required: [path, size_bytes]
@@ -248,37 +247,9 @@ tools:
           type: string
           description: "命令输出（截断后）"
 
-  - name: ritsu_validate
-    description: 独立 Schema 校验工具。校验 JSON 数据是否符合指定 Schema。当前支持 ctx_event 类型
-    call_template:
-      tool: ritsu_validate
-      params:
-        data: "{JSON 字符串}"
-        schema_type: "ctx_event"
-      example:
-        data: '{"status":"step_done","step":"3/7","correlation_id":"cid-20260509-001"}'
-        schema_type: "ctx_event"
-    input:
-      data:
-        type: string
-        required: true
-        description: "待校验的 JSON 字符串"
-      schema_type:
-        type: string
-        required: false
-        description: "Schema 类型（默认 ctx_event）"
-    output_schema:
-      type: object
-      required: [valid]
-      properties:
-        valid:
-          type: boolean
-          description: "是否通过校验"
-        errors:
-          type: array
-          items:
-            type: string
-          description: "校验错误列表"
+  # ritsu_validate 已移除（v3.7.0）
+  # 原因：ritsu_emit_event 写入时已自动校验，无 skill 在流程中调用独立校验。
+  # 如需调试，可直接读取 _shared/ctx-event-schema.json 手动校验。
 
   - name: ritsu_get_changed_files
     description: 获取 Git 工作区和暂存区的变更文件列表，自动推断领域。返回每个变更文件的路径、状态、扩展名，以及基于文件后缀的领域推断结果。替代 ritsu_exec("git diff --name-only") 的裸命令调用

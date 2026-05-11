@@ -1,4 +1,4 @@
-# Domain: Backend (后端) v3.5.0
+# Domain: Backend (后端) v3.8.0
 # 继承 _base.yaml 全部内容。以下仅声明后端领域增量。
 
 extends: _base
@@ -37,14 +37,6 @@ pr_requirements:
     rule: "必须提供单测覆盖率报告或关键路径的 Benchmark 性能报告"
   - id: BE-PR2
     rule: "检查是否涉及破坏性 Schema 变更"
-
-discipline_attack_mapping:
-  - discipline: BE-D1
-    attack: BE-A2
-    relation: "事务是否原子？先查后改是否有漏洞？"
-  - discipline: BE-D2
-    attack: B-A1
-    relation: "异常是否被吞导致无日志可查？"
 
 optimize_disciplines:
   - id: BE-O1

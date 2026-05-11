@@ -1,82 +1,58 @@
-# Ritsu 全局状态机 v3.5.0
-# 定义技能间的合法流转路径、熔断规则与标准引导话术。
+# Ritsu 全局状态机 v3.8.0
+# 定义技能间的合法流转路径、流水线编排、熔断规则与流转引导。
 # AI 执行流转判定时，必须查询此文件的 states.{current}.next 确认合法性。
-# transitions 定义触发流转的事件和 UI 渲染提示，供前端消费。
 
 states:
   route:
-    next: [init, think, dev, hunt, review, optimize, triage]
-    transitions:
-      - to: init
-        event: no_agents_md
-        ui_hint: show_init_prompt
-      - to: think
-        event: feature_request
-        ui_hint: show_think_entry
-      - to: dev
-        event: implementation_request
-        ui_hint: show_dev_entry
-      - to: hunt
-        event: bug_report
-        ui_hint: show_hunt_entry
-      - to: review
-        event: review_request
-        ui_hint: show_review_entry
-      - to: optimize
-        event: optimization_request
-        ui_hint: show_optimize_entry
-      - to: triage
-        event: issue_triage
-        ui_hint: show_triage_entry
+    next:
+      [
+        init,
+        think,
+        dev,
+        test,
+        hunt,
+        review,
+        optimize,
+        triage,
+        deploy,
+        document,
+        pipe,
+      ]
+  pipe:
+    next: [think, dev, review, hunt, optimize, test]
+    note: "流水线编排状态，自动按预设序列衔接技能，无需用户手动调用"
+    pipelines:
+      standard: "think → dev → review"
+      bugfix: "hunt → dev → review"
+      optimize: "optimize → review"
+      test_add: "test → review"
+    rules:
+      - "流水线内自动传递 correlation_id 和 domain，无需重新解析"
+      - "任一技能 failed 时，流水线暂停，等待用户决定（修复后继续 / 切换技能 / 终止）"
+      - "熔断触发时，流水线自动重定向至 think，无需用户手动切换"
+      - "用户可随时用 /r-pipe --skip 跳过当前技能，推进到下一步"
+      - "用户可随时用 /r-pipe --abort 终止流水线"
   init:
     next: [route, think]
-    transitions:
-      - to: route
-        event: init_complete_undecided
-        ui_hint: show_route_options
-      - to: think
-        event: init_complete_with_feature
-        ui_hint: show_think_entry
     hint:
       route: "不确定下一步"
       think: "新需求"
   think:
     next: [dev, think]
     note: "循环允许（方案被否决时重新设计）"
-    transitions:
-      - to: dev
-        event: handoff_written
-        ui_hint: show_handoff_preview
-      - to: think
-        event: design_rejected
-        ui_hint: highlight_rejected_items
   dev:
-    next: [review, optimize]
-    transitions:
-      - to: review
-        event: dev_complete
-        ui_hint: show_dev_summary
-      - to: optimize
-        event: dev_complete_needs_optimization
-        ui_hint: show_optimize_suggestion
+    next: [review, optimize, test]
     branches:
       review: "开发完成，需审查"
       optimize: "代码可用但需精简/提速"
+      test: "开发完成，需补测试"
+  test:
+    next: [review, dev]
+    branches:
+      review: "测试通过，进入审查"
+      dev: "测试失败，修复代码"
   review:
     next: [dev, think, optimize, triage]
-    transitions:
-      - to: dev
-        event: review_fail
-        ui_hint: show_review_fail_items
-      - to: think
-        event: circuit_breaker_triggered
-        ui_hint: show_circuit_breaker_alert
-      - to: optimize
-        event: review_pass_with_optimization
-        ui_hint: show_optimize_opportunity
-      - to: triage
-        event: review_pass_with_issues
-        ui_hint: show_triage_suggestion
     branches:
       dev: "单次 FAIL，必须修复"
       think: "连续两次 FAIL 触发熔断，重审架构"
@@ -85,107 +61,68 @@ states:
   optimize:
     next: [review]
     note: "优化后必须审查确认无功能回归"
-    transitions:
-      - to: review
-        event: optimize_complete
-        ui_hint: show_optimize_summary
   hunt:
     next: [dev, think]
-    transitions:
-      - to: dev
-        event: simple_fix_identified
-        ui_hint: show_diagnosis_summary
-      - to: think
-        event: architectural_fix_needed
-        ui_hint: show_architectural_alert
     branches:
       dev: "简单修复"
       think: "架构级修复"
   triage:
     next: [hunt, think, review, optimize]
-    transitions:
-      - to: hunt
-        event: bug_issue
-        ui_hint: show_bug_issue_context
-      - to: think
-        event: feature_issue
-        ui_hint: show_feature_issue_context
-      - to: review
-        event: pr_issue
-        ui_hint: show_pr_diff_preview
-      - to: optimize
-        event: performance_issue
-        ui_hint: show_performance_metrics
     branches:
       hunt: "Bug 工单"
       think: "Feature 工单"
       review: "PR 工单"
       optimize: "性能优化工单"
+  deploy:
+    next: [review, hunt]
+    branches:
+      review: "部署后冒烟审查"
+      hunt: "部署异常诊断"
+  document:
+    next: [review, dev]
+    branches:
+      review: "文档完成后审查"
+      dev: "文档发现代码与描述不一致，需修复代码"
 
 circuit_breaker:
   - skill: review
     condition: "连续两次 FAIL"
     action: route_to_think
-    message: "⚠️ 熔断触发（连续两次 FAIL）→ 必须引导至 /r-think 重新审视架构设计，或要求人类介入"
   - skill: dev→review
     condition: "同一 handoff 的 dev→review 循环超过 3 次"
     action: route_to_think
-    message: "⚠️ 循环熔断（dev↔review 循环 >3 次）→ 反复修补说明设计有缺陷，必须引导至 /r-think 重新审视"
   - skill: optimize→review
     condition: "同一模块的 optimize→review 循环超过 2 次"
     action: route_to_think
-    message: "⚠️ 循环熔断（optimize↔review 循环 >2 次）→ 优化引入回归说明理解不充分，必须引导至 /r-think 重新审视"
 
 guidance:
   route_done:
-    icon: "🧭"
-    template: "律 (Ritsu) 调度决策：已识别意图，领域已解析。请执行：/r-{skill}"
+    next: "/r-{skill}"
   init_done:
-    icon: "✅"
-    template: "律 (Ritsu) 初始化完毕，AGENTS.md 已生效。"
-    options:
-      - "不确定下一步 → /r-route"
-      - "构思新特性 → /r-think [特性描述]"
-      - "直接开发 → /r-dev [需求描述]"
+    next: ["/r-route", "/r-think", "/r-dev"]
   think_done:
-    icon: "✅"
-    template: "律 (Ritsu) Handoff 已写入 .ritsu/handoff-{slug}.md。"
-    options:
-      - "确认方案后 → /r-dev [执行此 Handoff: .ritsu/handoff-{slug}.md]"
-      - "方案需修改 → /r-think [修改意见]（循环允许）"
+    next: ["/r-dev (执行 Handoff)", "/r-think (修改方案)"]
   dev_done:
-    icon: "✅"
-    template: "律 (Ritsu) 编码与自测落盘完毕。"
-    options:
-      - "进入防腐阶段 → /r-review"
+    next: "/r-review"
   review_pass:
-    icon: "✅"
-    template: "律 (Ritsu) 对抗审查通过，Review Stamp 已写入 .ritsu/review-stamp-{ts}.md。"
-    options:
-      - "有工单待处理 → /r-triage（可选）"
-      - "无工单 → 可直接合并"
+    next: ["/r-triage (可选)", "合并"]
   review_fail:
-    icon: "❌"
-    template: "律 (Ritsu) 拦截成功，Review Stamp 已写入 .ritsu/review-stamp-{ts}.md。"
-    options:
-      - "单次失败，携带 Stamp 修复 → /r-dev [修复 review-stamp-{ts}.md 中的问题]"
-      - "⚠️ 熔断触发（连续两次 FAIL）→ /r-think [架构或逻辑存在严重偏差，申请重构 Handoff]"
+    next: ["/r-dev (修复)", "/r-think (熔断重审)"]
   hunt_done:
-    icon: "✅"
-    template: "律 (Ritsu) 根因已锁定，诊断报告已写入 .ritsu/diagnosis-{ts}.md。"
-    options:
-      - "简单修复 → /r-dev [依据 diagnosis-{ts}.md 修复]"
-      - "架构级修复 → /r-think [设计修复方案]"
+    next: ["/r-dev (简单修复)", "/r-think (架构级修复)"]
   optimize_done:
-    icon: "✅"
-    template: "律 (Ritsu) 优化完毕，报告已写入 .ritsu/optimize-report-{ts}.md。"
-    options:
-      - "进入审查确认无回归 → /r-review"
-      - "继续优化其他模块 → /r-opt [目标文件/模块]"
+    next: "/r-review"
   triage_done:
-    icon: "✅"
-    template: "律 (Ritsu) 工单裁决完毕。"
-    options:
-      - "Bug 工单 → /r-hunt [摘要: {一句话描述} | 复现: {步骤} | 环境: {信息}]"
-      - "Feature 工单 → /r-think [特性描述]"
-      - "PR 工单 → /r-review"
+    next: ["/r-hunt", "/r-think", "/r-review"]
+  test_done:
+    next: ["/r-review (通过)", "/r-dev (失败修复)"]
+  deploy_done:
+    next: ["/r-review (冒烟)", "/r-hunt (异常)"]
+  document_done:
+    next: ["/r-review", "/r-dev (代码修复)"]
+  pipe_step_done:
+    next: "自动推进至流水线下一技能"
+  pipe_failed:
+    next: ["修复后继续", "/r-pipe --skip (跳过)", "/r-pipe --abort (终止)"]
+  pipe_done:
+    next: ["合并", "/r-deploy"]

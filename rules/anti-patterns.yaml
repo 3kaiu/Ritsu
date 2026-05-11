@@ -1,4 +1,4 @@
-# Anti-Patterns: 全局底线约束 v3.5.0
+# Anti-Patterns: 全局底线约束 v3.8.0
 # 这些规则是不可跨越的底线，无论你当前正在执行哪个技能，都必须无条件遵守。
 # 每条规则有唯一 ID，AI 在输出中必须引用 ID 而非模糊描述。
 # violation 事件格式见 _shared/ctx-protocol.md violation 字段定义。
@@ -93,4 +93,4 @@ review:
     pattern: "新增依赖存在已知 CVE，或代码中存在注入/越权风险"
     severity: HARD_STOP
 
-dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能内的具体执行步骤是本底线在特定上下文中的落地细化，不属于重复定义"
+dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"

@@ -1,4 +1,4 @@
-# Domain: Fullstack (全栈) v3.5.0
+# Domain: Fullstack (全栈) v3.8.0
 # 继承 _base.yaml + frontend.yaml + backend.yaml 全部内容。以下仅声明全栈领域增量。
 # 合并协议：当 frontend 与 backend 的规则冲突时，以主视角领域优先；无主视角时以更严格的规则为准。
 
@@ -21,14 +21,6 @@ attack_vectors:
     check: "前端输入校验是否与后端校验对齐？是否存在前端校验通过但后端绕过的路径？"
 
 pr_requirements: []
-
-discipline_attack_mapping:
-  - discipline: FS-D1
-    attack: FS-A1
-    relation: "前端是否依赖后端未承诺的字段？"
-  - discipline: FS-D2
-    attack: FS-A2
-    relation: "前端校验通过但后端绕过？"
 
 optimize_disciplines:
   - id: FS-O1

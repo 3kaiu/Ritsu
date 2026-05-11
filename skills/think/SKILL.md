@@ -1,10 +1,10 @@
 ---
 name: think
-version: "3.6.0"
+version: "3.8.0"
 description: "Ritsu 领域自适应需求评审与架构设计。强制拆分为评审阶段和设计阶段，输出防腐 Handoff 文件。"
 when_to_use: "/r-think, 设计方案, 怎么做, 要不要做, 分析一下, 看看这个 PRD"
 complexity_grading: true
-token_budget: 10000
+context_window_guidance: 10000
 total_steps: 7
 required_sections: [hypothesis_directions, coding_disciplines]
 hard_constraints:
@@ -12,7 +12,7 @@ hard_constraints:
     rule: "Phase A 完成后必须强制停止，收到用户确认后才进入 Phase B"
     severity: FATAL
   - id: HC-2
-    rule: "Handoff 文件不得包含 TODO/待定/暂不处理 等占位符"
+    rule: "ref AP-6: Handoff 文件不得包含占位符"
     severity: FATAL
   - id: HC-3
     rule: "文件名必须使用 kebab-slug 规则，不得使用中文或空格"

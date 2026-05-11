@@ -1,4 +1,4 @@
-# Domain: Data / ML (数据与机器学习) v3.5.0
+# Domain: Data / ML (数据与机器学习) v3.8.0
 # 继承 _base.yaml 全部内容。以下仅声明数据领域增量。
 
 extends: _base
@@ -37,14 +37,6 @@ pr_requirements:
     rule: "必须提供数据管线端到端验证报告或模型指标对比表"
   - id: DA-PR2
     rule: "检查是否引入了新的数据依赖或变更了特征 Schema"
-
-discipline_attack_mapping:
-  - discipline: DA-D1
-    attack: null
-    relation: "重复执行 ETL 是否产生脏数据？"
-  - discipline: DA-D2
-    attack: null
-    relation: "随机种子/超参数是否锁定？能否复现同一结果？"
 
 optimize_disciplines:
   - id: DA-O1

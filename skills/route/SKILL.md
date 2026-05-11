@@ -1,9 +1,9 @@
 ---
 name: route
-version: "3.6.0"
-description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能，建立全局会话上下文。"
+version: "3.8.0"
+description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能或流水线，建立全局会话上下文。"
 when_to_use: "/r-route, 我不知道该用哪个命令, 帮我决定, 从哪开始"
-token_budget: 3000
+context_window_guidance: 3000
 total_steps: 5
 hard_constraints:
   - id: HC-1
@@ -51,13 +51,33 @@ hard_constraints:
 
 ```
 1. 项目全新 / 无 AGENTS.md           → /r-init
-2. 有新需求 且 .ritsu/handoff-* 不存在 → /r-think [需求]
+2. 有新需求 且 .ritsu/handoff-* 不存在 → /r-pipe standard [需求]（自动 think→dev→review）
 3. 直接写代码 且 Handoff 已存在       → /r-dev [handoff路径]
-4. 有报错 / 找不到 Bug               → /r-hunt [报错信息]
+4. 有报错 / 找不到 Bug               → /r-pipe bugfix [报错信息]（自动 hunt→dev→review）
 5. 写完代码 / 要合并                 → /r-review
-6. 优化/精简/提速/重构（不改功能）    → /r-opt [目标文件/模块]
-7. 有 Issue/PR 要处理               → /r-triage
+6. 优化/精简/提速/重构（不改功能）    → /r-pipe optimize [目标]（自动 optimize→review）
+7. 补测试 / 写测试 / 测试覆盖率       → /r-pipe test_add [目标]（自动 test→review）
+8. 部署 / 发布 / 上线                 → /r-deploy
+9. 写文档 / 更新文档 / API文档        → /r-doc [目标]
+10. 有 Issue/PR 要处理               → /r-triage
 ```
+
+**流水线路由**（用户明确要求端到端交付时）：
+
+| 流水线             | 触发条件                 | 自动序列             |
+| ------------------ | ------------------------ | -------------------- |
+| `/r-pipe standard` | 新需求，需设计→开发→审查 | think → dev → review |
+| `/r-pipe bugfix`   | Bug 修复                 | hunt → dev → review  |
+| `/r-pipe optimize` | 代码优化                 | optimize → review    |
+| `/r-pipe test_add` | 补充测试                 | test → review        |
+
+流水线规则（引用 `_shared/state-machine.yaml` states.pipe.rules）：
+
+- 自动传递 correlation_id 和 domain
+- 任一技能 failed → 暂停，等待用户决定
+- 熔断触发 → 自动重定向至 think
+- `/r-pipe --skip` 跳过当前技能
+- `/r-pipe --abort` 终止流水线
 
 > **dev vs think 分叉依据**：调用 **`ritsu_list_artifacts`**（type=handoff）检查文件是否存在，而非依赖用户描述措辞。
 
@@ -66,22 +86,22 @@ hard_constraints:
 - 主任务优先级：`hunt > review > optimize > dev > think > triage > init`
 - 必须在输出中标注：`⚠️ 次要意图：{描述} → 主任务完成后执行 /r-{skill}`
 
-### 4. 生成 correlation_id + 输出路由决策
-
-生成任务链路关联 ID：`cid-{YYYYMMDD}-{seq}`（seq 为当日递增序号，从当月 ctx 文件中查找当日最大 seq +1，若无则从 1 开始）。此 ID 将被同链路所有后续技能继承。
+### 4. 输出路由决策
 
 ```
-[RITSU_CTX: domain={value}, cid={correlation_id}]
+[RITSU_CTX: domain={value}]
 🧭 律 (Ritsu) 调度：{意图描述} → /r-{skill}
 {若多意图：⚠️ 次要：{描述} → /r-{次要}}
 请执行：**`/r-{skill} [...]`**
 ```
 
+> correlation_id 由 `ritsu_emit_event` 自动生成（格式 `cid-{YYYYMMDD}-{seq}`），无需手动指定。
+
 ### 5. 写入 ctx
 
 路由决策确定后，写入 ctx：
 
-> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null, correlation_id=步骤4生成的值）
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null）
 
 ---
 

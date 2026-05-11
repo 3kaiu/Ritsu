@@ -1,4 +1,4 @@
-# Domain: Base (通用基线) v3.5.0
+# Domain: Base (通用基线) v3.8.0
 # 所有领域配置隐式继承本基线。领域文件中不得重复声明以下内容。
 
 domain_interface_contract:
@@ -7,7 +7,6 @@ domain_interface_contract:
     - coding_disciplines
     - attack_vectors
     - pr_requirements
-    - discipline_attack_mapping
   rule: "领域文件仅声明增量内容，与 _base.yaml 重复的禁止出现"
 
 hypothesis_directions:
@@ -51,17 +50,6 @@ pr_requirements:
     rule: "PR 描述必须包含变更动机和影响范围"
   - id: B-PR3
     rule: "无 Hard Stop 命中（参照 /r-review 红线列表）"
-
-discipline_attack_mapping:
-  - discipline: B-D1
-    attack: B-A1
-    relation: "异常兜底：捕获后资源是否未释放？"
-  - discipline: B-D2
-    attack: B-A1
-    relation: "输入校验断裂：异常是否被吞导致静默失败？"
-  - discipline: B-D3
-    attack: B-A3
-    relation: "重复请求是否产生脏数据？"
 
 optimize_disciplines:
   - id: B-O1

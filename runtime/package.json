@@ -1,6 +1,7 @@
 {
   "name": "ritsu-mcp-server",
   "version": "3.5.1",
+  "ritsu_protocol_version": "3.7.0",
   "description": "Ritsu MCP Server SDK — 结构化 I/O 原语，供 AI 技能调用",
   "type": "module",
   "main": "dist/index.js",
@@ -14,7 +15,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "version:check": "node -e \"const pkg=require('./package.json').version; const schema=require('fs').readFileSync(require('path').resolve(__dirname,'../_shared/ctx-event-schema.json'),'utf8'); const sv=schema.match(/v(3\\.\\d+\\.\\d+)/)?.[1]; if(pkg!==sv){console.error('Version mismatch: package.json='+pkg+' schema='+sv);process.exit(1)}console.log('Versions aligned: '+pkg)\""
+    "version:check": "node -e \"const pkg=require('./package.json'); const pv=pkg.ritsu_protocol_version; const schema=require('fs').readFileSync(require('path').resolve(__dirname,'../_shared/ctx-event-schema.json'),'utf8'); const sv=schema.match(/v(3\\.\\d+\\.\\d+)/)?.[1]; if(pv!==sv){console.error('Protocol version mismatch: runtime expects '+pv+' but skills define '+sv);process.exit(1)}console.log('Protocol aligned: '+pv+' (runtime: '+pkg.version+')')\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

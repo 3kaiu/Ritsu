@@ -1,4 +1,4 @@
-# Domain: Frontend (前端) v3.5.0
+# Domain: Frontend (前端) v3.8.0
 # 继承 _base.yaml 全部内容。以下仅声明前端领域增量。
 
 extends: _base
@@ -48,24 +48,13 @@ pr_requirements:
   - id: FE-PR2
     rule: "检查是否增加了不必要的大体积三方包（>50KB 需说明）"
 
-discipline_attack_mapping:
-  - discipline: FE-D1
-    attack: FE-A3
-    relation: "大面积重渲染？"
-  - discipline: FE-D2
-    attack: FE-H3
-    relation: "请求取消是否生效？"
-  - discipline: FE-D3
-    attack: null
-    relation: "全局事件/定时器是否仍在运行？"
-
 optimize_disciplines:
   - id: FE-O1
     name: 工具库优先替换
-    rule: "手写的 useState+useEffect 组合必须优先替换为 react-use / ahooks 对应工具函数。react-use 擅长：useDebounce/useThrottle/useLocalStorage/useToggle。ahooks 擅长：useDebounceFn/useThrottleFn/useMemoizedFn/useDeepCompareEffect/useSize/useClickAway/useUpdateEffect"
+    rule: "手写的 useState+useEffect 组合必须优先替换为项目已有的工具库对应函数。若项目未引入工具库，保持现有实现不变"
   - id: FE-O2
     name: 请求层精简
-    rule: "手写的 fetch/axios + useState + useEffect + loading/error 状态管理必须替换为 TanStack Query（useQuery/useMutation/useInfiniteQuery），自动获得缓存/重试/去重/失效刷新"
+    rule: "手写的 fetch/axios + useState + useEffect + loading/error 状态管理必须优先替换为项目已有的数据请求层。若项目未引入，保持现有模式"
   - id: FE-O3
     name: 样式迁移 TailwindCSS
     rule: "内联 style 对象和独立 CSS 文件中的规则必须迁移为 TailwindCSS 等价类。重复样式块合并为 @apply 抽象。CSS Modules 保留仅在需要动态类名时"
@@ -78,35 +67,9 @@ optimize_disciplines:
 
 optimize_tool_preferences:
   - category: 状态/副作用
-    libraries:
-      - name: react-use
-        strengths:
-          [
-            useDebounce,
-            useThrottle,
-            useLocalStorage,
-            useToggle,
-            useCopyToClipboard,
-            useMedia,
-          ]
-      - name: ahooks
-        strengths:
-          [
-            useRequest,
-            useDebounceFn,
-            useThrottleFn,
-            useMemoizedFn,
-            useDeepCompareEffect,
-            useSize,
-            useClickAway,
-            useUpdateEffect,
-          ]
-    rule: "react-use 擅长简单原子 hook，ahooks 擅长复杂业务 hook。优先 react-use 的 useDebounce/useThrottle 替代手写防抖节流；请求层替换见下方请求层分类"
+    rule: "优先使用项目已有的工具库替代手写状态/副作用管理。若项目未引入相关库，保持现有实现不变"
   - category: 请求层
-    libraries:
-      - name: "@tanstack/react-query"
-        strengths: [useQuery, useMutation, useInfiniteQuery, useSuspenseQuery]
-    rule: "所有手写的 fetch+useState+useEffect+loading/error 模式必须替换为 TanStack Query"
+    rule: "优先使用项目已有的数据请求层（缓存/重试/去重/失效刷新）。若项目未引入，保持现有 fetch/axios 模式"
 
 platform_optimizations:
   - id: FE-P1

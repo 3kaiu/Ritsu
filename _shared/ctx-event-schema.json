@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ritsu-ctx-event",
   "title": "Ritsu Context Event",
-  "description": "v3.6.0 — Ritsu ctx JSONL 事件 Schema（精简版）。每行一条记录，追加不覆盖。仅保留有实际消费者的 4 种核心事件类型。",
+  "description": "v3.8.0 — Ritsu ctx JSONL 事件 Schema（精简版）。每行一条记录，追加不覆盖。仅保留有实际消费者的 4 种核心事件类型。",
   "type": "object",
   "required": ["ts", "correlation_id", "skill", "domain", "status"],
   "properties": {
@@ -14,7 +14,7 @@
     "correlation_id": {
       "type": "string",
       "pattern": "^cid-\\d{8}-\\d+$",
-      "description": "任务链路关联 ID，由 route 生成，同链路技能继承"
+      "description": "任务链路关联 ID，由 ritsu_emit_event 自动生成，同链路自动继承"
     },
     "skill": {
       "type": "string",
@@ -26,7 +26,10 @@
         "optimize",
         "review",
         "hunt",
-        "triage"
+        "triage",
+        "test",
+        "deploy",
+        "document"
       ],
       "description": "技能名"
     },
@@ -64,6 +67,7 @@
             "diagnosis",
             "review-stamp",
             "optimize-report",
+            "decision-log",
             "ctx"
           ],
           "description": "产物类型"
