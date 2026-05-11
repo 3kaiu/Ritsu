@@ -59,7 +59,6 @@ export function appendEvent(
 ): { path: string; lineCount: number } {
   ensureRitsuDir(projectRoot);
   const ctxPath = getCtxPath(projectRoot);
-  const line = JSON.stringify(event);
 
   // 月度切换检测 — 新月份重置行数计数器
   const currentMonth = getCurrentMonthFilename();
@@ -83,8 +82,13 @@ export function appendEvent(
   }
 
   // 原子追加锁 — 锁定 ctx 文件本身，粒度精确
+  // 若 event 缺少 correlation_id，在锁内生成以保证原子性
   lockSync(ctxPath);
   try {
+    if (!event.correlation_id) {
+      event.correlation_id = generateCorrelationIdLocked(ctxPath);
+    }
+    const line = JSON.stringify(event);
     appendFileSync(ctxPath, line + "\n");
     _lastLineCount++;
   } finally {
@@ -181,6 +185,35 @@ export function readLastCompleted(
   return null;
 }
 
+/** 从文件内容中扫描当日 max seq（在锁内调用，保证原子性） */
+function generateCorrelationIdLocked(ctxPath: string): string {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, "0");
+  const dd = String(today.getDate()).padStart(2, "0");
+  const prefix = `cid-${yyyy}${mm}${dd}-`;
+
+  let maxSeq = 0;
+  if (existsSync(ctxPath)) {
+    const content = readFileSync(ctxPath, "utf-8").trim();
+    if (content) {
+      for (const line of content.split("\n")) {
+        try {
+          const obj = JSON.parse(line) as Record<string, unknown>;
+          const cid = String(obj.correlation_id ?? "");
+          if (cid.startsWith(prefix)) {
+            const seq = parseInt(cid.slice(prefix.length), 10);
+            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+          }
+        } catch {
+          // 跳过无效行
+        }
+      }
+    }
+  }
+  return `cid-${yyyy}${mm}${dd}-${maxSeq + 1}`;
+}
+
 export function getNextSeq(projectRoot: string): number {
   const today = new Date();
   const yyyy = today.getFullYear();
@@ -202,10 +235,16 @@ export function getNextSeq(projectRoot: string): number {
 }
 
 export function generateCorrelationId(projectRoot: string): string {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  const seq = getNextSeq(projectRoot);
-  return `cid-${yyyy}${mm}${dd}-${seq}`;
+  const ctxPath = getCtxPath(projectRoot);
+  ensureRitsuDir(projectRoot);
+  if (!existsSync(ctxPath)) {
+    appendFileSync(ctxPath, "");
+  }
+  cleanupStaleLock(ctxPath);
+  lockSync(ctxPath);
+  try {
+    return generateCorrelationIdLocked(ctxPath);
+  } finally {
+    unlockSync(ctxPath);
+  }
 }

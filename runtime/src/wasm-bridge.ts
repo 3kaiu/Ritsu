@@ -11,7 +11,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getSharedDir, getPkgDir } from "../shared.js";
+import { getSharedDir, getPkgDir } from "./shared.js";
 
 let _wasm: any = null;
 let _wasmAvailable: boolean | null = null;

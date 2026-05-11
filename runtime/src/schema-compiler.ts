@@ -7,7 +7,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getSharedDir } from "../shared.js";
+import { getSharedDir } from "./shared.js";
 import yaml from "js-yaml";
 
 interface CompiledTool {

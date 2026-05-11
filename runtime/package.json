@@ -15,6 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "version:check": "node -e \"const pkg=require('./package.json').version; const cargo=require('fs').readFileSync('core/Cargo.toml','utf8').match(/version\\s*=\\s*\\\"([^\\\"]+)\\\"/)?.[1]; if(pkg!==cargo){console.error('Version mismatch: package.json='+pkg+' Cargo.toml='+cargo);process.exit(1)}console.log('Versions aligned: '+pkg)\"",
+    "version:check:wasm": "node -e \"const pkg=require('./package.json').version; try{const{core_version}=require('./pkg/ritsu_core.js');if(core_version()!==pkg){console.error('WASM version mismatch: '+core_version()+' vs '+pkg);process.exit(1)}console.log('WASM version aligned: '+pkg)}catch(e){console.warn('WASM pkg not built, skipping WASM version check')}\"",
     "build:wasm": "cd core && wasm-pack build --target nodejs --release --out-dir ../pkg",
     "postinstall": "node scripts/download-wasm.mjs"
   },

@@ -98,6 +98,18 @@ export const ALLOWED_BINARIES = new Set([
   "gh",
 ]);
 
+// 危险参数黑名单 — 拦截白名单二进制的代码注入/数据外泄用法
+export const DANGEROUS_ARGS: RegExp[] = [
+  /\bnode\s+(-e|--eval|\s+-i|--interactive)\b/, // node -e "任意代码"
+  /\bpython3?\s+(-c|--command)\b/, // python3 -c "任意代码"
+  /\bdocker\s+(exec|run)\b/, // docker exec/rm 可在容器内执行任意命令
+  /\bcurl\s+[^&]*-d\s+@/, // curl -d @/etc/shadow 数据外泄
+  /\bcurl\s+[^&]*--data-binary\s+@/, // curl --data-binary @文件
+  /\bwget\s+[^&]*--post-file\s+/, // wget --post-file 数据外泄
+  /\bgit\s+checkout\s+--\s+\.\s*$/, // git checkout -- . 丢弃所有工作区变更
+  /\bnpm\s+run\s+.*[;&|]/, // npm run 脚本名后接管道/链式命令
+];
+
 export const RESIDUAL_BLACKLIST: RegExp[] = [
   /\brm\s+-[a-zA-Z]*[rf][a-zA-Z]*\b/,
   /\bgit\s+push\s+.*--(force|no-verify|force-with-lease)\b/,
@@ -112,3 +124,7 @@ export const RESIDUAL_BLACKLIST: RegExp[] = [
   /\bmkfs\b/,
   /\bdd\s+if=/,
 ];
+
+// ritsu_exec 参数硬上限
+export const MAX_BUFFER_MB_HARD_LIMIT = 100;
+export const MAX_TIMEOUT_MS_HARD_LIMIT = 120_000;

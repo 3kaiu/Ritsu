@@ -26,14 +26,13 @@
         "optimize",
         "review",
         "hunt",
-        "triage",
-        "_summary"
+        "triage"
       ],
       "description": "技能名"
     },
     "domain": {
       "type": "string",
-      "enum": ["frontend", "backend", "fullstack", "infra", "data", "_all"],
+      "enum": ["frontend", "backend", "fullstack", "infra", "data"],
       "description": "领域值"
     },
     "status": {

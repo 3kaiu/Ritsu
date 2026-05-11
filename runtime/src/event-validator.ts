@@ -7,7 +7,7 @@ const Ajv2020 = Ajv2020Module.default ?? Ajv2020Module;
 import type { ValidateFunction } from "ajv";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { getSharedDir } from "../shared.js";
+import { getSharedDir } from "./shared.js";
 
 let _validate: ValidateFunction<unknown> | null = null;
 let _ajv: InstanceType<typeof Ajv2020> | null = null;

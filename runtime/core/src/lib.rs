@@ -11,8 +11,8 @@ pub mod correlation;
 
 use wasm_bindgen::prelude::*;
 
-/// 模块版本
+/// 模块版本（从 Cargo.toml 读取，编译时注入）
 #[wasm_bindgen]
 pub fn core_version() -> String {
-    "3.5.1".to_string()
+    env!("CARGO_PKG_VERSION").to_string()
 }
