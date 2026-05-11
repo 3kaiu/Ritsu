@@ -9,9 +9,16 @@ fast_mode:
   skip_artifacts: true
   self_test: "ritsu_run_quality_gates"
   description: "跳过领域纪律深度检查(2)、沙盒自查(5)、Handoff自愈(7)，直接编码+质量门禁自测，不写产物文件"
+hotfix_mode:
+  description: "微变更快速通道：跳过全部前置检查和Handoff溯源，直接修改+质量门禁自测。仅适用于≤1文件/≤10行的确定性微变更（typo/配置值/单行CSS等）"
+  rules:
+    - "变更必须≤1文件且≤10行，超出则拒绝执行hotfix，降级为fast或standard"
+    - "必须明确知道改什么、改哪里、改后的预期效果，禁止探索性修改"
+    - "不读取Handoff、不执行领域纪律、不写产物文件、不做沙盒自查"
+    - "仍须调用 ritsu_run_quality_gates 确认不破坏现有功能"
 hard_constraints:
   - id: HC-1
-    rule: "外部标识符引用前必须调用 ritsu_exec 执行 grep 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐（≈AP-2）"
+    rule: "ref AP-2: 引用或调用外部标识符前必须 grep 验证其真实存在，并确保调用签名对齐"
     severity: FATAL
   - id: HC-2
     rule: "ref AP-6: 交付物不得包含占位符"
@@ -30,7 +37,25 @@ hard_constraints:
 
 > ⚡ **fast 模式**：`/r-dev --fast` 或变更 ≤3 文件/≤30 行时自动触发。跳过步骤 2/5/7，不写产物文件，仅执行步骤 1→3→4→6 + 精简交付摘要。
 
+> 🔥 **hotfix 模式**：`/r-dev --hotfix` 微变更快速通道。跳过全部前置（Handoff/领域纪律/沙盒自查/契约自愈），直接修改 + quality_gates 自测。仅限 ≤1 文件/≤10 行的确定性微变更（typo/配置值/单行CSS等）。
+
 ## 执行流水线
+
+### 0. hotfix 模式检查
+
+若用户指定 `--hotfix`，检查变更规模：
+
+- **≤1 文件且 ≤10 行** → 执行 hotfix：跳过步骤 1-5 和 7，直接进入步骤 6 质量门禁（步骤 3/4 简化为直接修改），完成后输出精简交付摘要
+- **超出限制** → 告知用户"hotfix 仅限 ≤1 文件/≤10 行的确定性微变更，当前变更已超出，降级为 /r-dev --fast 或 /r-dev"
+
+hotfix 交付摘要格式：
+
+```
+## 🔥 Hotfix 落盘
+- 文件: {路径}
+- 变更: {一行描述}
+- Lint: ✅/❌ | Test: ✅/❌
+```
 
 ### 1. 领域解析与零点击寻址 (Zero-Click Context Binding)
 
@@ -53,7 +78,7 @@ hard_constraints:
 
 按当前领域已加载的 `coding_disciplines` 执行（`domains/_base.yaml` + `domains/{domain}.yaml`）。对每条 discipline 的 `rule` 字段严格遵守，违反即停止编码。
 
-### 3. 标识符验证（HC-1 执行协议）
+### 3. 标识符验证（ref AP-2 执行协议）
 
 `[Step 2 Complete]` 后进入步骤 3。
 
@@ -86,7 +111,7 @@ hard_constraints:
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-- [ ] HC-1：所有外部标识符均已通过 `ritsu_exec` (grep) 验证 — 违反时输出错误提示并停止
+- [ ] AP-2：所有外部标识符均已通过 `ritsu_exec` (grep) 验证 — 违反时输出错误提示并停止
 - [ ] HC-2：代码中无 TODO / 待定 / 后续完善 / 暂不处理 — 违反时输出错误提示并停止
 - [ ] 无孤儿引用，无未使用的残余变量
 
@@ -111,12 +136,7 @@ hard_constraints:
 
 **交付摘要**（强制输出）：
 
-```
-## 律 (Ritsu) 开发落盘清单
-- 涉及文件: {路径 + 改动概述}
-- Handoff 溯源: .ritsu/handoff-{slug}.md 或 无（风险已知悉）
-- Lint: ✅/❌ | Test: ✅/❌
-```
+> 引用 `_shared/skill-common-steps.md` Step 4（skill=dev）
 
 写入 ctx（started + done 事件）：
 

@@ -113,6 +113,10 @@ hard_constraints:
 
 按 `_shared/artifact-schema.yaml` Schema 2 格式写入（将其中的 Root Cause 替换为 5-Whys 提炼的物理根因）。
 
+**交付摘要**：
+
+> 引用 `_shared/skill-common-steps.md` Step 4（skill=hunt）
+
 写入 ctx-{YYYY-MM}.jsonl：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=hunt, artifact=.ritsu/diagnosis-{ts}.md）

@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 领域自适应需求评审与架构设计。强制拆分为评审阶段和设计阶段，输出防腐 Handoff 文件。"
 when_to_use: "/r-think, 设计方案, 怎么做, 要不要做, 分析一下, 看看这个 PRD"
 total_steps: 7
+fast_mode:
+  skip_steps: [2, 3]
+  skip_artifacts: false
+  self_test: null
+  description: "跳过多维轰炸(2)和事前验尸(3)，直接进入架构设计+Handoff输出，仍写产物文件"
 hard_constraints:
   - id: HC-1
     rule: "Phase A 完成后必须强制停止，收到用户确认后才进入 Phase B"
@@ -25,6 +30,12 @@ hard_constraints:
 ### A1. 领域解析
 
 > 引用 `_shared/skill-common-steps.md` Step 1
+
+若本次 `/r-think` 是由熔断引导（例如来自 review 连续 FAIL），则在进入 A2 前追加一个“输入对账”步骤：
+
+- 调用 `ritsu_list_artifacts`（type=review-stamp）获取最近一条 Review Stamp
+- 用 `ritsu_exec` 读取该文件内容（只读）
+- 若存在 `## 熔断反馈（给 /r-think）` 小节，则将其作为本次评审会的优先输入，先回答其中“需要升维确认的问题”，再进入 A2
 
 ### A2. 多维轰炸（基于领域）
 

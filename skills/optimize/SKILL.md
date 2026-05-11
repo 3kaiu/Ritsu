@@ -100,39 +100,11 @@ hard_constraints:
 
 > 引用 `domains/{domain}.yaml` 的 `optimize_disciplines` 和 `optimize_tool_preferences` 和 `platform_optimizations`
 
-### 5. 优化报告输出
+### 5. 交付摘要
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-所有优化项执行完毕后，输出精简报告：
-
-```markdown
-# 优化报告: {文件/模块名}
-
-_优化 by /r-opt · domain: {value} · date: {YYYY-MM-DD}_
-
-## 执行摘要
-
-- 总优化项: {N}
-- 成功: {M} | 跳过(风险): {K} | 失败回滚: {L}
-
-## 成功项明细
-
-| #   | 优化项 | Before → After | 验证              |
-| --- | ------ | -------------- | ----------------- |
-| 1   | ...    | ...            | ✅ Lint+Test 通过 |
-
-## 跳过/回滚项
-
-| #   | 优化项 | 原因                 |
-| --- | ------ | -------------------- |
-| ... | ...    | Test 失败 / 用户跳过 |
-
-## 质量门禁
-
-- Lint: {✅/❌}
-- Test: {✅/❌}
-```
+> 引用 `_shared/skill-common-steps.md` Step 4（skill=optimize）
 
 写入 ctx-{YYYY-MM}.jsonl：
 

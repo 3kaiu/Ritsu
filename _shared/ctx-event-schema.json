@@ -20,6 +20,7 @@
       "type": "string",
       "enum": [
         "route",
+        "pipe",
         "init",
         "think",
         "dev",

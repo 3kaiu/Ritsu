@@ -71,7 +71,7 @@ review:
     name: 不明标识符
     pattern: "代码中引入了找不到定义的变量或组件"
     severity: HARD_STOP
-    note: "全局 AP-2 的 review 特化"
+    note: "ref AP-2：本条为 review 阶段的 HARD_STOP 特化，只提升严重度与拦截策略，不新增规则语义"
   - id: R-2
     name: 版本号不同步
     pattern: "package.json 等多处版本号出现割裂"

@@ -100,15 +100,7 @@ hard_constraints:
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-```markdown
-## 律 (Ritsu) 测试落盘清单
-
-- 涉及文件: {新增/修改的测试文件路径}
-- 测试目标: {被测模块}
-- 用例数: {新增 N 个 / 修改 M 个}
-- 执行结果: ✅ 全部通过 / ❌ {失败数} 个失败
-- 覆盖率: {百分比}（目标: {目标值}）
-```
+> 引用 `_shared/skill-common-steps.md` Step 4（skill=test）
 
 写入 ctx-{YYYY-MM}.jsonl：
 

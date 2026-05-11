@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 文档维护技能。API 文档生成、README 更新、CHANGELOG 维护、JSDoc/TSDoc 补充。"
 when_to_use: "/r-doc, 写文档, 更新文档, API文档, CHANGELOG, README, JSDoc"
 total_steps: 4
+fast_mode:
+  skip_steps: [2]
+  skip_artifacts: true
+  self_test: null
+  description: "跳过代码扫描与文档对账(2)，直接生成/更新文档，不写产物文件"
 hard_constraints:
   - id: HC-1
     rule: "ref AP-2: 文档必须与代码实际行为一致，禁止描述不存在的功能或参数"
@@ -122,15 +127,7 @@ hard_constraints:
 
 `[Step 3 Complete]` 后进入步骤 4。
 
-```markdown
-## 律 (Ritsu) 文档落盘清单
-
-- 文档类型: {API/README/CHANGELOG/JSDoc}
-- 涉及文件: {新增/修改的文档文件路径}
-- 新增条目: {N} 个
-- 更新条目: {M} 个
-- 废弃标记: {K} 个
-```
+> 引用 `_shared/skill-common-steps.md` Step 4（skill=document）
 
 写入 ctx-{YYYY-MM}.jsonl：
 

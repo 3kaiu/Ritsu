@@ -98,16 +98,7 @@ hard_constraints:
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-```markdown
-## 律 (Ritsu) 部署落盘清单
-
-- 版本: {version}
-- 环境: {staging/production}
-- 部署方式: {命令}
-- Review 溯源: .ritsu/review-stamp-{ts}.md 或 无（风险已知悉）
-- 冒烟测试: ✅/❌
-- 回滚方案: {已确认/执行中/无需回滚}
-```
+> 引用 `_shared/skill-common-steps.md` Step 4（skill=deploy）
 
 写入 ctx-{YYYY-MM}.jsonl：
 

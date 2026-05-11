@@ -25,6 +25,21 @@ schemas:
       - field: 质量门禁.Test
         type: string
         placeholder: "待补充"
+    optional_fields:
+      - field: 规则覆盖.rules_overrides
+        type: object
+        description: "项目级规则覆盖（可选）。用于在不修改 Bundle 的情况下，按项目禁用/降级/补充规则。未声明则沿用 Bundle 默认规则。"
+        example:
+          disable:
+            - "AP-8"
+          downgrade:
+            - id: "AP-12"
+              severity: "INFO"
+          add:
+            - id: "PROJ-D1"
+              name: "项目专属纪律"
+              scope: "dev"
+              rule: "..."
     heterogeneity:
       detect: "存在 ritsu-version: 字段 → 旧版 Ritsu 产物；不存在 → 异构配置"
       injection_template:
@@ -151,6 +166,18 @@ schemas:
             format: "✅ 通过 | ❌ 失败，输出：..."
           - name: test
             format: "✅ 通过 | ❌ 失败，输出：..."
+    optional_sections:
+      - title: "熔断反馈（给 /r-think）"
+        id: circuit-breaker-feedback
+        fields:
+          - name: 失败摘要
+            format: "一句话总结为什么 FAIL"
+          - name: 命中规则
+            format: "R-{N} 或 AP-{N} 列表"
+          - name: 需要升维确认的问题
+            type: list
+          - name: 推荐的重设边界/契约调整
+            type: list
 
   optimize_report:
     id: 4

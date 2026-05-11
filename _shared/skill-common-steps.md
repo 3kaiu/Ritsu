@@ -10,6 +10,8 @@
 
 每个技能在执行任何实质性动作前，**必须**先完成以下装载序列。
 
+> **轻量技能豁免**：read / triage / document 技能可跳过 Step 0.1 和 0.3（无需读 AGENTS.md 和确认环境），仅执行 0.2（上下文恢复）和 0.4（模式选择）。
+
 ### 0.1 项目基线加载
 
 - 读取项目根 `AGENTS.md`。
@@ -34,10 +36,11 @@
 
 根据变更规模选择执行模式：
 
-| 模式         | 条件                                                 | 行为                                        |
-| ------------ | ---------------------------------------------------- | ------------------------------------------- |
-| **fast**     | 用户指定 `--fast`，或变更 ≤3 文件/≤30 行，无架构影响 | 按 SKILL.md `fast_mode.skip_steps` 跳步执行 |
-| **standard** | 默认，或变更 >3 文件/>30 行，涉及架构                | 完整流程（当前 SKILL.md 定义的完整步骤）    |
+| 模式         | 条件                                                 | 行为                                         |
+| ------------ | ---------------------------------------------------- | -------------------------------------------- |
+| **hotfix**   | 用户指定 `--hotfix`，且变更 ≤1 文件/≤10 行           | 仅 dev 技能支持，跳过全部前置，直接修改+自测 |
+| **fast**     | 用户指定 `--fast`，或变更 ≤3 文件/≤30 行，无架构影响 | 按 SKILL.md `fast_mode.skip_steps` 跳步执行  |
+| **standard** | 默认，或变更 >3 文件/>30 行，涉及架构                | 完整流程（当前 SKILL.md 定义的完整步骤）     |
 
 **fast 模式执行协议**：
 
@@ -62,7 +65,7 @@
 领域解析完成后，加载领域配置：
 
 - 始终加载 `domains/_base.yaml` + `domains/[domain].yaml`
-- fullstack 领域同时加载 `domains/frontend.yaml` 和 `domains/backend.yaml`
+- fullstack 领域使用扁平化后的 `domains/fullstack.yaml`，无需额外加载 `domains/frontend.yaml` 和 `domains/backend.yaml`
 - route / triage 无需加载领域配置
 
 解析完成后，调用 `ritsu_emit_event` 追加 started 事件：
@@ -148,3 +151,33 @@ ritsu_emit_event({
 完成后按 `_shared/state-machine.yaml` 输出引导语。查询 `states.{current_skill}.next` 确认合法流转目标。
 
 **熔断规则**：引用 `_shared/state-machine.yaml` 的 `circuit_breaker` section，AI 不内联重复定义。
+
+---
+
+## Step 4: 统一交付摘要模板
+
+所有技能完成后，必须输出交付摘要。使用以下统一模板，禁止各技能自定义格式：
+
+```
+## 律 (Ritsu) {skill_name} 落盘清单
+- 涉及文件: {路径 + 改动概述}
+- 溯源: {Handoff/Diagnosis/Review-Stamp 路径 或 无（风险已知悉）}
+- Lint: ✅/❌/跳过 | Test: ✅/❌/跳过
+```
+
+**hotfix 模式精简版**：
+
+```
+## 🔥 Hotfix 落盘
+- 文件: {路径}
+- 变更: {一行描述}
+- Lint: ✅/❌ | Test: ✅/❌
+```
+
+**read 模式精简版**（无文件变更）：
+
+```
+## 📖 阅读摘要
+- 目标: {文件/模块}
+- 核心发现: {1-3 条关键结论}
+```
