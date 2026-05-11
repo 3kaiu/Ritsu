@@ -188,12 +188,12 @@ describe("semantic index handlers integration", () => {
     // write sample artifacts
     writeFileSync(
       resolve(TEST_ROOT, RITSU_DIR, "diagnosis-sample.md"),
-      "# Root Cause\nCI cache poisoned; fix by clearing vite cache.\n",
+      "# 根因确诊\n由于缓存污染，导致 CI 与本地不一致。\n\n# 验证命令\nnpm test\n",
       "utf-8",
     );
     writeFileSync(
       resolve(TEST_ROOT, RITSU_DIR, "handoff-sample.md"),
-      "# Plan\nUpdate config X and restart service.\n",
+      "# 边界与依赖\nIn Scope: 配置文件 X\n\n# 攻击测试防线\n回滚步骤：...\n",
       "utf-8",
     );
 
@@ -218,6 +218,7 @@ describe("semantic index handlers integration", () => {
     expect(sd.ok).toBe(true);
     expect(Array.isArray(sd.matches)).toBe(true);
     expect(sd.matches.length).toBeGreaterThan(0);
+    expect(typeof sd.matches[0].heading).toBe("string");
 
     delete process.env.RITSU_PROJECT_ROOT;
     delete process.env.RITSU_EMBEDDINGS_BACKEND;

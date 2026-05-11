@@ -10,6 +10,8 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { getEmbedder } from "./_semantic-embed.js";
+import { getSharedDir } from "../shared.js";
+import { load as loadYaml } from "js-yaml";
 
 type ArtifactType =
   | "handoff"
@@ -51,6 +53,46 @@ function detectArtifactType(fileName: string): ArtifactType | null {
   if (fileName.startsWith("review-stamp-")) return "review-stamp";
   if (fileName.startsWith("optimize-report-")) return "optimize-report";
   return null;
+}
+
+function normalizeHeadingTitle(heading: string): string {
+  return heading
+    .replace(/^#{1,6}\s+/, "")
+    .trim()
+    .toLowerCase();
+}
+
+function getImportantSectionTitlesByType(): Partial<
+  Record<ArtifactType, Set<string>>
+> {
+  // Best-effort: read artifact-schema.yaml to discover required section titles.
+  // If unavailable or malformed, we fall back to heading-based chunking only.
+  try {
+    const schemaPath = resolve(getSharedDir(), "artifact-schema.yaml");
+    if (!existsSync(schemaPath)) return {};
+    const raw = readFileSync(schemaPath, "utf-8");
+    const doc = loadYaml(raw) as any;
+    const schemas = doc?.schemas;
+
+    const pickTitles = (schemaKey: string): Set<string> => {
+      const required = schemas?.[schemaKey]?.required_sections;
+      if (!Array.isArray(required)) return new Set();
+      const titles = required
+        .map((s: any) => (typeof s?.title === "string" ? s.title : ""))
+        .filter(Boolean)
+        .map((t: string) => t.trim().toLowerCase());
+      return new Set(titles);
+    };
+
+    return {
+      handoff: pickTitles("handoff"),
+      diagnosis: pickTitles("diagnosis"),
+      // schema uses review_stamp key; runtime artifact type is review-stamp
+      "review-stamp": pickTitles("review_stamp"),
+    };
+  } catch {
+    return {};
+  }
 }
 
 type Section = {
@@ -144,6 +186,7 @@ export async function ritsu_semantic_index_build(
   const existing = loadExistingIndex(indexPath);
 
   const embedder = await getEmbedder();
+  const importantTitlesByType = getImportantSectionTitlesByType();
 
   const files = readdirSync(ritsuDir)
     .filter((f) => f.endsWith(".md"))
@@ -186,6 +229,34 @@ export async function ritsu_semantic_index_build(
     const sections = splitMarkdownSections(content);
     let chunkIndex = 0;
     for (const s of sections) {
+      const titleNorm = normalizeHeadingTitle(s.heading);
+      const importantSet = importantTitlesByType[t];
+      const isImportant = importantSet ? importantSet.has(titleNorm) : false;
+
+      if (isImportant) {
+        const whole = content.slice(s.start, s.end).trim();
+        if (whole) {
+          const wholeText = whole.length > 4000 ? whole.slice(0, 4000) : whole;
+          const embWhole = await embedder.embed(wholeText);
+          const leadingWs = content.slice(s.start, s.end).indexOf(whole[0]);
+          const absStart = s.start + Math.max(0, leadingWs);
+          const absEnd = absStart + wholeText.length;
+          newEntries.push({
+            id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
+            artifact_type: t,
+            path: abs,
+            chunk_index: chunkIndex,
+            heading: s.heading,
+            chunk_start: absStart,
+            chunk_end: Math.min(absEnd, content.length),
+            content_hash: contentHash,
+            embedding: embWhole,
+            created_at: nowIso(),
+          });
+          chunkIndex++;
+        }
+      }
+
       const chunks = chunkRange(content, s.start, s.end, chunkSize, overlap);
       for (const c of chunks) {
         const emb = await embedder.embed(c.text);
