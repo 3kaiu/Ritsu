@@ -9,6 +9,11 @@ import {
   warnResult,
 } from "./_utils.js";
 
+const CONTRACT_ARTIFACT_PRIORITY = [
+  { type: "handoff", prefix: "handoff-" },
+  { type: "intake-ticket", prefix: "intake-ticket-" },
+] as const;
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -26,19 +31,19 @@ function extractImplementationSection(content: string): string {
   return buf.join("\n");
 }
 
-function extractExpectedIdentifiersFromHandoff(content: string): string[] {
-  const section = extractImplementationSection(content);
-  if (!section.trim()) return [];
+function extractExpectedIdentifiersFromContract(content: string): string[] {
+  const implementationSection = extractImplementationSection(content);
+  const sourceText = implementationSection.trim() ? implementationSection : content;
 
   const rawTokens = new Set<string>();
 
-  for (const m of section.matchAll(/`([^`]+)`/g)) {
+  for (const m of sourceText.matchAll(/`([^`]+)`/g)) {
     const t = m[1].trim();
     if (!t) continue;
     rawTokens.add(t);
   }
 
-  for (const m of section.matchAll(/\b[A-Za-z_][A-Za-z0-9_]{2,}\b/g)) {
+  for (const m of sourceText.matchAll(/\b[A-Za-z_][A-Za-z0-9_]{2,}\b/g)) {
     rawTokens.add(m[0]);
   }
 
@@ -68,6 +73,41 @@ function extractExpectedIdentifiersFromHandoff(content: string): string[] {
     .filter((t) => /^[A-Za-z_]/.test(t));
 
   return Array.from(new Set(filtered)).sort((a, b) => a.localeCompare(b));
+}
+
+function detectContractArtifactType(path: string): string {
+  const fileName = path.split("/").pop() ?? path;
+  return (
+    CONTRACT_ARTIFACT_PRIORITY.find(({ prefix }) => fileName.startsWith(prefix))
+      ?.type ?? "unknown"
+  );
+}
+
+function findLatestContractArtifact(root: string): {
+  path: string;
+  artifact_type: string;
+} | null {
+  const dir = resolve(root, ".ritsu");
+  if (!existsSync(dir)) return null;
+
+  const entries = readdirSync(dir)
+    .filter((f: string) => f.endsWith(".md"))
+    .map((f: string) => ({
+      path: resolve(dir, f),
+      name: f,
+      mtime: statSync(resolve(dir, f)).mtimeMs,
+    }));
+
+  for (const { type, prefix } of CONTRACT_ARTIFACT_PRIORITY) {
+    const files = entries
+      .filter((entry) => entry.name.startsWith(prefix))
+      .sort((a, b) => b.mtime - a.mtime);
+    if (files.length > 0) {
+      return { path: files[0].path, artifact_type: type };
+    }
+  }
+
+  return null;
 }
 
 function findIdentifierCoverage(
@@ -104,47 +144,35 @@ export async function ritsu_contract_validate(
     Math.min(1, Number(params.min_coverage ?? 0.8)),
   );
   const cached = params.cached === true;
-  const handoffPathParam = String(params.handoff_path ?? "").trim();
+  const artifactPathParam = String(
+    params.artifact_path ?? params.handoff_path ?? "",
+  ).trim();
 
-  let handoffPath = handoffPathParam;
+  let artifactPath = artifactPathParam;
+  let artifactType = artifactPath ? detectContractArtifactType(artifactPath) : "";
 
-  if (!handoffPath) {
-    const dir = resolve(root, ".ritsu");
-    if (!existsSync(dir)) {
+  if (!artifactPath) {
+    const latestArtifact = findLatestContractArtifact(root);
+    if (!latestArtifact) {
       return warnResult(
         {
           passed: true,
-          reason: "no .ritsu directory; skip contract validation",
+          reason: "no contract artifact found; skip contract validation",
         },
-        "no .ritsu directory; skip contract validation",
+        "no contract artifact found; skip contract validation",
       );
     }
-
-    const files = readdirSync(dir)
-      .filter((f: string) => f.startsWith("handoff-") && f.endsWith(".md"))
-      .map((f: string) => ({
-        path: resolve(dir, f),
-        mtime: statSync(resolve(dir, f)).mtimeMs,
-      }))
-      .sort((a: any, b: any) => b.mtime - a.mtime);
-
-    if (files.length === 0) {
-      return warnResult(
-        { passed: true, reason: "no handoff found; skip contract validation" },
-        "no handoff found; skip contract validation",
-      );
-    }
-
-    handoffPath = files[0].path;
+    artifactPath = latestArtifact.path;
+    artifactType = latestArtifact.artifact_type;
   }
 
-  if (!existsSync(handoffPath)) {
-    return errorResult(`handoff file not found: ${handoffPath}`);
+  if (!existsSync(artifactPath)) {
+    return errorResult(`contract artifact not found: ${artifactPath}`);
   }
 
-  const handoffContent = readFileSync(handoffPath, "utf-8");
+  const contractContent = readFileSync(artifactPath, "utf-8");
   const expectedIdentifiers =
-    extractExpectedIdentifiersFromHandoff(handoffContent);
+    extractExpectedIdentifiersFromContract(contractContent);
 
   const diffArgs = cached
     ? ["diff", "--unified=3", "--cached"]
@@ -163,7 +191,9 @@ export async function ritsu_contract_validate(
       expected_total: expectedIdentifiers.length,
       covered: coverage.covered,
       missing: coverage.missing,
-      handoff_path: handoffPath,
+      artifact_path: artifactPath,
+      artifact_type: artifactType,
+      handoff_path: artifactPath,
       cached,
     }),
   );

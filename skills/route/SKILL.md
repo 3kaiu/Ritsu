@@ -1,21 +1,23 @@
 ---
 name: route
 version: "3.8.0"
-description: "Ritsu 任务调度入口。分析用户意图，路由至正确技能或流水线，建立全局会话上下文。"
+description: "Ritsu 需求受理入口。识别任务类型、风险等级和执行路径，输出统一执行单。"
 when_to_use: "/r-route, 我不知道该用哪个命令, 帮我决定, 从哪开始"
 total_steps: 5
 hard_constraints:
   - id: HC-1
-    rule: "只做调度决策，不执行任何实质性的开发/设计/诊断工作"
+    rule: "只做需求受理与执行路径判定，不执行实质性的开发/设计/诊断工作"
     severity: FATAL
   - id: HC-2
-    rule: "识别到多个意图时，必须标注次要意图，不得静默丢弃"
+    rule: "识别到多个意图或隐含风险时，必须显式写入执行单，不得静默丢弃"
     severity: FATAL
 ---
 
-# Route: 全局任务调度入口 (Global Dispatcher)
+# Route: Intake 需求受理入口 (Intake Gateway)
 
-**触发条件**：用户输入 `/r-route`，或表达了意图但不确定该调用哪个技能。
+**触发条件**：用户输入 `/r-route`，或表达了意图但尚未形成清晰执行路径。
+
+> 当前文件名仍为 `route`，但产品语义上承担 `intake`。
 
 ## 执行流水线
 
@@ -23,92 +25,91 @@ hard_constraints:
 
 调用 **`ritsu_read_ctx`** 工具解析历史任务状态：
 
-⚠️ **现实对账机制**：`ritsu_read_ctx` 自动计算 `reality_check` 字段：
+- 若存在未完成任务，提示是否继续
+- 若存在熔断状态，提示当前风险
+- 若发现产物丢失，提示状态已失配
 
-- `desync_detected: true` → 向用户提示"检测到 Git 时空错位，产物文件已丢失"，主动忽略该 `done` 记录，将状态机自适应拨回 `started`，并询问是否重新执行该任务。
-- `desync_detected: false` → 按正常逻辑提示。
+**Context Pruning**：
 
-同时检查 `recovery_context`：
-
-- 存在未完成任务 → 告知用户"检测到未完成任务"，展示 `recovery_context.resume_hint`，询问是否继续或开启新任务
-- 发现已完成任务 → 告知上一任务结论，推荐下一步
-- 无记录 → 正常继续
-
-同时检查 `circuit_breaker_status`：
-
-- `should_redirect` 非空 → 告知用户"检测到熔断状态（连续 {consecutive_fails} 次失败）"，建议先执行 `/r-think`
-
-**Token 炸弹防御（Context Pruning）**：
-
-- 优先读取 `recent_entries_pruned`（done/artifact_written 权重更高）而不是全量 recent_entries
-- failed 事件优先读取 `failed_summary`（按 skill 聚合）而不是逐条展开
+- 优先读取 `recent_entries_pruned`
+- failed 事件优先读取 `failed_summary`
 
 ### 2. 领域解析
 
 > 引用 `_shared/skill-common-steps.md` Step 1
 
-> 💡 优先调用 `ritsu_get_changed_files` 获取 `domain_hint`，作为领域解析的 P2 依据。
+> 优先调用 `ritsu_get_changed_files` 获取 `domain_hint`，作为领域解析的 P2 依据。
 
-### 3. 意图识别与路由
+### 3. 任务识别与执行路径判定
 
-**单意图路由**（按序，首个命中即路由）：
+`[Step 2 Complete]` 后，不再把结果主要表达为“你该调用哪个 skill”，而是收敛为统一受理判断。
 
-```
-1. 项目全新 / 无 AGENTS.md           → /r-init
-2. 看看/解释/理解/读一下（纯阅读）   → /r-read [目标]
-3. 有新需求 且 .ritsu/handoff-* 不存在 → /r-pipe standard [需求]（自动 think→dev→review）
-4. 直接写代码 且 Handoff 已存在       → /r-dev [handoff路径]
-5. 有报错 / 找不到 Bug               → /r-pipe bugfix [报错信息]（自动 hunt→dev→review）
-6. 写完代码 / 要合并                 → /r-review
-7. 优化/精简/提速（不改功能）         → /r-pipe optimize [目标]（自动 optimize→review）
-8. 重构/提取/重命名/拆分/改结构       → /r-refactor [目标]
-9. 补测试 / 写测试 / 测试覆盖率       → /r-pipe test_add [目标]（自动 test→review）
-10. 部署 / 发布 / 上线                 → /r-deploy
-11. 写文档 / 更新文档 / API文档        → /r-doc [目标]
-12. 有 Issue/PR 要处理               → /r-triage
-```
+**任务类型**（至少识别其一）：
 
-**流水线路由**（用户明确要求端到端交付时）：
+- 新功能
+- Bug 修复
+- 补测试
+- 重构
+- 优化
+- 纯阅读 / 纯咨询
+- 扩展任务（文档 / 部署 / triage）
 
-| 流水线             | 触发条件                 | 自动序列             |
-| ------------------ | ------------------------ | -------------------- |
-| `/r-pipe standard` | 新需求，需设计→开发→审查 | think → dev → review |
-| `/r-pipe bugfix`   | Bug 修复                 | hunt → dev → review  |
-| `/r-pipe optimize` | 代码优化                 | optimize → review    |
-| `/r-pipe test_add` | 补充测试                 | test → review        |
+**风险等级**：
 
-流水线规则（引用 `_shared/state-machine.yaml` states.pipe.rules）：
+- `quick`：小改动、低风险、信息充分
+- `standard`：常规任务，需正常验证
+- `critical`：涉及架构、迁移或高发布风险
 
-- 自动传递 correlation_id 和 domain
-- `/r-pipe --fast`：流水线中每个技能按其 `fast_mode` 声明执行（无声明则按 standard）
-- 任一技能 failed → 暂停，等待用户决定
-- 熔断触发 → 自动重定向至 think
-- `/r-pipe --skip` 跳过当前技能
-- `/r-pipe --abort` 终止流水线
+**信息完备度**：
 
-> **dev vs think 分叉依据**：调用 **`ritsu_list_artifacts`**（type=handoff）检查文件是否存在，而非依赖用户描述措辞。
+- 是否缺少复现步骤
+- 是否缺少验收标准
+- 是否缺少上下文文件/模块
+- 是否缺少风险边界
 
-**多意图路由**（识别到 2+ 意图）：
+**推荐路径**：
 
-- 主任务优先级：`hunt > review > refactor > optimize > dev > think > read > triage > init`
-- 必须在输出中标注：`⚠️ 次要意图：{描述} → 主任务完成后执行 /r-{skill}`
+- 新功能 / 常规开发 → `deliver.standard`
+- 小改动 / 明确修复 → `deliver.quick`
+- 高风险变更 → `deliver.critical`
+- 仅需结论审查 → `assure`
+- 非主链路任务 → 扩展模块
 
-### 4. 输出路由决策
+### 4. 输出执行单
 
-```
+```markdown
 [RITSU_CTX: domain={value}]
-🧭 律 (Ritsu) 调度：{意图描述} → /r-{skill}
-{若多意图：⚠️ 次要：{描述} → /r-{次要}}
-请执行：**`/r-{skill} [...]`**
+
+## Intake 执行单
+- 任务类型: {新功能/Bug/补测试/重构/优化/纯阅读/扩展任务}
+- 风险等级: {quick/standard/critical}
+- 当前目标: {一句话描述}
+- 信息完备度: {充分/部分缺失/严重缺失}
+- 缺失信息: {若无则写“无”}
+- 推荐路径: {deliver.quick / deliver.standard / deliver.critical / assure / extension}
+- 次要意图: {若无则写“无”}
+- 备注风险: {若无则写“无”}
 ```
 
-> correlation_id 由 `ritsu_emit_event` 自动生成（格式 `cid-{YYYYMMDD}-{seq}`），无需手动指定。
+**输出要求**：
+
+- 优先给执行路径，不优先给命令说明
+- 需要补信息时，一次性列全
+- 只有在确实需要用户显式选择时才中断
+
+执行单形成后，调用 **`ritsu_write_artifact`**（type=`intake-ticket`）写入主受理产物，内容至少包含：
+
+- 任务识别
+- 风险与信息
+- 执行路径
+
+`intake-ticket` 的职责是沉淀“需求已被如何理解、下一步应如何推进”，不是替代后续 `handoff` 的实施清单。
 
 ### 5. 写入 ctx
 
-路由决策确定后，写入 ctx：
+执行单确认后，写入 ctx：
 
-> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=null）
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=route, artifact=.ritsu/intake-ticket-{ts}.md）
 
 ---
 

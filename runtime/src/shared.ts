@@ -17,6 +17,9 @@ export function getSharedDir(): string {
 // ─── Artifact 常量 ──────────────────────────────────────────
 
 export const ARTIFACT_VALID_TYPES = [
+  "intake-ticket",
+  "delivery-report",
+  "assurance-report",
   "handoff",
   "diagnosis",
   "review-stamp",
@@ -27,6 +30,9 @@ export type ArtifactType = (typeof ARTIFACT_VALID_TYPES)[number];
 
 /** 产物类型 → 文件名前缀映射（含 ctx 用于 list 查询） */
 export const ARTIFACT_PREFIX_MAP: Record<string, string> = {
+  "intake-ticket": "intake-ticket-",
+  "delivery-report": "delivery-report-",
+  "assurance-report": "assurance-report-",
   handoff: "handoff-",
   diagnosis: "diagnosis-",
   "review-stamp": "review-stamp-",

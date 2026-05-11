@@ -1,18 +1,13 @@
 /**
- * 工具 Handler 注册表 (SDK + 业务工具模式)
+ * 工具 Handler 注册表
  *
- * MCP Server = SDK 原语 + 高频业务封装。
- * SKILL.md = 程序，AI 是 CPU，按需调用这些系统调用。
+ * 产品面已经收敛为 intake / deliver / assure。
+ * 这里不再维护“8 个工具”之类的历史描述，而以实际注册表为准。
  *
- * 8 个工具（各 handler 实现在独立文件中）：
- *   ritsu_emit_event       — 事件写入 + Schema 校验
- *   ritsu_read_ctx         — ctx 索引查询
- *   ritsu_write_artifact   — 产物写入 + 占位符拦截
- *   ritsu_list_artifacts   — 产物列表查询
- *   ritsu_exec             — 通用命令执行（带截断/超时/安全边界）
- *   ritsu_get_changed_files — 变更文件列表 + 自动领域推断
- *   ritsu_get_diff         — 结构化 diff 分析 + 新增标识符提取
- *   ritsu_run_quality_gates — Lint/Test 执行 + 结构化结果
+ * 可以大致分成三类：
+ * - stable: ctx / artifact / exec / diff / quality gates
+ * - conditional: contract validate
+ * - advanced: sandbox / semantic / kg / ts
  */
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";

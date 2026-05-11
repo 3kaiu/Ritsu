@@ -1,5 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { getProjectRoot, errorResult, textResult } from "./_utils.js";
 import { runGit } from "./_git-utils.js";
@@ -17,6 +18,9 @@ export async function ritsu_sandbox_prepare(
   mkdirSync(tempRoot, { recursive: true });
 
   const sandboxPath = resolve(tempRoot, cid);
+  const fallbackRoot = resolve(tmpdir(), "ritsu-sandboxes");
+  mkdirSync(fallbackRoot, { recursive: true });
+  const fallbackClonePath = resolve(fallbackRoot, cid);
 
   // clean if exists
   if (existsSync(sandboxPath)) {
@@ -27,15 +31,53 @@ export async function ritsu_sandbox_prepare(
     }
     rmSync(sandboxPath, { recursive: true, force: true });
   }
+  if (existsSync(fallbackClonePath)) {
+    rmSync(fallbackClonePath, { recursive: true, force: true });
+  }
 
   const addR = await runGit(["worktree", "add", "--detach", sandboxPath, baseRef], root);
-  if (!addR.ok) return errorResult(`git worktree add failed: ${addR.output}`);
+  if (addR.ok) {
+    return textResult(
+      JSON.stringify({
+        ok: true,
+        sandbox_path: sandboxPath,
+        base_ref: baseRef,
+        mode: "worktree",
+      }),
+    );
+  }
+
+  // Fallback: some environments cannot mutate source .git/worktrees or create
+  // nested sandboxes inside the main repo. In that case, use an isolated clone
+  // in the system temp directory.
+  const cloneR = await runGit(
+    ["clone", "--no-local", root, fallbackClonePath],
+    root,
+  );
+  if (!cloneR.ok) {
+    return errorResult(
+      `sandbox prepare failed: git worktree add failed (${addR.output}); clone fallback failed (${cloneR.output})`,
+    );
+  }
+
+  const checkoutR = await runGit(
+    ["-C", fallbackClonePath, "checkout", "--detach", baseRef],
+    root,
+  );
+  if (!checkoutR.ok) {
+    rmSync(fallbackClonePath, { recursive: true, force: true });
+    return errorResult(
+      `sandbox clone prepared but checkout failed: ${checkoutR.output}`,
+    );
+  }
 
   return textResult(
     JSON.stringify({
       ok: true,
-      sandbox_path: sandboxPath,
+      sandbox_path: fallbackClonePath,
       base_ref: baseRef,
+      mode: "clone-fallback",
+      warning: addR.output || null,
     }),
   );
 }

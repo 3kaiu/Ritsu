@@ -2,6 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
   statSync,
   writeFileSync,
   renameSync,
@@ -9,10 +10,113 @@ import {
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { ARTIFACT_VALID_TYPES, ARTIFACT_PREFIX_MAP } from "../shared.js";
+import { load as loadYaml } from "js-yaml";
+import {
+  ARTIFACT_VALID_TYPES,
+  ARTIFACT_PREFIX_MAP,
+  getSharedDir,
+} from "../shared.js";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 
 const RITSU_DIR = ".ritsu";
+const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
+  "intake-ticket": "intake_ticket",
+  "delivery-report": "delivery_report",
+  "assurance-report": "assurance_report",
+  handoff: "handoff",
+  diagnosis: "diagnosis",
+  "review-stamp": "review_stamp",
+  "optimize-report": "optimize_report",
+};
+
+type ArtifactSchemaSection = {
+  title?: string;
+  fields?: Array<{ label?: string }>;
+  conditional_fields?: Array<{ fields?: Array<{ label?: string }> }>;
+};
+
+let cachedArtifactSchemas: Record<string, { required_sections?: ArtifactSchemaSection[] }> | null =
+  null;
+
+function getArtifactSchemas(): Record<
+  string,
+  { required_sections?: ArtifactSchemaSection[] }
+> {
+  if (cachedArtifactSchemas) return cachedArtifactSchemas;
+  const schemaPath = resolve(getSharedDir(), "artifact-schema.yaml");
+  if (!existsSync(schemaPath)) {
+    cachedArtifactSchemas = {};
+    return cachedArtifactSchemas;
+  }
+
+  try {
+    const raw = readFileSync(schemaPath, "utf-8");
+    const doc = loadYaml(raw) as {
+      schemas?: Record<string, { required_sections?: ArtifactSchemaSection[] }>;
+    };
+    cachedArtifactSchemas = doc?.schemas ?? {};
+  } catch {
+    cachedArtifactSchemas = {};
+  }
+
+  return cachedArtifactSchemas;
+}
+
+function getSectionBody(content: string, title: string): string | null {
+  const lines = content.split(/\r?\n/);
+  const heading = `## ${title}`;
+  const startIdx = lines.findIndex((line) => line.trim() === heading);
+  if (startIdx === -1) return null;
+
+  const buf: string[] = [];
+  for (let i = startIdx + 1; i < lines.length; i++) {
+    if (/^##\s+/.test(lines[i].trim())) break;
+    buf.push(lines[i]);
+  }
+  return buf.join("\n");
+}
+
+function validateArtifactContent(type: string, content: string): string | null {
+  const schemaKey = ARTIFACT_SCHEMA_KEY_MAP[type];
+  if (!schemaKey) return null;
+
+  const schema = getArtifactSchemas()[schemaKey];
+  const requiredSections = schema?.required_sections;
+  if (!Array.isArray(requiredSections) || requiredSections.length === 0) {
+    return null;
+  }
+
+  for (const section of requiredSections) {
+    const title = typeof section?.title === "string" ? section.title.trim() : "";
+    if (!title) continue;
+
+    const body = getSectionBody(content, title);
+    if (body === null) {
+      return `artifact schema validation failed: missing required section '## ${title}'`;
+    }
+
+    const labels = [
+      ...(Array.isArray(section.fields) ? section.fields : []),
+      ...((Array.isArray(section.conditional_fields)
+        ? section.conditional_fields.flatMap((group) =>
+            Array.isArray(group.fields) ? group.fields : [],
+          )
+        : []) as Array<{ label?: string }>),
+    ]
+      .map((field) =>
+        typeof field?.label === "string" ? field.label.trim() : "",
+      )
+      .filter(Boolean);
+
+    for (const label of labels) {
+      if (!body.includes(label)) {
+        return `artifact schema validation failed: section '${title}' missing field label '${label}'`;
+      }
+    }
+  }
+
+  return null;
+}
 
 export async function ritsu_write_artifact(
   params: Record<string, unknown>,
@@ -27,9 +131,9 @@ export async function ritsu_write_artifact(
   if (!type || !filename || !content)
     return errorResult("type, filename, content are required");
 
-  // 占位符拦截 — ctx 类型豁免，AGENTS.md (handoff) 也豁免 init 阶段
+  // 占位符拦截 — runtime 当前只对 artifact 内容做最小约束
   const placeholderPattern = /TODO|待定|暂不处理|后续完善|TBD/;
-  if (placeholderPattern.test(content) && type !== "ctx") {
+  if (placeholderPattern.test(content)) {
     return errorResult(
       "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",
     );
@@ -60,6 +164,9 @@ export async function ritsu_write_artifact(
       "filename must not contain path traversal (..) or directory separators",
     );
   }
+
+  const validationError = validateArtifactContent(type, content);
+  if (validationError) return errorResult(validationError);
 
   const root = getProjectRoot();
   const dir = resolve(root, RITSU_DIR);

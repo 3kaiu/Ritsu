@@ -28,10 +28,9 @@ import {
   existsSync,
   mkdirSync,
   rmSync,
-  readdirSync,
-  readFileSync,
   writeFileSync,
 } from "node:fs";
+import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 
 const TEST_ROOT = resolve("/tmp/ritsu-test-" + process.pid);
@@ -39,6 +38,9 @@ const RITSU_DIR = ".ritsu";
 
 beforeEach(() => {
   // 清理并创建测试目录
+  if (existsSync(resolve(TEST_ROOT, ".git"))) {
+    rmSync(resolve(TEST_ROOT, ".git"), { recursive: true, force: true });
+  }
   if (existsSync(resolve(TEST_ROOT, RITSU_DIR))) {
     rmSync(resolve(TEST_ROOT, RITSU_DIR), { recursive: true, force: true });
   }
@@ -47,6 +49,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  if (existsSync(resolve(TEST_ROOT, ".git"))) {
+    rmSync(resolve(TEST_ROOT, ".git"), { recursive: true, force: true });
+  }
   if (existsSync(resolve(TEST_ROOT, RITSU_DIR))) {
     rmSync(resolve(TEST_ROOT, RITSU_DIR), { recursive: true, force: true });
   }
@@ -531,6 +536,16 @@ describe("ritsu_exec safety boundary", () => {
 // ─── 产物校验 ──────────────────────────────────────────────
 
 describe("artifact validation rules", () => {
+  it("should include product-level artifact types", () => {
+    expect(ARTIFACT_VALID_TYPES).toEqual(
+      expect.arrayContaining([
+        "intake-ticket",
+        "delivery-report",
+        "assurance-report",
+      ]),
+    );
+  });
+
   it("should reject invalid artifact types", () => {
     expect(ARTIFACT_VALID_TYPES.includes("invalid" as any)).toBe(false);
     expect(ARTIFACT_VALID_TYPES.includes("ctx" as any)).toBe(false);
@@ -539,8 +554,16 @@ describe("artifact validation rules", () => {
   it("should enforce filename prefix per type", () => {
     for (const [type, prefix] of Object.entries(ARTIFACT_PREFIX_MAP)) {
       if (type === "ctx") continue;
-      expect(`diagnosis-bug.md`.startsWith(prefix)).toBe(type === "diagnosis");
-      expect(`handoff-auth.md`.startsWith(prefix)).toBe(type === "handoff");
+      const sampleByType: Record<string, string> = {
+        "intake-ticket": "intake-ticket-auth.md",
+        "delivery-report": "delivery-report-auth.md",
+        "assurance-report": "assurance-report-auth.md",
+        handoff: "handoff-auth.md",
+        diagnosis: "diagnosis-bug.md",
+        "review-stamp": "review-stamp-auth.md",
+        "optimize-report": "optimize-report-auth.md",
+      };
+      expect(sampleByType[type].startsWith(prefix)).toBe(true);
     }
   });
 
@@ -728,6 +751,47 @@ describe.skip("ritsu_validate handler integration", () => {
 describe("ritsu_write_artifact handler integration", () => {
   let writeArtifact: (params: Record<string, unknown>) => Promise<any>;
 
+  const validHandoffContent = `# Auth Delivery
+
+## 边界与依赖
+- 目标范围 (In Scope): 登录态持久化
+- Out of Scope: 权限模型重构
+- 新增依赖: 无
+
+## 核心契约 (Contract)
+- API / 接口契约: POST /session/refresh
+- 数据模型: session_token / expires_at
+- 组件契约: AuthProvider / useSession
+
+## 攻击测试防线
+- 宕机响应: refresh 接口失败时保持当前会话并提示重试
+- 10x 瓶颈: token 刷新热点通过缓存和限流兜底
+- 回滚步骤: 回退 session refresh 逻辑并清理新增缓存键
+
+## Complexity Score（动态代价评估）
+- 变更规模(LoC/文件数): 4/120
+- 架构侵入度: 4/10
+- 运行时开销: 3/10
+- 备选方案: 仅本地缓存，不做自动续期
+
+## 实施清单
+- [ ] \`src/auth/session.ts\`: 增加续期和持久化逻辑
+`;
+
+  const validDeliveryReportContent = `# Delivery Report
+
+## 交付摘要
+- 模式: standard
+- 任务目标: 登录态持久化与自动续期
+- 实施结果: 已完成续期逻辑与状态持久化
+- 验证结果: 单测通过，质量门禁通过
+
+## 变更与风险
+- 主要产出: auth session 持久化代码与测试
+- 已知风险: 旧 token 清理仍依赖定时任务
+- 下一步: 进入 assure 验收
+`;
+
   beforeAll(async () => {
     const mod = await import("../src/handlers/write-artifact.js");
     writeArtifact = mod.ritsu_write_artifact;
@@ -783,12 +847,36 @@ describe("ritsu_write_artifact handler integration", () => {
     const result = await writeArtifact({
       type: "handoff",
       filename: "handoff-test.md",
-      content: "# Real content",
+      content: validHandoffContent,
     });
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
     expect(data.size_bytes).toBeGreaterThan(0);
     delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should write a valid product-level artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "delivery-report",
+      filename: "delivery-report-test.md",
+      content: validDeliveryReportContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("delivery-report-test.md");
+    expect(data.size_bytes).toBeGreaterThan(0);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should reject artifact content missing required schema sections", async () => {
+    const result = await writeArtifact({
+      type: "delivery-report",
+      filename: "delivery-report-invalid.md",
+      content: "# Delivered\n\n- verified",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("missing required section");
   });
 });
 
@@ -819,6 +907,80 @@ describe("ritsu_list_artifacts handler integration", () => {
     const data = JSON.parse(result.content[0].text);
     expect(data.files).toBeDefined();
     expect(typeof data.total_count).toBe("number");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should filter product-level artifact types", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "delivery-report-auth.md"),
+      "# delivery",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "handoff-auth.md"),
+      "# handoff",
+      "utf-8",
+    );
+
+    const result = await listArtifacts({ type: "delivery-report" });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.total_count).toBe(1);
+    expect(data.files[0].artifact_type).toBe("delivery-report");
+    expect(data.files[0].path).toContain("delivery-report-auth.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── ritsu_contract_validate handler 集成测试 ──────────────────
+
+describe("ritsu_contract_validate handler integration", () => {
+  let contractValidate: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    const mod = await import("../src/handlers/contract-validate.js");
+    contractValidate = mod.ritsu_contract_validate;
+  });
+
+  it("should prefer handoff over intake-ticket when auto-selecting contract artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    execSync("git init", { cwd: TEST_ROOT, stdio: "ignore" });
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "intake-ticket-old.md"),
+      "# Intake\n\n## 任务识别\n- 当前目标: auth flow\n",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "handoff-new.md"),
+      "# Handoff\n\n## 实施清单\n- [ ] `AuthService`: wire auth flow\n",
+      "utf-8",
+    );
+
+    const result = await contractValidate({ min_coverage: 0 });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.artifact_type).toBe("handoff");
+    expect(data.artifact_path).toContain("handoff-new.md");
+    expect(data.handoff_path).toContain("handoff-new.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should fall back to intake-ticket when no handoff exists", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    execSync("git init", { cwd: TEST_ROOT, stdio: "ignore" });
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "intake-ticket-auth.md"),
+      "# Intake\n\n## 任务识别\n- 当前目标: auth flow\n- 推荐路径: update AuthService\n",
+      "utf-8",
+    );
+
+    const result = await contractValidate({ min_coverage: 0 });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.artifact_type).toBe("intake-ticket");
+    expect(data.artifact_path).toContain("intake-ticket-auth.md");
+    expect(data.handoff_path).toContain("intake-ticket-auth.md");
     delete process.env.RITSU_PROJECT_ROOT;
   });
 });
@@ -938,7 +1100,7 @@ describe("sandbox handlers integration", () => {
   it("should prepare and cleanup sandbox idempotently", async () => {
     process.env.RITSU_PROJECT_ROOT = REAL_PROJECT_ROOT;
     const cid = "cid-sandbox-prepare-" + process.pid;
-    const sandboxPath = resolve(REAL_PROJECT_ROOT, ".ritsu", "temp", cid);
+    let sandboxPath = "";
 
     try {
       const p1 = await sandboxPrepare({
@@ -946,6 +1108,7 @@ describe("sandbox handlers integration", () => {
         base_ref: "HEAD",
       });
       expect(p1.isError).toBeFalsy();
+      sandboxPath = JSON.parse(p1.content[0].text).sandbox_path;
       expect(existsSync(sandboxPath)).toBe(true);
 
       const p2 = await sandboxPrepare({
@@ -953,6 +1116,7 @@ describe("sandbox handlers integration", () => {
         base_ref: "HEAD",
       });
       expect(p2.isError).toBeFalsy();
+      sandboxPath = JSON.parse(p2.content[0].text).sandbox_path;
       expect(existsSync(sandboxPath)).toBe(true);
     } finally {
       await sandboxCleanup({ correlation_id: cid });
@@ -964,11 +1128,12 @@ describe("sandbox handlers integration", () => {
   it("should execute safe command inside sandbox", async () => {
     process.env.RITSU_PROJECT_ROOT = REAL_PROJECT_ROOT;
     const cid = "cid-sandbox-exec-ok-" + process.pid;
-    const sandboxPath = resolve(REAL_PROJECT_ROOT, ".ritsu", "temp", cid);
+    let sandboxPath = "";
 
     try {
       const p = await sandboxPrepare({ correlation_id: cid, base_ref: "HEAD" });
       expect(p.isError).toBeFalsy();
+      sandboxPath = JSON.parse(p.content[0].text).sandbox_path;
       expect(existsSync(sandboxPath)).toBe(true);
 
       const r = await sandboxExec({

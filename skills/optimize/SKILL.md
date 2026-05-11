@@ -1,46 +1,35 @@
 ---
 name: optimize
 version: "3.8.0"
-description: "Ritsu 领域自适应代码精简优化。不改功能/布局/结构/样式，只做精简、性能提升和平台适配优化。"
-when_to_use: "/r-opt, 优化, 精简, 性能优化, refactor, 代码瘦身, 提速"
+description: "Ritsu 交付模式能力。用于 deliver 内的减法优化与等价替换，不再视为主产品入口。"
+when_to_use: "/r-opt, 优化, 精简, 性能优化, 代码瘦身, 提速"
 total_steps: 5
 fast_mode:
   skip_steps: [4]
   skip_artifacts: true
   self_test: "ritsu_run_quality_gates"
-  description: "跳过详细报告(4)，直接执行优化+质量门禁自测，不写 optimize-report 产物"
+  description: "直接执行确认过的优化项并做验证"
 hard_constraints:
   - id: HC-1
-    rule: "优化前后功能必须完全等价——任何行为变更视为违规，必须回滚"
+    rule: "优化前后功能必须完全等价"
     severity: FATAL
   - id: HC-2
-    rule: "禁止新增功能、样式、布局、结构——只做减法和等价替换"
+    rule: "禁止新增功能、样式、布局、结构"
     severity: FATAL
   - id: HC-3
-    rule: "每项优化必须可独立验证——合并多项不可测的微优化等于未优化"
-    severity: FATAL
-  - id: HC-4
-    rule: "外部标识符替换前必须调用 ritsu_exec 执行 grep 验证新标识符存在且签名对齐"
+    rule: "每项优化必须可独立验证"
     severity: FATAL
 ---
 
-# Optimize: 领域自适应代码精简优化
+# Optimize: Deliver 模式能力 (Optimization Mode)
 
-> 核心原则：**只做减法和等价替换，绝不做加法。**
+**触发条件**：用户输入 `/r-opt`，或 `deliver` 以 optimize 模式处理减法优化任务时调用。
 
----
+> 该模块现在属于 `deliver` 的模式能力，而不是产品一线入口。
 
-## 不可变边界 (Immutable Boundaries)
+## 核心原则
 
-以下内容**绝对禁止变更**，违反任何一条即终止优化：
-
-1. **功能行为**：输入输出、副作用、错误处理路径必须完全一致
-2. **布局与结构**：DOM 层级、组件树、路由结构不变
-3. **视觉样式**：用户可见的任何像素不变（CSS 等价替换允许，如 `margin: 0 auto` → `mx-auto`）
-4. **公共接口**：export 的函数签名、Props 类型、API 契约不变
-5. **数据流**：状态管理路径、数据流向不变
-
----
+只做减法和等价替换，不做产品面加法。
 
 ## 执行流水线
 
@@ -48,57 +37,37 @@ hard_constraints:
 
 > 引用 `_shared/skill-common-steps.md` Step 1
 
-### 2. 深度分析 (Deep Analysis)
+### 2. 优化项识别
 
 `[Step 1 Complete]` 后进入步骤 2。
 
-对目标文件及其直接依赖进行**只读扫描**，产出分析清单：
+识别候选优化项：
 
-| #   | 类别       | 当前写法                         | 替换为                    | 预期收益  | 风险 |
-| --- | ---------- | -------------------------------- | ------------------------- | --------- | ---- |
-| 1   | 死代码     | {未使用的变量/函数/导入/类型}    | 删除                      | 体积↓     | 低   |
-| 2   | 冗余逻辑   | {可合并条件/重复计算/可内联函数} | 合并/内联                 | 可读性↑   | 低   |
-| 3   | 算法热点   | {O(n²)→O(n) 机会/不必要全量遍历} | 优化算法                  | 性能↑     | 中   |
-| 4   | 工具库替换 | {手写逻辑}                       | {领域推荐工具函数}        | 可维护性↑ | 中   |
-| 5   | 语义化标签 | {div/span}                       | {header/main/section/nav} | 可访问性↑ | 低   |
-| 6   | 注释清理   | {无用注释}                       | 删除/保留 TSDoc           | 体积↓     | 低   |
-| 7   | 样式精简   | {内联/冗余 CSS}                  | {TailwindCSS 等价类}      | 体积↓     | 低   |
-| 8   | 平台优化   | {WebView 专属问题}               | {领域推荐平台优化}        | 性能↑     | 中   |
-| 9   | 请求优化   | {接口请求模式}                   | {领域推荐请求工具}        | 性能↑     | 中   |
+- 死代码
+- 冗余逻辑
+- 局部热点
+- 注释和样式冗余
 
-> ⚠️ 分析阶段**禁止修改任何文件**。只产出清单，等待用户确认。
+分析阶段只产出候选清单，不立即扩散改动。
 
-### 3. 优化方案确认
+### 3. 优化项确认
 
 `[Step 2 Complete]` 后进入步骤 3。
 
-将步骤 2 的分析清单补充实际值后呈现给用户确认。
+明确本次优化范围：
 
-**风险评级规则**：
+- 执行哪些项
+- 跳过哪些项
+- 哪些项风险过高不进入本轮
 
-- **低**：删除死代码、等价 CSS 替换、注释清理
-- **中**：工具库替换、算法优化、语义标签替换
-- **高**：涉及状态管理路径、异步逻辑重构
+### 4. 逐项执行与验证
 
-> 向用户展示清单并询问："确认执行哪些优化项？（全选 / 指定编号 / 跳过高风险项）"
-> 收到确认前，保持等待。
+`[Step 3 Complete]` 后进入步骤 4。
 
-### 4. 逐项执行 (Item-by-Item Execution)
+按项执行，每项完成后立即验证：
 
-`[Step 3 Complete]` 后进入步骤 4（收到用户确认后）。
-
-按确认清单**逐项**执行，每项执行后立即验证：
-
-**执行纪律**：
-
-- **单次单项**：每次只改一个优化项，禁止批量合并修改
-- **立即验证**：每项改完后调用 `ritsu_run_quality_gates` 执行 Lint + Test
-- **失败即停**：若 quality_gates 失败，立即回滚该项，向用户确认"回滚并继续下一项 / 终止优化"，记录到优化报告
-- **标识符校验**：替换工具函数/组件时，必须先 `ritsu_exec` (grep) 验证新标识符存在且签名对齐
-
-**领域专属优化规则**（按 domain 动态加载）：
-
-> 引用 `domains/{domain}.yaml` 的 `optimize_disciplines` 和 `optimize_tool_preferences` 和 `platform_optimizations`
+- 验证通过 → 保留
+- 验证失败 → 回滚该项
 
 ### 5. 交付摘要
 
@@ -106,7 +75,7 @@ hard_constraints:
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=optimize）
 
-写入 ctx-{YYYY-MM}.jsonl：
+写入 ctx：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=optimize, artifact=.ritsu/optimize-report-{ts}.md）
 

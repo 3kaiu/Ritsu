@@ -1,153 +1,93 @@
 ---
 name: hunt
 version: "3.8.0"
-description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
+description: "Ritsu 交付诊断子模块。为 bugfix 和验证失败场景提供证据收集、假设验证和根因定位。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
-total_steps: 6
+total_steps: 5
 fast_mode:
   skip_steps: [4]
   skip_artifacts: true
   self_test: null
-  description: "跳过 MECE 假设(4)，直接 grep 报错信息+5-Whys 根因倒推，不写 diagnosis 产物"
+  description: "在报错信息明确时直接做快速定位与根因倒推"
 hard_constraints:
   - id: HC-1
-    rule: "确诊前禁止修改任何业务代码。发现修改冲动时，记录到诊断报告，等确诊后交给 /r-dev"
+    rule: "确诊前禁止修改任何业务代码"
     severity: FATAL
   - id: HC-2
-    rule: "假设必须 MECE（互斥穷举），每条假设必须有明确的排除条件"
+    rule: "假设必须可验证、可排除，禁止模糊猜测"
     severity: FATAL
   - id: HC-3
-    rule: "全部假设排除时，回到步骤 2 重新采集证据，禁止输出模糊猜测"
+    rule: "当现有证据不足时，必须回到取证，而不是硬给结论"
     severity: FATAL
 ---
 
-# Hunt: 技术 CSI — 深度根因诊断 (Root Cause Investigation)
+# Hunt: Deliver 诊断子模块 (Bugfix Investigation Module)
 
-**触发条件**：用户输入 `/r-hunt [问题描述]`，或由 `/r-triage` 携带结构化上下文路由。
+**触发条件**：用户输入 `/r-hunt`，或 `deliver` 在 bugfix / 验证失败路径中调用。
 
-> ⚡ **fast 模式**：`/r-hunt --fast` 或报错信息明确时自动触发。跳过 MECE 假设步骤，直接 grep 定位 + 5-Whys 根因倒推，不写 diagnosis 产物文件。
+> 该模块现在主要服务于交付恢复，而不是独立产品入口。
 
 ## 执行流水线
 
-### 1. 领域解析
+### 1. 领域解析与上下文绑定
 
 > 引用 `_shared/skill-common-steps.md` Step 1
 
-### 2. 零点击上下文绑定 (Zero-Click Context Binding)
+绑定当前诊断上下文：
+
+- 报错信息
+- diagnosis 历史
+- 当前 diff
+- 失败的 lint/test 输出
+
+### 2. 证据抓取
 
 `[Step 1 Complete]` 后进入步骤 2。
 
-**隐式绑定优先**：检查当前 IDE（Cursor/Windsurf）是否已激活打开了任何错误日志文件、Issue 描述文档或历史 `diagnosis-*.md` 文件。
+先定义问题边界，再抓证据：
 
-- **若有** → 直接读取当前激活的焦点文件内容作为诊断的初始上下文，跳过向用户索要报错信息，并在输出中注明"已根据 IDE 焦点自动提取报错上下文"。
+- 当前症状是什么
+- 影响路径在哪
+- 最可能涉及哪些模块
 
-在进入证据抓取前，执行一次 **历史相似案例召回（长期工程记忆）**：
+历史案例召回、semantic 检索、KG、sandbox 都只能作为增强手段；它们的职责是加速取证，不是直接代替结论。
 
-1. 每次进入“历史相似案例召回”都先调用一次增量构建（工具会按 content_hash 复用旧条目，成本可控）：
-   - `ritsu_semantic_index_build({ chunk_size: 1200, chunk_overlap: 200, max_files: 200 })`
-2. 若 `.ritsu/kg.json` 存在（或你已知当前项目依赖图对定位很关键），优先使用 Vectorized Graph RAG（语义 + KG 相关性重排）：
-   - 可选：先调用 `ritsu_build_kg({ max_files: 2000 })`（若 kg 不存在或明显过旧）
-   - `focus_paths` 必须尽量自动化获取：
-     - 优先从 `ritsu_get_changed_files().files` 或 `ritsu_get_diff().changed_files` 取前 5-10 个（相对项目根）
-     - 若当前为纯线上/日志排障无 diff，则可从报错堆栈/日志中提取到的文件路径补充
-   - `ritsu_semantic_graph_rerank({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"], focus_paths: ["{changed_files[0..N]}"], semantic_weight: 0.7, kg_weight: 0.3, kg_depth: 4 })`
-3. 否则回退到纯语义检索（优先诊断/审查结论，不要把 handoff 当作“答案”）：
-   - `ritsu_semantic_search({ query: "{当前报错/症状的 1-2 句摘要}", top_k: 5, types: ["diagnosis", "review-stamp"] })`
-4. 将匹配结果作为“线索”，输出：
-   - 命中的历史文件路径 + heading + snippet
-   - 当时的修复入口/配置文件/关键命令（若 snippet 中可直接读出）
-5. 约束：
-   - 召回结果 **只能作为假设线索**，不得直接当作根因结论
-   - 后续必须在步骤 3/5 用当前项目的证据验证（不允许“凭记忆直接改”）
-
-### 3. 证据抓取与边界扫描 (Boundary Scan)
+### 3. 根因假设
 
 `[Step 2 Complete]` 后进入步骤 3。
 
-**系统边界定义**：在抓取具体日志前，强制输出当前报错涉及的【系统数据流链路】（例如：Client -> WAF -> Gateway -> Node.js -> Redis -> MySQL）。这能彻底消除大模型在局部盲区中瞎猜的现象。
+提出 1-3 个可验证假设，每条都必须包含：
 
-根据边界定义抓取证据，按当前领域已加载的 `hypothesis_directions` 确定优先排查方向（`domains/_base.yaml` + `domains/{domain}.yaml`）。
+- 假设内容
+- 排除条件
+- 验证方式
 
-当问题表现为“本地/CI 环境不一致、缓存污染、无法稳定复现、工作区状态不确定”时，优先执行 **沙盒复现协议（Git worktree）**，以隔离环境噪声：
-
-1. 调用 `ritsu_env_probe` 检查 git/worktree 与 .ritsu/temp 可用性
-2. 使用当前链路 `correlation_id`（若上游未提供则由 started 事件生成）
-3. 调用 `ritsu_sandbox_prepare({ correlation_id, base_ref: "HEAD" })`
-4. 在沙盒中执行最小复现命令（拆成多次调用，禁止管道/重定向）：
-   - `ritsu_sandbox_exec({ correlation_id, command: "git status --porcelain" })`
-   - `ritsu_sandbox_exec({ correlation_id, command: "npm test" })` / `ritsu_sandbox_exec({ correlation_id, command: "npm run lint" })`（按问题类型选择）
-5. 无论成功/失败，最后必须调用 `ritsu_sandbox_cleanup({ correlation_id })`
-6. 记录“沙盒是否可复现”的结论，并将沙盒输出作为后续假设验证的关键证据来源
-
-### 4. 建立 MECE 假设（HC-2 执行协议）
+### 4. 探针验证
 
 `[Step 3 Complete]` 后进入步骤 4。
 
-提出 1-3 个假设，**每条必须满足**：
+按置信度从高到低逐个验证：
 
-- **互斥**：假设 A 成立可排除 B（死锁 vs 连接池耗尽是两个独立原因，不是子集关系）
-- **有排除条件**：明确说明哪个验证结果可以排除此假设
+- 命中 → 锁定根因
+- 排除 → 进入下一条
+- 全部排除 → 回到取证
 
-输出格式：
-
-```
-假设 #1（置信度：高）：由于 [具体原因]，导致 [现象]
-  排除条件：执行 [命令/操作]，若输出 [X] 则此假设不成立
-
-假设 #2（置信度：中）：由于 [具体原因]，导致 [现象]
-  排除条件：执行 [命令/操作]，若输出 [Y] 则此假设不成立
-```
-
-> 参考方向按当前领域已加载的 `hypothesis_directions`（`domains/_base.yaml` + `domains/{domain}.yaml`），LLM 必须结合项目实际情况调整，禁止原样照搬。
-
-### 5. 探针验证（按置信度从高到低）
+### 5. 根因结论与诊断产物
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-逐个验证，每个假设验证后输出明确结论：
+最终输出必须回答：
 
-```
-假设 #1 验证：执行了 [命令]，结果为 [...]
-→ ✅ 确认：根因锁定，进入步骤 5
-→ ❌ 排除：[排除理由]，推进假设 #2
-```
+- 表象是什么
+- 根因是什么
+- 证据是什么
+- 应该回到 `dev` 还是升级到 `think`
 
-**全部假设排除时（HC-3 执行协议）**：
-
-```
-输出：
-  "已排除所有假设：
-   - 假设 #1 排除：[理由]
-   - 假设 #2 排除：[理由]
-  需要更深层证据，请提供：[具体需要什么]"
-等待用户补充后，回到步骤 2，不输出任何推测性结论。
-```
-
-### 6. 5-Whys 根因倒推与写入诊断报告
-
-`[Step 5 Complete]` 后进入步骤 6。
-
-在最终锁定问题后，严禁直接把"报错表象"当做根因。必须执行 **【5-Whys 连续追问】** 协议：
-
-```
-报错表象：[例如：变量为 undefined]
-↳ 为什么？因为 [DB 返回为空]
-  ↳ 为什么？因为 [外键关联失效]
-    ↳ 为什么？因为 [上一版数据迁移遗漏了约束]
-      ↳ 物理根因：[数据迁移脚本不完整]
-```
-
-基于 5-Whys 的最终结论，调用 **`ritsu_write_artifact`**（type=diagnosis）写入 md 文件：
-
-- md 路径：`.ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md`（Schema 2，AI 消费）
-
-按 `_shared/artifact-schema.yaml` Schema 2 格式写入（将其中的 Root Cause 替换为 5-Whys 提炼的物理根因）。
-
-**交付摘要**：
+如需落盘，调用 `ritsu_write_artifact`（type=diagnosis）。
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=hunt）
 
-写入 ctx-{YYYY-MM}.jsonl：
+写入 ctx：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=hunt, artifact=.ritsu/diagnosis-{ts}.md）
 

@@ -1,127 +1,64 @@
 ---
 name: document
 version: "3.8.0"
-description: "Ritsu 文档维护技能。API 文档生成、README 更新、CHANGELOG 维护、JSDoc/TSDoc 补充。"
+description: "Ritsu 扩展模块。用于维护 README、API 文档、CHANGELOG 和注释，不属于主交付链路。"
 when_to_use: "/r-doc, 写文档, 更新文档, API文档, CHANGELOG, README, JSDoc"
 total_steps: 4
 fast_mode:
   skip_steps: [2]
   skip_artifacts: true
   self_test: null
-  description: "跳过代码扫描与文档对账(2)，直接生成/更新文档，不写产物文件"
+  description: "直接生成或更新目标文档"
 hard_constraints:
   - id: HC-1
-    rule: "ref AP-2: 文档必须与代码实际行为一致，禁止描述不存在的功能或参数"
+    rule: "文档必须与代码实际行为一致"
     severity: FATAL
   - id: HC-2
-    rule: "ref AP-6: 文档内容不得包含占位符"
+    rule: "文档内容不得包含占位符"
     severity: FATAL
   - id: HC-3
-    rule: "不得修改业务代码，只修改文档文件（.md/.d.ts/JSDoc 注释）"
+    rule: "不得修改业务代码，只修改文档与注释"
     severity: WARN
 ---
 
-# Document: 文档维护 (Documentation Maintenance)
+# Document: Extensions 文档模块 (Documentation Extension)
 
-**触发条件**：用户输入 `/r-doc`。
+**触发条件**：用户输入 `/r-doc`，或交付完成后需要补文档时调用。
+
+> 该模块属于扩展能力，不属于主链路一线入口。
 
 ## 执行流水线
 
-### 1. 领域解析 + 文档目标识别
+### 1. 文档目标识别
 
 > 引用 `_shared/skill-common-steps.md` Step 1
 
-`[Step 1 Complete]` 后确定文档目标：
+识别本次目标：
 
-| 触发关键词     | 文档目标                                            |
-| -------------- | --------------------------------------------------- |
-| API / 接口文档 | 生成/更新 API Reference（从代码注释或路由定义提取） |
-| README         | 更新项目 README（安装方式、使用说明、架构说明）     |
-| CHANGELOG      | 维护 CHANGELOG.md（按 conventional-changelog 格式） |
-| JSDoc / TSDoc  | 补充函数/方法的文档注释                             |
-| 通用           | 用户指定目标                                        |
+- API 文档
+- README
+- CHANGELOG
+- JSDoc / TSDoc
 
-### 2. 代码扫描与文档对账
+### 2. 代码与文档对账
 
 `[Step 1 Complete]` 后进入步骤 2。
 
-**API 文档**：
+通过代码扫描确认：
 
-- 调用 `ritsu_exec` 扫描路由定义文件（如 `src/routes/`、`src/api/`）
-- 提取端点路径、HTTP 方法、请求/响应类型
-- 与现有 API 文档对账：标记新增/变更/废弃端点
+- 路由、接口、类型是否真实存在
+- 现有文档是否过时
+- 变更项是否已被记录
 
-**JSDoc/TSDoc**：
-
-- 调用 `ritsu_exec` 扫描 export 的函数/类/接口
-- 识别缺失文档注释的导出符号
-- 识别与签名不一致的现有注释（参数名/类型不匹配）
-
-**CHANGELOG**：
-
-- 调用 `ritsu_get_diff` 获取最近变更
-- 按类型分类：feat / fix / refactor / perf / chore
-- 与现有 CHANGELOG 最新条目对账，避免重复
-
-**README**：
-
-- 读取当前 README，识别过时内容（版本号、安装命令、配置项）
-- 调用 `ritsu_exec` 读取 `package.json`/`AGENTS.md` 获取最新值
-
-### 3. 文档生成/更新
+### 3. 文档更新
 
 `[Step 2 Complete]` 后进入步骤 3。
 
-**API 文档格式**：
+更新目标文档，确保：
 
-```markdown
-## {HTTP Method} {Path}
-
-{描述}
-
-**请求参数**：
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | --- | --- |
-
-**响应**：
-| 字段 | 类型 | 说明 |
-| --- | --- | --- |
-
-**示例**：
-\`\`\`json
-{请求/响应示例}
-\`\`\`
-```
-
-**CHANGELOG 格式**（conventional-changelog）：
-
-```markdown
-## [{version}] - {YYYY-MM-DD}
-
-### feat
-
-- {新增功能描述}
-
-### fix
-
-- {修复描述}
-
-### refactor
-
-- {重构描述}
-```
-
-**JSDoc/TSDoc 规范**：
-
-- 函数：`@param` + `@returns` + `@throws`（如有）
-- 类：`@constructor` + 属性类型注释
-- 接口/类型：每个字段的 `/** 注释 */`
-- 禁止生成空描述的注释（如 `@param name -`）
-
-**HC-1 执行协议**：
-
-- 每个文档描述的函数/参数/端点，必须通过 `ritsu_exec(grep)` 验证其在代码中存在
-- 描述的行为必须与代码实际逻辑一致，禁止凭记忆编写
+- 描述和代码一致
+- 参数和签名对齐
+- 不制造占位或伪功能描述
 
 ### 4. 交付摘要
 
@@ -129,7 +66,7 @@ hard_constraints:
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=document）
 
-写入 ctx-{YYYY-MM}.jsonl：
+写入 ctx：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=document, artifact=null）
 

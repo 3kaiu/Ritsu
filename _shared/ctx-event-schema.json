@@ -66,6 +66,9 @@
         "type": {
           "type": "string",
           "enum": [
+            "intake-ticket",
+            "delivery-report",
+            "assurance-report",
             "handoff",
             "diagnosis",
             "review-stamp",

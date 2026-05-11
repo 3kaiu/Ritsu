@@ -1,116 +1,94 @@
 # Ritsu 全局状态机 v3.8.0
-# 定义技能间的合法流转路径、流水线编排、熔断规则与流转引导。
-# AI 执行流转判定时，必须查询此文件的 states.{current}.next 确认合法性。
+# 优先表达产品阶段流转，而不是让用户承受过细的 skill 心智负担。
 
 states:
-  route:
+  intake:
+    owned_by: route
     next:
-      [
-        init,
-        read,
-        think,
-        dev,
-        refactor,
-        test,
-        hunt,
-        review,
-        optimize,
-        triage,
-        deploy,
-        document,
-        pipe,
-      ]
-  pipe:
-    next: [think, dev, review, hunt, optimize, test]
-    note: "流水线编排状态，自动按预设序列衔接技能，无需用户手动调用"
-    pipelines:
-      standard: "think → dev → review"
-      bugfix: "hunt → dev → review"
-      optimize: "optimize → review"
-      test_add: "test → review"
+      [deliver.quick, deliver.standard, deliver.critical, assure, extensions]
     rules:
-      - "流水线内自动传递 correlation_id 和 domain，无需重新解析"
-      - "/r-pipe --fast：每个技能按其 fast_mode 声明执行（无声明则按 standard）"
-      - "任一技能 failed 时，流水线暂停，等待用户决定（修复后继续 / 切换技能 / 终止）"
-      - "failed 时用户可选自愈诊断：自动进入 hunt，并在同一 correlation_id 下用 Git worktree 沙盒最多 3 次尝试复现（prepare→exec→cleanup），输出汇报后仍保持暂停"
-      - "熔断触发时，流水线自动重定向至 think，无需用户手动切换"
-      - "用户可随时用 /r-pipe --skip 跳过当前技能，推进到下一步"
-      - "用户可随时用 /r-pipe --abort 终止流水线"
-  init:
-    next: [route, think]
-    hint:
-      route: "不确定下一步"
-      think: "新需求"
-  think:
-    next: [dev, think]
-    note: "循环允许（方案被否决时重新设计）"
-  dev:
-    next: [review, optimize, test]
-    branches:
-      review: "开发完成，需审查"
-      optimize: "代码可用但需精简/提速"
-      test: "开发完成，需补测试"
-  test:
-    next: [review, dev]
-    branches:
-      review: "测试通过，进入审查"
-      dev: "测试失败，修复代码"
-  review:
-    next: [dev, think, optimize, triage]
-    branches:
-      dev: "单次 FAIL，必须修复"
-      think: "连续两次 FAIL 触发熔断，重审架构"
-      optimize: "PASS 但有性能/精简空间"
-      triage: "PASS + 有工单待处理（可选）"
-  optimize:
-    next: [review]
-    note: "优化后必须审查确认无功能回归"
-  hunt:
-    next: [dev, think]
-    branches:
-      dev: "简单修复"
-      think: "架构级修复"
-  triage:
-    next: [hunt, think, review, optimize]
-    branches:
-      hunt: "Bug 工单"
-      think: "Feature 工单"
-      review: "PR 工单"
-      optimize: "性能优化工单"
-  deploy:
-    next: [review, hunt]
-    branches:
-      review: "部署后冒烟审查"
-      hunt: "部署异常诊断"
-  document:
-    next: [review, dev]
-    branches:
-      review: "文档完成后审查"
-      dev: "文档发现代码与描述不一致，需修复代码"
-  read:
-    next: [think, dev, hunt, optimize, refactor]
-    branches:
-      think: "阅读后需要设计方案"
-      dev: "阅读后直接开发（Handoff 已存在）"
-      hunt: "阅读中发现可疑问题需诊断"
-      optimize: "阅读后发现优化机会"
-      refactor: "阅读后发现结构需改善"
-    note: "只读技能，不产生产物文件，不写 artifact"
-  refactor:
-    next: [review, test, optimize]
-    branches:
-      review: "重构完成，需审查"
-      test: "重构完成，需补充新接口测试"
-      optimize: "重构后仍有精简空间"
-    note: "改变结构但不改变行为，必须有测试保障"
+      - "intake 的职责是形成执行单，而不是直接展开全部实现细节"
+      - "若信息严重缺失，应先补信息，再进入 deliver"
+
+  deliver.quick:
+    owned_by: pipe
+    next: [assure, deliver.standard]
+    rules:
+      - "适用于小改动、低风险、信息充分的任务"
+      - "可降低交互成本，但不得跳过最小必要验证"
+      - "若实现中发现风险被低估，应升级到 deliver.standard"
+
+  deliver.standard:
+    owned_by: pipe
+    next: [assure, deliver.critical, intake]
+    rules:
+      - "默认交付路径"
+      - "允许内部调用 think/dev/test/hunt"
+      - "若需求边界失真或验证持续失败，可回到 intake 或升级到 critical"
+
+  deliver.critical:
+    owned_by: pipe
+    next: [assure, intake]
+    rules:
+      - "适用于架构改动、数据迁移、高发布风险任务"
+      - "必须补充边界、关键验证和回滚方案"
+      - "若前提条件仍不充分，可退回 intake 重新定义执行单"
+
+  assure:
+    owned_by: review
+    next: [deliver.quick, deliver.standard, deliver.critical, extensions]
+    rules:
+      - "assure 负责给出可合并、可上线、阻断项和剩余风险"
+      - "命中阻断项后必须退回 deliver，而不是直接宣称完成"
+      - "PASS 不等于必须部署；是否进入 extensions.deploy 取决于上下文"
+
+  extensions:
+    owned_by: init/document/deploy/triage
+    next: [intake, deliver.quick, deliver.standard, assure]
+    rules:
+      - "扩展能力不属于主链路一线入口"
+      - "文档、部署、工单处理等动作应在主交付链路之外明确说明目的"
+
+skill_mapping:
+  route: intake
+  pipe: deliver.standard
+  review: assure
+  think: deliver.standard
+  dev: deliver.standard
+  test: deliver.standard
+  hunt: deliver.standard
+  optimize: deliver.standard
+  refactor: deliver.standard
+  init: extensions
+  document: extensions
+  deploy: extensions
+  triage: extensions
+  read: intake
+
+mode_hints:
+  quick:
+    triggers:
+      - "微小改动"
+      - "低风险"
+      - "上下文充分"
+  standard:
+    triggers:
+      - "默认模式"
+      - "常规需求"
+      - "常规 bugfix"
+  critical:
+    triggers:
+      - "架构改动"
+      - "数据迁移"
+      - "上线风险高"
 
 circuit_breaker:
-  - skill: review
+  - stage: assure
     condition: "连续两次 FAIL"
-    action: route_to_think
-  - skill: dev→review
-    condition: "同一 handoff 的 dev→review 循环超过 3 次"
-    action: route_to_think
-  - skill: optimize→review
-    condition: "同一模块的 optimize→review 循环超过 2 次"
-    action: route_to_think
+    action: route_to_intake
+  - stage: deliver.standard
+    condition: "同一目标在 deliver→assure 循环超过 3 次"
+    action: escalate_to_critical
+  - stage: deliver.quick
+    condition: "发现超出 quick 边界的架构/契约风险"
+    action: escalate_to_standard

@@ -24,7 +24,7 @@ JSONL（每行一个 JSON 对象，追加不覆盖）。示例见 `_shared/ctx-e
 
 ### 读取时机
 
-当用户执行 `/r-route` 或新会话开始时，AI **必须先读取当月最新的** `.ritsu/ctx-{YYYY-MM}.jsonl`（若存在）：
+当用户执行 `/r-route`（当前承担 intake）或新会话开始时，AI **必须先读取当月最新的** `.ritsu/ctx-{YYYY-MM}.jsonl`（若存在）：
 
 1. 找到最后一条 `status=started` 且没有对应 `done`/`failed` 的记录 → 告知用户"检测到未完成的任务"并询问是否继续
 2. 找到最后一条 `status=done` 记录 → 告知用户"上一个任务已完成"并推荐下一步
@@ -36,7 +36,7 @@ JSONL（每行一个 JSON 对象，追加不覆盖）。示例见 `_shared/ctx-e
 
 1. **定位断点**：`ritsu_read_ctx` 返回 `recovery_context`，包含未完成任务的 skill/domain/step 信息
 2. **现实对账**：`ritsu_read_ctx` 返回 `reality_check`，检查 handoff/diagnosis 等产物文件是否仍存在于磁盘（git reset --hard 后文件可能丢失）
-3. **熔断检测**：`ritsu_read_ctx` 返回 `circuit_breaker_status`，若连续 failed ≥ 2 则 `should_redirect=think`，AI 应先升维再继续
+3. **熔断检测**：`ritsu_read_ctx` 返回 `circuit_breaker_status`。当前产品语义上应理解为“先回到 intake 或升级交付模式”，即使底层旧字段仍可能表现为 `think`
 4. **恢复后首行输出**：
    ```
    🔄 会话恢复: /r-{skill} | 断点: step {N}/{M} | 领域: {domain}

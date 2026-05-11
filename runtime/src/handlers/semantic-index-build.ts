@@ -14,6 +14,9 @@ import { getSharedDir } from "../shared.js";
 import { load as loadYaml } from "js-yaml";
 
 type ArtifactType =
+  | "intake-ticket"
+  | "delivery-report"
+  | "assurance-report"
   | "handoff"
   | "diagnosis"
   | "review-stamp"
@@ -49,6 +52,9 @@ function sha256(text: string): string {
 }
 
 function detectArtifactType(fileName: string): ArtifactType | null {
+  if (fileName.startsWith("intake-ticket-")) return "intake-ticket";
+  if (fileName.startsWith("delivery-report-")) return "delivery-report";
+  if (fileName.startsWith("assurance-report-")) return "assurance-report";
   if (fileName.startsWith("handoff-")) return "handoff";
   if (fileName.startsWith("diagnosis-")) return "diagnosis";
   if (fileName.startsWith("review-stamp-")) return "review-stamp";
@@ -86,6 +92,9 @@ function getImportantSectionTitlesByType(): Partial<
     };
 
     return {
+      "intake-ticket": pickTitles("intake_ticket"),
+      "delivery-report": pickTitles("delivery_report"),
+      "assurance-report": pickTitles("assurance_report"),
       handoff: pickTitles("handoff"),
       diagnosis: pickTitles("diagnosis"),
       // schema uses review_stamp key; runtime artifact type is review-stamp

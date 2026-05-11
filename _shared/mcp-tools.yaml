@@ -1,14 +1,15 @@
 # Ritsu MCP Tool Schema 声明 v3.8.0
 # 所有技能中的工具调用必须引用此文件中声明的工具名，禁止用自然语言描述工具调用行为。
-# AI 执行时应将此文件视为"可用工具菜单"，按 Schema 构造调用参数。
+# AI 执行时应将此文件视为“可用工具菜单”，按 Schema 构造调用参数。
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
 #
-# ⚠️ SDK + 业务工具模式：MCP Server 提供 SDK 原语 + 高频业务封装。
-# SKILL.md = 程序，AI = CPU，MCP 工具 = 系统调用。
+# 当前产品语义已经收敛为 intake / deliver / assure。
+# 但 runtime 目前仍以 legacy 产物（handoff / diagnosis / review-stamp / optimize-report）为主。
+# 因此本文件描述的是“当前运行时真实支持的工具”，不是未来目标图。
 #
-# ⚠️ 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
+# 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
 # call_template 是 input 的快捷视图（DRY），若两者冲突以 input 为准。
-# ⚠️ output_schema：定义工具返回值的 JSON Schema，供 UI 渲染 ToolCallCard 组件。
+# output_schema：定义工具返回值的 JSON Schema，供 UI 渲染 ToolCallCard 组件。
 
 tools:
   - name: ritsu_emit_event
@@ -140,7 +141,7 @@ tools:
             missing_artifacts: { type: array, items: { type: string } }
         circuit_breaker_status:
           type: object
-          description: "熔断状态（连续 failed >=2 时 should_redirect=think）"
+          description: "熔断状态。当前底层字段仍可能返回旧值（如 think），但产品语义上应理解为回到 intake 或升级交付模式"
           properties:
             consecutive_fails: { type: integer }
             should_redirect: { type: string }
@@ -196,7 +197,7 @@ tools:
                   rule: { type: string }
 
   - name: ritsu_contract_validate
-    description: 契约测试（Contract Validation）。读取最近的 handoff（或指定路径），抽取实施清单中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
+    description: 契约测试（Contract Validation）。优先读取最近的 handoff；若不存在则回退到 intake-ticket（或使用显式指定路径），抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
     call_template:
       tool: ritsu_contract_validate
       params:
@@ -214,13 +215,17 @@ tools:
         type: boolean
         required: false
         description: "是否使用 git diff --cached（默认 false）"
+      artifact_path:
+        type: string
+        required: false
+        description: "显式指定契约产物路径（推荐）。为空则自动选择最新 handoff，若无则回退到 intake-ticket"
       handoff_path:
         type: string
         required: false
-        description: "显式指定 handoff 文件路径（可选），为空则自动选择 .ritsu 下最新的 handoff-*"
+        description: "兼容旧调用的别名。语义等同 artifact_path"
     output_schema:
       type: object
-      required: [passed, coverage_ratio, expected_total, handoff_path]
+      required: [passed, coverage_ratio, expected_total, artifact_path]
       properties:
         passed: { type: boolean }
         min_coverage: { type: number }
@@ -228,6 +233,8 @@ tools:
         expected_total: { type: integer }
         covered: { type: array, items: { type: string } }
         missing: { type: array, items: { type: string } }
+        artifact_path: { type: string }
+        artifact_type: { type: string }
         handoff_path: { type: string }
         cached: { type: boolean }
 
@@ -565,7 +572,7 @@ tools:
                   col: { type: integer }
 
   - name: ritsu_semantic_index_build
-    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描 handoff/diagnosis/review-stamp/optimize-report 产物，将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
+    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描 intake-ticket/delivery-report/assurance-report 与 legacy 产物（handoff/diagnosis/review-stamp/optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
     call_template:
       tool: ritsu_semantic_index_build
       params:
@@ -610,11 +617,11 @@ tools:
       params:
         query: "{natural_language_query}"
         top_k: 5
-        types: [handoff, diagnosis, review-stamp]
+        types: [intake-ticket, diagnosis, assurance-report]
       example:
         query: "CI 里 vitest 报错但本地不报"
         top_k: 5
-        types: [diagnosis, review-stamp]
+        types: [delivery-report, diagnosis]
     input:
       query:
         type: string
@@ -627,7 +634,7 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤（handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+        description: "产物类型过滤（intake-ticket/delivery-report/assurance-report/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
       chunk_size:
         type: integer
         required: false
@@ -665,7 +672,7 @@ tools:
       params:
         query: "{natural_language_query}"
         top_k: 5
-        types: [diagnosis, review-stamp]
+        types: [delivery-report, assurance-report]
         focus_paths: ["{可选: 当前错误涉及的文件路径}"]
         semantic_weight: 0.7
         kg_weight: 0.3
@@ -673,7 +680,7 @@ tools:
       example:
         query: "CI 与本地不一致，怀疑缓存污染"
         top_k: 5
-        types: [diagnosis, review-stamp]
+        types: [delivery-report, diagnosis]
         focus_paths: ["src/app/app.tsx"]
         semantic_weight: 0.7
         kg_weight: 0.3
@@ -690,7 +697,7 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤（handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+        description: "产物类型过滤（intake-ticket/delivery-report/assurance-report/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
       focus_paths:
         type: list
         required: false
@@ -750,27 +757,27 @@ tools:
                 items: { type: string }
 
   - name: ritsu_write_artifact
-    description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
+    description: 写入产物文件到 .ritsu/ 目录。当前运行时同时支持 intake-ticket/delivery-report/assurance-report 与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
     call_template:
       tool: ritsu_write_artifact
       params:
-        type: "{handoff|diagnosis|review-stamp|optimize-report}"
+        type: "{intake-ticket|delivery-report|assurance-report|handoff|diagnosis|review-stamp|optimize-report}"
         filename: "{文件名}"
         content: "{内容}"
       example:
-        type: "handoff"
-        filename: "handoff-20260509-auth.md"
-        content: "# Handoff..."
+        type: "delivery-report"
+        filename: "delivery-report-20260511-auth.md"
+        content: "# Delivery Report..."
     input:
       type:
         type: enum
-        values: [handoff, diagnosis, review-stamp, optimize-report]
+        values: [intake-ticket, delivery-report, assurance-report, handoff, diagnosis, review-stamp, optimize-report]
         required: true
-        description: "产物类型"
+        description: "当前运行时支持的产物类型"
       filename:
         type: string
         required: true
-        description: "文件名（如 handoff-20260509-auth.md）"
+        description: "文件名（如 delivery-report-20260511-auth.md）"
       content:
         type: string
         required: true
@@ -795,18 +802,18 @@ tools:
           description: "产物元数据"
 
   - name: ritsu_list_artifacts
-    description: 列出 .ritsu/ 目录下的产物文件。支持按类型过滤（handoff/diagnosis/review-stamp/optimize-report/ctx）
+    description: 列出 .ritsu/ 目录下的产物文件。当前支持按 intake-ticket/delivery-report/assurance-report 与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report/ctx）过滤
     call_template:
       tool: ritsu_list_artifacts
       params:
         type: "{类型或all}"
       example:
-        type: "handoff"
+        type: "delivery-report"
     input:
       type:
         type: string
         required: false
-        description: "产物类型过滤（all/handoff/diagnosis/review-stamp/optimize-report/ctx），默认 all"
+        description: "产物类型过滤（all/intake-ticket/delivery-report/assurance-report/handoff/diagnosis/review-stamp/optimize-report/ctx），默认 all"
     output_schema:
       type: object
       required: [files, total_count]

@@ -4,6 +4,79 @@
 # ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
 
 schemas:
+  intake_ticket:
+    id: 10
+    path: ".ritsu/intake-ticket-{YYYYMMDD-HHMMSS}.md"
+    required_sections:
+      - title: "任务识别"
+        fields:
+          - name: task_type
+            label: "任务类型"
+          - name: current_goal
+            label: "当前目标"
+      - title: "风险与信息"
+        fields:
+          - name: risk_level
+            label: "风险等级"
+            enum: [quick, standard, critical]
+          - name: information_completeness
+            label: "信息完备度"
+          - name: missing_information
+            label: "缺失信息"
+      - title: "执行路径"
+        fields:
+          - name: recommended_path
+            label: "推荐路径"
+          - name: secondary_intents
+            label: "次要意图"
+
+  delivery_report:
+    id: 11
+    path: ".ritsu/delivery-report-{YYYYMMDD-HHMMSS}.md"
+    required_sections:
+      - title: "交付摘要"
+        fields:
+          - name: mode
+            label: "模式"
+            enum: [quick, standard, critical]
+          - name: target
+            label: "任务目标"
+          - name: implementation_result
+            label: "实施结果"
+          - name: verification_result
+            label: "验证结果"
+      - title: "变更与风险"
+        fields:
+          - name: outputs
+            label: "主要产出"
+          - name: known_risks
+            label: "已知风险"
+          - name: next_step
+            label: "下一步"
+
+  assurance_report:
+    id: 12
+    path: ".ritsu/assurance-report-{YYYYMMDD-HHMMSS}.md"
+    required_sections:
+      - title: "验收结论"
+        fields:
+          - name: mergeability
+            label: "合并结论"
+            enum: [mergeable, not_mergeable]
+          - name: deployability
+            label: "上线结论"
+            enum: [deployable, not_deployable, deployable_with_risk]
+      - title: "阻断项与风险"
+        fields:
+          - name: blockers
+            label: "阻断项"
+          - name: residual_risks
+            label: "剩余风险"
+      - title: "建议动作"
+        fields:
+          - name: recommended_next_step
+            label: "建议下一步"
+
   agents_md:
     id: 0
     path: "{项目根}/AGENTS.md"

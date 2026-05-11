@@ -2,80 +2,76 @@
 
 > 所有 SKILL.md 中重复出现的步骤，统一引用此模板，禁止各自重写。
 > 引用方式：`> 引用 _shared/skill-common-steps.md Step N`
-> ⚠️ 此文件已内联全部前置协议（含原 context-loader.md），LLM 读取此单文件即可执行，无需再跳转其他文件。
+> 目标不是堆更多治理动作，而是为 `intake → deliver → assure` 提供最小公共骨架。
 
 ---
 
 ## Step 0: Pre-flight + 执行模式选择
 
-每个技能在执行任何实质性动作前，**必须**先完成以下装载序列。
+每个技能在执行任何实质性动作前，先完成最小装载序列。
 
-> **轻量技能豁免**：read / triage / document 技能可跳过 Step 0.1 和 0.3（无需读 AGENTS.md 和确认环境），仅执行 0.2（上下文恢复）和 0.4（模式选择）。
+> **轻量技能豁免**：`read / triage / document` 可跳过 0.1 和 0.3，仅执行 0.2 和 0.4。
 
 ### 0.1 项目基线加载
 
-- 读取项目根 `AGENTS.md`。
-- 未找到 `AGENTS.md`：
-  - 非 `/r-init` 技能 → 警告 "⚠️ 未发现 AGENTS.md，将自动触发 /r-init" 并执行 init 装载逻辑，完成后继续当前技能
-  - `/r-init` 本身 → 正常继续
-- 找到 `AGENTS.md`：校验 `last_updated` 时间戳，超过 7 天发出提示 "💡 AGENTS.md 已超过 7 天未更新，建议 /r-init:refresh"，但不阻塞
+- 读取项目根 `AGENTS.md`
+- 若不存在：
+  - `/r-init` 正常继续
+  - 其他技能提示“未发现 AGENTS.md，建议先初始化项目基线”
+- 若存在但明显过旧，可提示刷新，但不默认阻塞
 
 ### 0.2 上下文恢复检查
 
 调用 `ritsu_read_ctx`：
 
-- `recovery_context` 非空 → 提示"检测到未完成任务"，展示 `resume_hint`，询问是否继续
-- `circuit_breaker_status.should_redirect` 非空 → 提示"检测到熔断状态"，建议先执行 `/r-think`
-- `reality_check.desync_detected` 为 true → 提示"检测到 Git 时空错位"，自动忽略失效记录
+- 若存在未完成任务，提示是否继续
+- 若存在熔断状态，提示当前风险
+- 若存在产物失配，提示状态已失真
 
-**Context Pruning（抗 Token 炸弹）**：
+**精简原则**：
 
-- 优先使用 `recent_entries_pruned` 作为“近期上下文”输入（done/artifact_written 权重更高）
-- failed 事件优先读取 `failed_summary`（按 skill 聚合），避免逐条 failed 把 token 撑爆
+- 优先使用 `recent_entries_pruned`
+- failed 事件优先看 `failed_summary`
 
 ### 0.3 环境确认
 
-- 通过读取 `package.json`/`.env`/`pom.xml` 等真实配置文件，抓取项目的**真实框架版本和运行端口**，禁止背诵"常见配置"
+- 通过读取 `package.json` / `.env` / `pom.xml` 等真实文件确认环境
+- 禁止背诵“常见配置”
 
 ### 0.4 执行模式选择
 
-根据变更规模选择执行模式：
+根据任务风险和变更规模选择模式：
 
-| 模式         | 条件                                                 | 行为                                         |
-| ------------ | ---------------------------------------------------- | -------------------------------------------- |
-| **hotfix**   | 用户指定 `--hotfix`，且变更 ≤1 文件/≤10 行           | 仅 dev 技能支持，跳过全部前置，直接修改+自测 |
-| **fast**     | 用户指定 `--fast`，或变更 ≤3 文件/≤30 行，无架构影响 | 按 SKILL.md `fast_mode.skip_steps` 跳步执行  |
-| **standard** | 默认，或变更 >3 文件/>30 行，涉及架构                | 完整流程（当前 SKILL.md 定义的完整步骤）     |
+| 模式 | 适用情况 | 行为 |
+| --- | --- | --- |
+| `quick` | 小改动、低风险、信息充分 | 降低交互成本，保留基本验证 |
+| `standard` | 默认模式 | 走正常闭环 |
+| `critical` | 架构、迁移、发布风险高 | 强制增加边界、验证、回滚要求 |
 
-**fast 模式执行协议**：
+兼容历史模式：
 
-- 读取当前 SKILL.md 的 `fast_mode` 声明：
-  - `skip_steps`：跳过列出的步骤编号，其余步骤顺序执行
-  - `skip_artifacts: true`：不调用 `ritsu_write_artifact` 写入产物文件，不触发 `artifact_written` 事件
-  - `self_test`：若非 null，跳过 review 直接调用指定工具自测（通常为 `ritsu_run_quality_gates`）
-- 只调用 `ritsu_emit_event(started)` + `ritsu_emit_event(done)` 两个事件
-- 输出精简交付摘要（涉及文件 + Lint/Test 结果）
-- 不支持 fast 模式的技能（无 `fast_mode` 声明）：忽略 `--fast`，按 standard 执行
+- `--hotfix` 视为 `quick` 的极小改动子集
+- `--fast` 视为降低输出和交互密度，而不是跳过关键验证
 
 ---
 
 ## Step 1: 领域解析 + ctx started
 
-按以下优先级解析领域，**首个命中即停止**，输出 `[RITSU_CTX: domain={value}]`：
+按以下优先级解析领域，首个命中即停止，输出 `[RITSU_CTX: domain={value}]`：
 
-1. **P1**：读取项目根 `AGENTS.md` 的 `domain:` 字段。合法值：frontend / backend / fullstack / infra / data
-2. **P2**：调用 `ritsu_get_changed_files`，使用返回的 `domain_hint` 字段
-3. **P3**：P1/P2 均无法判断时，**强制询问用户**，不得自行猜测
+1. 读取 `AGENTS.md` 的 `domain`
+2. 调用 `ritsu_get_changed_files`，使用返回的 `domain_hint`
+3. 均无法判断时再询问用户
 
-领域解析完成后，加载领域配置：
+领域解析完成后：
 
-- 始终加载 `domains/_base.yaml` + `domains/[domain].yaml`
-- fullstack 领域使用扁平化后的 `domains/fullstack.yaml`，无需额外加载 `domains/frontend.yaml` 和 `domains/backend.yaml`
-- route / triage 无需加载领域配置
+- 加载 `domains/_base.yaml` + `domains/[domain].yaml`
+- `fullstack` 直接使用扁平化配置
+- `route / triage` 可不加载详细领域增量
 
-解析完成后，调用 `ritsu_emit_event` 追加 started 事件：
+随后调用 `ritsu_emit_event` 追加 started 事件：
 
-```
+```text
 ritsu_emit_event({
   event_type: "started",
   step: "1/{N}",
@@ -84,7 +80,7 @@ ritsu_emit_event({
 })
 ```
 
-> correlation_id 由 `ritsu_emit_event` 自动生成（格式 `cid-{YYYYMMDD}-{seq}`），同链路技能自动继承上一事件的 correlation_id，无需手动指定。
+> correlation_id 由 `ritsu_emit_event` 自动生成并沿链路继承。
 
 ---
 
@@ -92,7 +88,7 @@ ritsu_emit_event({
 
 ### 技能完成时
 
-```
+```text
 ritsu_emit_event({
   event_type: "done",
   step: "{M}/{M}",
@@ -104,9 +100,9 @@ ritsu_emit_event({
 
 ### 产物写入时
 
-调用 `ritsu_write_artifact` 写入产物文件后，追加：
+调用 `ritsu_write_artifact` 后，追加：
 
-```
+```text
 ritsu_emit_event({
   event_type: "artifact_written",
   step: "{N}/{M}",
@@ -119,7 +115,7 @@ ritsu_emit_event({
 
 ### 技能失败时
 
-```
+```text
 ritsu_emit_event({
   event_type: "failed",
   skill: "{skill_name}",
@@ -128,60 +124,60 @@ ritsu_emit_event({
 })
 ```
 
-> ⚠️ **精简原则**：只写入 4 种核心事件（started/done/failed/artifact_written），审批/步骤进度/熔断告警通过 AI 自然语言输出。熔断状态由 `ritsu_read_ctx` 的 `circuit_breaker_status` 字段自动计算。
-
 ### 失败恢复协议
 
-技能执行中途失败时，必须执行以下恢复操作，防止磁盘/ctx 状态不一致：
+失败时优先保证状态真实，而不是掩盖失败：
 
-**代码变更回滚**（dev/optimize 失败）：
+- 若有代码变更，明确告知当前工作区状态
+- 若有半写入产物，清理不完整文件
+- 必须写入 `failed` 事件，保留恢复线索
 
-- 调用 `ritsu_exec({command: "git stash"})` 暂存未提交变更
-- 告知用户"代码已 stash，可通过 `git stash pop` 恢复"
-
-**不完整产物清理**（artifact 写入失败）：
-
-- 若 `ritsu_write_artifact` 写入了一半的文件，调用 `ritsu_exec({command: "rm {文件路径}}")` 删除
-- 不写入 `artifact_written` 事件
-
-**ctx 状态修正**：
-
-- 写入 `failed` 事件，`error` 字段描述失败原因和已执行的恢复操作
-- 下次恢复时 `ritsu_read_ctx` 的 `recovery_context` 会指引正确的断点
+不要求所有技能都自动执行激进回滚；只有在该技能文档明确要求时才做自动恢复动作。
 
 ---
 
 ## Step 3: 关联流转 + 状态机引导
 
-完成后按 `_shared/state-machine.yaml` 输出引导语。查询 `states.{current_skill}.next` 确认合法流转目标。
+完成后按 `_shared/state-machine.yaml` 输出下一步建议。
 
-**熔断规则**：引用 `_shared/state-machine.yaml` 的 `circuit_breaker` section，AI 不内联重复定义。
+状态机现在优先表达产品阶段流转，而不是暴露过多内部 skill 跳转：
+
+- `intake`
+- `deliver.quick`
+- `deliver.standard`
+- `deliver.critical`
+- `assure`
+- `extensions.*`
+
+若某个内部 skill 仍需细粒度跳转，应服从所属阶段的边界。
 
 ---
 
 ## Step 4: 统一交付摘要模板
 
-所有技能完成后，必须输出交付摘要。使用以下统一模板，禁止各技能自定义格式：
+所有技能完成后，必须输出精简摘要。
 
-```
+### 通用模板
+
+```markdown
 ## 律 (Ritsu) {skill_name} 落盘清单
 - 涉及文件: {路径 + 改动概述}
-- 溯源: {Handoff/Diagnosis/Review-Stamp 路径 或 无（风险已知悉）}
+- 溯源: {intake-ticket/handoff/diagnosis/delivery-report/assurance-report 路径 或 无}
 - Lint: ✅/❌/跳过 | Test: ✅/❌/跳过
 ```
 
-**hotfix 模式精简版**：
+### Quick / Hotfix 精简版
 
-```
-## 🔥 Hotfix 落盘
+```markdown
+## 🔥 Quick 交付摘要
 - 文件: {路径}
 - 变更: {一行描述}
-- Lint: ✅/❌ | Test: ✅/❌
+- 验证: {已做的最小验证}
 ```
 
-**read 模式精简版**（无文件变更）：
+### Read 精简版
 
-```
+```markdown
 ## 📖 阅读摘要
 - 目标: {文件/模块}
 - 核心发现: {1-3 条关键结论}
