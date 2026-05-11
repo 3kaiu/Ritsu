@@ -7,8 +7,10 @@ states:
     next:
       [
         init,
+        read,
         think,
         dev,
+        refactor,
         test,
         hunt,
         review,
@@ -83,6 +85,22 @@ states:
     branches:
       review: "文档完成后审查"
       dev: "文档发现代码与描述不一致，需修复代码"
+  read:
+    next: [think, dev, hunt, optimize, refactor]
+    branches:
+      think: "阅读后需要设计方案"
+      dev: "阅读后直接开发（Handoff 已存在）"
+      hunt: "阅读中发现可疑问题需诊断"
+      optimize: "阅读后发现优化机会"
+      refactor: "阅读后发现结构需改善"
+    note: "只读技能，不产生产物文件，不写 artifact"
+  refactor:
+    next: [review, test, optimize]
+    branches:
+      review: "重构完成，需审查"
+      test: "重构完成，需补充新接口测试"
+      optimize: "重构后仍有精简空间"
+    note: "改变结构但不改变行为，必须有测试保障"
 
 circuit_breaker:
   - skill: review

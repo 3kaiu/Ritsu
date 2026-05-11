@@ -50,15 +50,17 @@ hard_constraints:
 
 ```
 1. 项目全新 / 无 AGENTS.md           → /r-init
-2. 有新需求 且 .ritsu/handoff-* 不存在 → /r-pipe standard [需求]（自动 think→dev→review）
-3. 直接写代码 且 Handoff 已存在       → /r-dev [handoff路径]
-4. 有报错 / 找不到 Bug               → /r-pipe bugfix [报错信息]（自动 hunt→dev→review）
-5. 写完代码 / 要合并                 → /r-review
-6. 优化/精简/提速/重构（不改功能）    → /r-pipe optimize [目标]（自动 optimize→review）
-7. 补测试 / 写测试 / 测试覆盖率       → /r-pipe test_add [目标]（自动 test→review）
-8. 部署 / 发布 / 上线                 → /r-deploy
-9. 写文档 / 更新文档 / API文档        → /r-doc [目标]
-10. 有 Issue/PR 要处理               → /r-triage
+2. 看看/解释/理解/读一下（纯阅读）   → /r-read [目标]
+3. 有新需求 且 .ritsu/handoff-* 不存在 → /r-pipe standard [需求]（自动 think→dev→review）
+4. 直接写代码 且 Handoff 已存在       → /r-dev [handoff路径]
+5. 有报错 / 找不到 Bug               → /r-pipe bugfix [报错信息]（自动 hunt→dev→review）
+6. 写完代码 / 要合并                 → /r-review
+7. 优化/精简/提速（不改功能）         → /r-pipe optimize [目标]（自动 optimize→review）
+8. 重构/提取/重命名/拆分/改结构       → /r-refactor [目标]
+9. 补测试 / 写测试 / 测试覆盖率       → /r-pipe test_add [目标]（自动 test→review）
+10. 部署 / 发布 / 上线                 → /r-deploy
+11. 写文档 / 更新文档 / API文档        → /r-doc [目标]
+12. 有 Issue/PR 要处理               → /r-triage
 ```
 
 **流水线路由**（用户明确要求端到端交付时）：

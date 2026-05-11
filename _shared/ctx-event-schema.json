@@ -29,7 +29,9 @@
         "triage",
         "test",
         "deploy",
-        "document"
+        "document",
+        "read",
+        "refactor"
       ],
       "description": "技能名"
     },
