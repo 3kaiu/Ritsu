@@ -73,22 +73,7 @@ hard_constraints:
 
 **领域专属测试规则**：
 
-**backend**：
-
-- API 测试必须覆盖：正常路径 + 参数校验失败 + 鉴权失败 + 数据库异常
-- 事务测试必须验证回滚行为
-- 并发测试使用确定性手段（不依赖时序）
-
-**frontend**：
-
-- 组件测试必须覆盖：渲染输出 + 用户交互 + 异步状态（loading/error/success）
-- Hook 测试使用 `@testing-library/react-hooks` 或 `renderHook`
-- 快照测试仅用于稳定组件，禁止对频繁变更的组件使用快照
-
-**infra/data**：
-
-- IaC 变更测试使用 plan 输出断言
-- 数据管道测试使用固定输入 + 预期输出断言
+按当前领域已加载的 `coding_disciplines` 和 `attack_vectors` 执行（`domains/_base.yaml` + `domains/{domain}.yaml`）。对每条 discipline 的 `rule` 字段编写对应测试用例，对每条 attack_vector 的 `check` 字段编写防御性测试。
 
 ### 4. 执行与验证
 

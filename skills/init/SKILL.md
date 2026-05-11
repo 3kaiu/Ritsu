@@ -89,7 +89,7 @@ Ritsu Bundle v3.6 已激活。
 全局规则：~/.gemini/antigravity/skills/Ritsu/
 项目规则：AGENTS.md
 指令前缀（识别后立即加载对应 SKILL.md）：
-  /r-route /r-init /r-think /r-dev /r-opt /r-review /r-hunt /r-triage
+  /r-route /r-init /r-read /r-think /r-dev /r-refactor /r-opt /r-review /r-hunt /r-test /r-deploy /r-doc /r-triage
 ```
 
 ### 6. Git 污染防范 (Git History Pollution)

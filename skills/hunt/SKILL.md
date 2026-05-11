@@ -40,12 +40,7 @@ hard_constraints:
 
 **系统边界定义**：在抓取具体日志前，强制输出当前报错涉及的【系统数据流链路】（例如：Client -> WAF -> Gateway -> Node.js -> Redis -> MySQL）。这能彻底消除大模型在局部盲区中瞎猜的现象。
 
-根据边界定义抓取证据：
-**frontend**：浏览器控制台完整堆栈 / 网络面板状态码+响应体 / DevTools 状态快照 / Hydration 特征 / CORS 响应头
-
-**backend**：完整报错堆栈（含线程/goroutine 信息）/ DB 连接池状态 / 内存与 GC 曲线 / 上游服务响应延迟
-
-**infra/data**：变更前后状态文件 diff / CI 日志完整输出 / 资源依赖图失败节点
+根据边界定义抓取证据，按当前领域已加载的 `hypothesis_directions` 确定优先排查方向（`domains/_base.yaml` + `domains/{domain}.yaml`）。
 
 ### 4. 建立 MECE 假设（HC-2 执行协议）
 
@@ -66,9 +61,7 @@ hard_constraints:
   排除条件：执行 [命令/操作]，若输出 [Y] 则此假设不成立
 ```
 
-**frontend 参考方向**：Service Worker 缓存过期 / 闭包捕获旧值 / 异步竞态（useEffect 时机）/ 三方库版本冲突
-
-**backend 参考方向**：DB 死锁（SHOW ENGINE INNODB STATUS）/ 连接池耗尽（检查池配置与活跃数）/ OOM（内存趋势）/ 事务隔离级别（幻读/不可重复读）
+> 参考方向按当前领域已加载的 `hypothesis_directions`（`domains/_base.yaml` + `domains/{domain}.yaml`），LLM 必须结合项目实际情况调整，禁止原样照搬。
 
 ### 5. 探针验证（按置信度从高到低）
 

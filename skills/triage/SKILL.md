@@ -68,11 +68,7 @@ hard_constraints:
 [RITSU_CTX: domain={value}]（基于 PR 文件后缀推断）
 ```
 
-按领域质量门槛：
-
-- **frontend PR**：必须提供 UI 变更截图/录屏 + 检查新增三方包体积（>50KB 需说明）
-- **backend PR**：必须提供单测覆盖率报告 + 检查破坏性 Schema 变更
-- **infra PR**：必须提供 terraform plan 或等效输出
+按当前领域已加载的 `pr_requirements` 逐条检查（`domains/_base.yaml` + `domains/{domain}.yaml`）。对每条 pr_requirement 的 `rule` 字段验证 PR 是否满足。
 
 门槛未满足 → 标记 `changes-requested`，步骤 3，附缺失材料清单
 
