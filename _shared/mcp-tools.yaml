@@ -313,6 +313,349 @@ tools:
         callers_count: { type: integer }
         kg_generated_at: { type: string }
 
+  - name: ritsu_env_probe
+    description: 环境嗅探（Self-Healing Sandbox MVP）。检查 git/worktree 可用性、node 版本、.ritsu 临时目录可写性，以及 .env/.env.example 键缺失情况。仅做只读探测。
+    call_template:
+      tool: ritsu_env_probe
+      params: {}
+    input: {}
+    output_schema:
+      type: object
+      required: [project_root, tools, git, sandbox]
+      properties:
+        project_root: { type: string }
+        platform: { type: string }
+        arch: { type: string }
+        tools:
+          type: object
+          properties:
+            git:
+              type: object
+              properties:
+                ok: { type: boolean }
+                output: { type: string }
+            node:
+              type: object
+              properties:
+                ok: { type: boolean }
+                output: { type: string }
+        git:
+          type: object
+          properties:
+            is_inside_work_tree: { type: string }
+            worktree_list_ok: { type: boolean }
+            worktree_list: { type: string }
+        sandbox:
+          type: object
+          properties:
+            ritsu_dir: { type: string }
+            temp_dir: { type: string }
+            ritsu_dir_writable: { type: boolean }
+            temp_dir_writable: { type: boolean }
+        has_env_example: { type: boolean }
+        has_env: { type: boolean }
+        expected_env_keys: { type: array, items: { type: string } }
+        missing_env_keys: { type: array, items: { type: string } }
+
+  - name: ritsu_sandbox_prepare
+    description: 创建 Git worktree 沙盒（Self-Healing Sandbox MVP）。在 .ritsu/temp/{correlation_id} 下创建一个 detach worktree，用于隔离执行与自愈尝试。
+    call_template:
+      tool: ritsu_sandbox_prepare
+      params:
+        correlation_id: "{cid}"
+        base_ref: "HEAD"
+      example:
+        correlation_id: "cid-20260511-001"
+        base_ref: "HEAD"
+    input:
+      correlation_id:
+        type: string
+        required: true
+        description: "任务链路关联 ID，用作沙盒目录名"
+      base_ref:
+        type: string
+        required: false
+        description: "worktree 基线引用（默认 HEAD）"
+    output_schema:
+      type: object
+      required: [ok, sandbox_path, base_ref]
+      properties:
+        ok: { type: boolean }
+        sandbox_path: { type: string }
+        base_ref: { type: string }
+
+  - name: ritsu_sandbox_exec
+    description: 在 Git worktree 沙盒中执行命令（Self-Healing Sandbox MVP）。复用 ritsu_exec 的安全边界（白名单二进制 + shell 元字符拦截 + 危险参数/残余黑名单），且不经 shell 解释。
+    call_template:
+      tool: ritsu_sandbox_exec
+      params:
+        correlation_id: "{cid}"
+        command: "{命令}"
+      example:
+        correlation_id: "cid-20260511-001"
+        command: "git status --porcelain"
+    input:
+      correlation_id:
+        type: string
+        required: true
+        description: "任务链路关联 ID，对应 .ritsu/temp/{correlation_id}"
+      command:
+        type: string
+        required: true
+        description: "要执行的命令（单命令，不支持管道/重定向）"
+      max_output_lines:
+        type: integer
+        required: false
+        description: "最大输出行数（默认 200）"
+      timeout_ms:
+        type: integer
+        required: false
+        description: "超时毫秒数（默认 30000）"
+      max_buffer_mb:
+        type: integer
+        required: false
+        description: "最大输出缓冲 MB（默认 10）"
+    safety_boundary: "三层防护：shell 元字符阻断（管道/重定向/子shell）+ 白名单二进制 + 危险参数/用法黑名单"
+    output_schema:
+      type: object
+      required: [ok, output, cwd]
+      properties:
+        ok: { type: boolean }
+        output: { type: string }
+        cwd: { type: string }
+
+  - name: ritsu_sandbox_cleanup
+    description: 清理 Git worktree 沙盒（Self-Healing Sandbox MVP）。移除 .ritsu/temp/{correlation_id} worktree 并删除目录，幂等。
+    call_template:
+      tool: ritsu_sandbox_cleanup
+      params:
+        correlation_id: "{cid}"
+      example:
+        correlation_id: "cid-20260511-001"
+    input:
+      correlation_id:
+        type: string
+        required: true
+        description: "任务链路关联 ID，对应 .ritsu/temp/{correlation_id}"
+    output_schema:
+      type: object
+      required: [ok, removed, sandbox_path]
+      properties:
+        ok: { type: boolean }
+        removed: { type: boolean }
+        sandbox_path: { type: string }
+        warning: { type: string }
+
+  - name: ritsu_ts_check
+    description: TypeScript/JavaScript 编译上下文静态检查（工程友好）。在项目根目录运行 tsc --noEmit（不产出文件），返回结构化 diagnostics。用于替代 grep 的“存在性校验”，升级为编译器级签名/类型校验。
+    call_template:
+      tool: ritsu_ts_check
+      params:
+        tsconfig_path: "tsconfig.json"
+        max_diagnostics: 50
+        timeout_ms: 60000
+      example:
+        tsconfig_path: "tsconfig.json"
+        max_diagnostics: 50
+        timeout_ms: 60000
+    input:
+      tsconfig_path:
+        type: string
+        required: false
+        description: "tsconfig.json 路径（相对项目根，默认 tsconfig.json）"
+      max_diagnostics:
+        type: integer
+        required: false
+        description: "最多返回的诊断条数（默认 50，上限 200）"
+      timeout_ms:
+        type: integer
+        required: false
+        description: "超时毫秒数（默认 60000，上限 120000）"
+    output_schema:
+      type: object
+      required: [passed, diagnostics, diagnostics_count, tsconfig_path]
+      properties:
+        passed: { type: boolean }
+        tsconfig_path: { type: string }
+        diagnostics_count: { type: integer }
+        diagnostics:
+          type: array
+          items:
+            type: object
+            properties:
+              file: { type: string }
+              line: { type: integer }
+              col: { type: integer }
+              code: { type: string }
+              message: { type: string }
+        raw_output: { type: string }
+        truncated: { type: boolean }
+
+  - name: ritsu_ts_symbol_query
+    description: TypeScript/JavaScript 符号查询（工程友好，基于 TypeScript 编译器 API）。返回符号的定义位置、推导类型/签名，以及部分引用位置（带上下文片段）。用于将 AP-2 的签名级校验从 grep 升级为类型系统查询。
+    call_template:
+      tool: ritsu_ts_symbol_query
+      params:
+        symbol: "{identifier}"
+        tsconfig_path: "tsconfig.json"
+        max_definitions: 10
+        max_references: 20
+      example:
+        symbol: "ritsu_exec"
+        tsconfig_path: "tsconfig.json"
+        file_hint: "src/handlers/exec.ts"
+        max_definitions: 10
+        max_references: 20
+    input:
+      symbol:
+        type: string
+        required: true
+        description: "要查询的符号名（identifier），如 ritsu_exec / useFoo / SomeType"
+      tsconfig_path:
+        type: string
+        required: false
+        description: "tsconfig.json 路径（相对项目根，默认 tsconfig.json）"
+      file_hint:
+        type: string
+        required: false
+        description: "可选：将扫描范围限定到指定文件（相对项目根），用于降低噪声与加速"
+      max_definitions:
+        type: integer
+        required: false
+        description: "最多返回的定义条数（默认 10，上限 50）"
+      max_references:
+        type: integer
+        required: false
+        description: "最多返回的引用条数（默认 20，上限 200）"
+    output_schema:
+      type: object
+      required: [symbol, tsconfig_path, definitions, references]
+      properties:
+        symbol: { type: string }
+        tsconfig_path: { type: string }
+        file_hint: { type: string }
+        definitions_count: { type: integer }
+        references_count: { type: integer }
+        definitions:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              kind: { type: string }
+              signature: { type: string }
+              type: { type: string }
+              location:
+                type: object
+                properties:
+                  file: { type: string }
+                  line: { type: integer }
+                  col: { type: integer }
+        references:
+          type: array
+          items:
+            type: object
+            properties:
+              context: { type: string }
+              location:
+                type: object
+                properties:
+                  file: { type: string }
+                  line: { type: integer }
+                  col: { type: integer }
+
+  - name: ritsu_semantic_index_build
+    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描 handoff/diagnosis/review-stamp/optimize-report 产物，将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
+    call_template:
+      tool: ritsu_semantic_index_build
+      params:
+        chunk_size: 1200
+        chunk_overlap: 200
+        max_files: 200
+      example:
+        chunk_size: 1200
+        chunk_overlap: 200
+        max_files: 200
+    input:
+      chunk_size:
+        type: integer
+        required: false
+        description: "分块字符数（默认 1200，上限 4000）"
+      chunk_overlap:
+        type: integer
+        required: false
+        description: "分块重叠字符数（默认 200，上限 1000）"
+      max_files:
+        type: integer
+        required: false
+        description: "最多扫描文件数（默认 200，上限 2000）"
+    output_schema:
+      type: object
+      required: [ok, index_path, embedder_model, entries_total, entries_added]
+      properties:
+        ok: { type: boolean }
+        index_path: { type: string }
+        embedder_model: { type: string }
+        files_scanned: { type: integer }
+        entries_total: { type: integer }
+        entries_added: { type: integer }
+        entries_reused: { type: integer }
+        dim: { type: integer }
+
+  - name: ritsu_semantic_search
+    description: 在 .ritsu 语义索引中进行语义检索（本地向量化记忆，Phase-1 MVP）。返回 top-k 匹配片段、分数与文件路径，用于时空回溯与类似问题召回。
+    call_template:
+      tool: ritsu_semantic_search
+      params:
+        query: "{natural_language_query}"
+        top_k: 5
+        types: [handoff, diagnosis, review-stamp]
+      example:
+        query: "CI 里 vitest 报错但本地不报"
+        top_k: 5
+        types: [diagnosis, review-stamp]
+    input:
+      query:
+        type: string
+        required: true
+        description: "自然语言查询（必填）"
+      top_k:
+        type: integer
+        required: false
+        description: "返回匹配条数（默认 5，上限 50）"
+      types:
+        type: list
+        required: false
+        description: "产物类型过滤（handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+      chunk_size:
+        type: integer
+        required: false
+        description: "用于生成 snippet 的分块大小（默认 1200）"
+      chunk_overlap:
+        type: integer
+        required: false
+        description: "用于生成 snippet 的分块重叠（默认 200）"
+    output_schema:
+      type: object
+      required: [ok, query, matches]
+      properties:
+        ok: { type: boolean }
+        query: { type: string }
+        top_k: { type: integer }
+        index_path: { type: string }
+        embedder_model: { type: string }
+        total_index_entries: { type: integer }
+        matches:
+          type: array
+          items:
+            type: object
+            properties:
+              score: { type: number }
+              path: { type: string }
+              artifact_type: { type: string }
+              chunk_index: { type: integer }
+              snippet: { type: string }
+
   - name: ritsu_write_artifact
     description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
     call_template:

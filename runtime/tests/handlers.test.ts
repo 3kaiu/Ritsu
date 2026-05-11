@@ -30,6 +30,7 @@ import {
   rmSync,
   readdirSync,
   readFileSync,
+  writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
 
@@ -164,6 +165,116 @@ describe("validateEvent (JS ajv)", () => {
       status: "failed",
     });
     expect(result.valid).toBe(false);
+  });
+});
+
+// ─── semantic index (vectorized memory) handler 集成测试 ─────
+
+describe("semantic index handlers integration", () => {
+  let indexBuild: (params: Record<string, unknown>) => Promise<any>;
+  let semanticSearch: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    indexBuild = (await import("../src/handlers/semantic-index-build.js"))
+      .ritsu_semantic_index_build;
+    semanticSearch = (await import("../src/handlers/semantic-search.js"))
+      .ritsu_semantic_search;
+  });
+
+  it("should build index and search (hash backend)", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    process.env.RITSU_EMBEDDINGS_BACKEND = "hash";
+
+    // write sample artifacts
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "diagnosis-sample.md"),
+      "# Root Cause\nCI cache poisoned; fix by clearing vite cache.\n",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "handoff-sample.md"),
+      "# Plan\nUpdate config X and restart service.\n",
+      "utf-8",
+    );
+
+    const b = await indexBuild({
+      chunk_size: 200,
+      chunk_overlap: 20,
+      max_files: 50,
+    });
+    expect(b.isError).toBeFalsy();
+    const bd = JSON.parse(b.content[0].text);
+    expect(bd.ok).toBe(true);
+    expect(typeof bd.index_path).toBe("string");
+    expect(typeof bd.entries_total).toBe("number");
+
+    const s = await semanticSearch({
+      query: "cache poisoned",
+      top_k: 3,
+      types: ["diagnosis"],
+    });
+    expect(s.isError).toBeFalsy();
+    const sd = JSON.parse(s.content[0].text);
+    expect(sd.ok).toBe(true);
+    expect(Array.isArray(sd.matches)).toBe(true);
+    expect(sd.matches.length).toBeGreaterThan(0);
+
+    delete process.env.RITSU_PROJECT_ROOT;
+    delete process.env.RITSU_EMBEDDINGS_BACKEND;
+  });
+});
+
+// ─── ritsu_ts_check handler 集成测试 ────────────────────────
+
+describe("ritsu_ts_check handler integration", () => {
+  let tsCheck: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    tsCheck = (await import("../src/handlers/ts-check.js")).ritsu_ts_check;
+  });
+
+  it("should typecheck runtime tsconfig", async () => {
+    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu/runtime";
+    const result = await tsCheck({
+      tsconfig_path: "tsconfig.json",
+      max_diagnostics: 20,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(typeof data.passed).toBe("boolean");
+    expect(Array.isArray(data.diagnostics)).toBe(true);
+    expect(typeof data.diagnostics_count).toBe("number");
+    expect(typeof data.tsconfig_path).toBe("string");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── ritsu_ts_symbol_query handler 集成测试 ─────────────────
+
+describe("ritsu_ts_symbol_query handler integration", () => {
+  let symbolQuery: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    symbolQuery = (await import("../src/handlers/ts-symbol-query.js"))
+      .ritsu_ts_symbol_query;
+  });
+
+  it("should query symbol definitions and references", async () => {
+    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu/runtime";
+    const result = await symbolQuery({
+      symbol: "ritsu_exec",
+      tsconfig_path: "tsconfig.json",
+      file_hint: "src/handlers/exec.ts",
+      max_definitions: 5,
+      max_references: 10,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.symbol).toBe("ritsu_exec");
+    expect(Array.isArray(data.definitions)).toBe(true);
+    expect(Array.isArray(data.references)).toBe(true);
+    expect(data.definitions.length).toBeGreaterThan(0);
+    delete process.env.RITSU_PROJECT_ROOT;
   });
 });
 
@@ -745,5 +856,111 @@ describe("ritsu_run_quality_gates handler integration", () => {
     expect(data.lint).toBeDefined();
     expect(data.test).toBeDefined();
     delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── sandbox (git worktree) handler 集成测试 ────────────────────────
+
+describe("sandbox handlers integration", () => {
+  const REAL_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu";
+
+  let sandboxPrepare: (params: Record<string, unknown>) => Promise<any>;
+  let sandboxExec: (params: Record<string, unknown>) => Promise<any>;
+  let sandboxCleanup: (params: Record<string, unknown>) => Promise<any>;
+
+  beforeAll(async () => {
+    sandboxPrepare = (await import("../src/handlers/sandbox-prepare.js"))
+      .ritsu_sandbox_prepare;
+    sandboxExec = (await import("../src/handlers/sandbox-exec.js"))
+      .ritsu_sandbox_exec;
+    sandboxCleanup = (await import("../src/handlers/sandbox-cleanup.js"))
+      .ritsu_sandbox_cleanup;
+  });
+
+  it("should error when sandbox is missing", async () => {
+    process.env.RITSU_PROJECT_ROOT = REAL_PROJECT_ROOT;
+    const cid = "cid-sandbox-missing-" + process.pid;
+    const result = await sandboxExec({
+      correlation_id: cid,
+      command: "echo ok",
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain("sandbox not found");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should prepare and cleanup sandbox idempotently", async () => {
+    process.env.RITSU_PROJECT_ROOT = REAL_PROJECT_ROOT;
+    const cid = "cid-sandbox-prepare-" + process.pid;
+    const sandboxPath = resolve(REAL_PROJECT_ROOT, ".ritsu", "temp", cid);
+
+    try {
+      const p1 = await sandboxPrepare({
+        correlation_id: cid,
+        base_ref: "HEAD",
+      });
+      expect(p1.isError).toBeFalsy();
+      expect(existsSync(sandboxPath)).toBe(true);
+
+      const p2 = await sandboxPrepare({
+        correlation_id: cid,
+        base_ref: "HEAD",
+      });
+      expect(p2.isError).toBeFalsy();
+      expect(existsSync(sandboxPath)).toBe(true);
+    } finally {
+      await sandboxCleanup({ correlation_id: cid });
+      await sandboxCleanup({ correlation_id: cid });
+      delete process.env.RITSU_PROJECT_ROOT;
+    }
+  });
+
+  it("should execute safe command inside sandbox", async () => {
+    process.env.RITSU_PROJECT_ROOT = REAL_PROJECT_ROOT;
+    const cid = "cid-sandbox-exec-ok-" + process.pid;
+    const sandboxPath = resolve(REAL_PROJECT_ROOT, ".ritsu", "temp", cid);
+
+    try {
+      const p = await sandboxPrepare({ correlation_id: cid, base_ref: "HEAD" });
+      expect(p.isError).toBeFalsy();
+      expect(existsSync(sandboxPath)).toBe(true);
+
+      const r = await sandboxExec({
+        correlation_id: cid,
+        command: "echo hello",
+      });
+      expect(r.isError).toBeFalsy();
+      const data = JSON.parse(r.content[0].text);
+      expect(data.ok).toBe(true);
+      expect(data.output).toContain("hello");
+      expect(data.cwd).toBe(sandboxPath);
+    } finally {
+      await sandboxCleanup({ correlation_id: cid });
+      delete process.env.RITSU_PROJECT_ROOT;
+    }
+  });
+
+  it("should enforce safety boundary in sandbox_exec", async () => {
+    process.env.RITSU_PROJECT_ROOT = REAL_PROJECT_ROOT;
+    const cid = "cid-sandbox-safety-" + process.pid;
+
+    try {
+      const p = await sandboxPrepare({ correlation_id: cid, base_ref: "HEAD" });
+      expect(p.isError).toBeFalsy();
+
+      const blocked = [
+        "bash -c 'echo pwn'",
+        "echo ok | cat",
+        'node -e "process.exit(1)"',
+      ];
+
+      for (const cmd of blocked) {
+        const r = await sandboxExec({ correlation_id: cid, command: cmd });
+        expect(r.isError, `should block: ${cmd}`).toBe(true);
+      }
+    } finally {
+      await sandboxCleanup({ correlation_id: cid });
+      delete process.env.RITSU_PROJECT_ROOT;
+    }
   });
 });

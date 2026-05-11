@@ -22,6 +22,14 @@ import { ritsu_read_agents } from "./read-agents.js";
 import { ritsu_contract_validate } from "./contract-validate.js";
 import { ritsu_build_kg } from "./kg-build.js";
 import { ritsu_query_kg } from "./kg-query.js";
+import { ritsu_env_probe } from "./env-probe.js";
+import { ritsu_sandbox_prepare } from "./sandbox-prepare.js";
+import { ritsu_sandbox_exec } from "./sandbox-exec.js";
+import { ritsu_sandbox_cleanup } from "./sandbox-cleanup.js";
+import { ritsu_ts_check } from "./ts-check.js";
+import { ritsu_ts_symbol_query } from "./ts-symbol-query.js";
+import { ritsu_semantic_index_build } from "./semantic-index-build.js";
+import { ritsu_semantic_search } from "./semantic-search.js";
 import { ritsu_write_artifact } from "./write-artifact.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
@@ -41,6 +49,14 @@ export const registerHandlers: Record<
   ritsu_contract_validate,
   ritsu_build_kg,
   ritsu_query_kg,
+  ritsu_env_probe,
+  ritsu_sandbox_prepare,
+  ritsu_sandbox_exec,
+  ritsu_sandbox_cleanup,
+  ritsu_ts_check,
+  ritsu_ts_symbol_query,
+  ritsu_semantic_index_build,
+  ritsu_semantic_search,
   ritsu_write_artifact,
   ritsu_list_artifacts,
   ritsu_exec,
