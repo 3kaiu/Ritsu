@@ -85,7 +85,7 @@ hard_constraints:
 
 **多意图路由**（识别到 2+ 意图）：
 
-- 主任务优先级：`hunt > review > optimize > dev > think > triage > init`
+- 主任务优先级：`hunt > review > refactor > optimize > dev > think > read > triage > init`
 - 必须在输出中标注：`⚠️ 次要意图：{描述} → 主任务完成后执行 /r-{skill}`
 
 ### 4. 输出路由决策
