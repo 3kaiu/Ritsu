@@ -154,6 +154,13 @@ schemas:
         fields:
           - name: findings
             format: "无 | - 问题描述（严重度：高/中/低）"
+      - title: "红蓝对抗发现"
+        id: red-teaming
+        fields:
+          - name: potential_defects
+            format: "至少 3 条：- 缺陷描述（触发条件/影响/验证方式）"
+          - name: refactor_suggestions
+            format: "至少 2 条：- 重构建议（不改变行为）"
       - title: "溯源对账"
         id: traceability
         fields:
