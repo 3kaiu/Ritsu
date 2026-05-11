@@ -91,6 +91,20 @@ schemas:
           - name: rollback_steps
             label: "回滚步骤"
             rule: "上线发现致命 Bug 的确切回滚指令（逐步骤列出）"
+      - title: "Complexity Score（动态代价评估）"
+        fields:
+          - name: change_size
+            label: "变更规模(LoC/文件数)"
+            rule: "必须给出 1-10 评分 + 粗略 files/loc 估计"
+          - name: intrusion
+            label: "架构侵入度"
+            rule: "必须给出 1-10 评分 + 解释影响范围"
+          - name: runtime_cost
+            label: "运行时开销"
+            rule: "必须给出 1-10 评分 + 解释 CPU/内存/IO 影响"
+          - name: alternatives
+            label: "备选方案"
+            rule: "当 intrusion>7 时必须至少 2 个备选，并解释为何不选更稳健方案"
       - title: "实施清单"
         type: checklist
         item_format: "- [ ] `{文件路径}`: {主干逻辑描述，精确到函数/组件级别}"

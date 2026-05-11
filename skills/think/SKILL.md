@@ -19,6 +19,9 @@ hard_constraints:
   - id: HC-3
     rule: "文件名必须使用 kebab-slug 规则，不得使用中文或空格"
     severity: WARN
+  - id: HC-4
+    rule: "Cost-Aware Planning：Phase B 推荐方案必须给出 Complexity Score（变更规模/侵入度/运行时开销）。若侵入度 > 7，必须给出至少两个备选方案，并解释为什么不选更稳健的那个"
+    severity: FATAL
 ---
 
 # Think: 领域自适应需求评审与架构设计
@@ -101,6 +104,18 @@ hard_constraints:
 | 运维成本 | | |
 | 可扩展性 | | |
 | 推荐原因 | | |
+
+在输出推荐方案前，必须附加 Complexity Score（动态代价评估）：
+
+```
+Complexity Score（1-10）
+- 变更规模(LoC/文件数): {1-10} — 估计 {files} 文件 / {loc} 行
+- 架构侵入度: {1-10} — 影响范围（模块边界/公共接口/数据模型/部署链路）
+- 运行时开销: {1-10} — CPU/内存/IO/冷启动/缓存命中
+
+判定：
+- 若“架构侵入度” > 7：必须提供至少 2 个备选方案（其中至少 1 个是更稳健/低侵入），并解释为何不选它
+```
 
 首推方案必须通过三项攻击测试：
 
