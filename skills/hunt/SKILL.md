@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 技术诊断引擎。抓证据 → 建 MECE 假设 → 验证 → 锁根因。绝对禁止改代码。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 total_steps: 6
+fast_mode:
+  skip_steps: [4]
+  skip_artifacts: true
+  self_test: null
+  description: "跳过 MECE 假设(4)，直接 grep 报错信息+5-Whys 根因倒推，不写 diagnosis 产物"
 hard_constraints:
   - id: HC-1
     rule: "确诊前禁止修改任何业务代码。发现修改冲动时，记录到诊断报告，等确诊后交给 /r-dev"
@@ -19,6 +24,8 @@ hard_constraints:
 # Hunt: 技术 CSI — 深度根因诊断 (Root Cause Investigation)
 
 **触发条件**：用户输入 `/r-hunt [问题描述]`，或由 `/r-triage` 携带结构化上下文路由。
+
+> ⚡ **fast 模式**：`/r-hunt --fast` 或报错信息明确时自动触发。跳过 MECE 假设步骤，直接 grep 定位 + 5-Whys 根因倒推，不写 diagnosis 产物文件。
 
 ## 执行流水线
 

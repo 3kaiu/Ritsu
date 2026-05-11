@@ -34,17 +34,20 @@
 
 根据变更规模选择执行模式：
 
-| 模式         | 条件                                                 | 行为                                                             |
-| ------------ | ---------------------------------------------------- | ---------------------------------------------------------------- |
-| **fast**     | 用户指定 `--fast`，或变更 ≤3 文件/≤30 行，无架构影响 | 跳过 think/review，dev 直接执行 + `ritsu_run_quality_gates` 自测 |
-| **standard** | 默认，或变更 >3 文件/>30 行，涉及架构                | 完整流程（当前 SKILL.md 定义的完整步骤）                         |
+| 模式         | 条件                                                 | 行为                                        |
+| ------------ | ---------------------------------------------------- | ------------------------------------------- |
+| **fast**     | 用户指定 `--fast`，或变更 ≤3 文件/≤30 行，无架构影响 | 按 SKILL.md `fast_mode.skip_steps` 跳步执行 |
+| **standard** | 默认，或变更 >3 文件/>30 行，涉及架构                | 完整流程（当前 SKILL.md 定义的完整步骤）    |
 
-**fast 模式规范**：
+**fast 模式执行协议**：
 
+- 读取当前 SKILL.md 的 `fast_mode` 声明：
+  - `skip_steps`：跳过列出的步骤编号，其余步骤顺序执行
+  - `skip_artifacts: true`：不调用 `ritsu_write_artifact` 写入产物文件，不触发 `artifact_written` 事件
+  - `self_test`：若非 null，跳过 review 直接调用指定工具自测（通常为 `ritsu_run_quality_gates`）
 - 只调用 `ritsu_emit_event(started)` + `ritsu_emit_event(done)` 两个事件
-- 直接调用 `ritsu_run_quality_gates` 验证
 - 输出精简交付摘要（涉及文件 + Lint/Test 结果）
-- 不写 handoff/diagnosis/review-stamp 产物
+- 不支持 fast 模式的技能（无 `fast_mode` 声明）：忽略 `--fast`，按 standard 执行
 
 ---
 

@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 领域自适应代码审查防线。Hard Stops 绝对红线拦截，领域语义审查，输出 Review Stamp 文件。"
 when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
 total_steps: 5
+fast_mode:
+  skip_steps: [4]
+  skip_artifacts: false
+  self_test: null
+  description: "跳过领域语义深度审查(4)，仅执行 Hard Stop 红线检查(3)+质量门禁(5)，仍写 Review Stamp"
 hard_constraints:
   - id: HC-1
     rule: "Hard Stop 命中后立即写入 FAIL Stamp 并停止，不继续执行步骤 4"
@@ -19,6 +24,8 @@ hard_constraints:
 # Review: 领域自适应对抗审查 (Adaptive Adversarial Check)
 
 **触发条件**：用户输入 `/r-review`。
+
+> ⚡ **fast 模式**：`/r-review --fast` 或变更 ≤3 文件/≤30 行时自动触发。跳过步骤 4（领域语义深度审查），仅执行 Hard Stop 红线 + 质量门禁，仍写 Review Stamp。
 
 ## 执行流水线
 

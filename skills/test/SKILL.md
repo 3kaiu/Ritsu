@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 测试工程技能。测试策略制定 → 用例编写 → 执行验证 → 覆盖率分析。"
 when_to_use: "/r-test, 写测试, 补测试, 测试覆盖, test, 单测, 集成测试"
 total_steps: 5
+fast_mode:
+  skip_steps: [1, 4]
+  skip_artifacts: true
+  self_test: "ritsu_run_quality_gates"
+  description: "跳过测试策略制定(1)和覆盖率分析(4)，直接编写用例+执行验证，不写产物"
 hard_constraints:
   - id: HC-1
     rule: "ref AP-4: 测试代码不得修改被测业务代码"

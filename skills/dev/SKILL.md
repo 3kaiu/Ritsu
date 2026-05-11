@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 领域自适应编码管道。防闭眼修改、未定义标识符拦截，按领域强制落地开发纪律。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug"
 total_steps: 7
+fast_mode:
+  skip_steps: [2, 5, 7]
+  skip_artifacts: true
+  self_test: "ritsu_run_quality_gates"
+  description: "跳过领域纪律深度检查(2)、沙盒自查(5)、Handoff自愈(7)，直接编码+质量门禁自测，不写产物文件"
 hard_constraints:
   - id: HC-1
     rule: "外部标识符引用前必须调用 ritsu_exec 执行 grep 抓取上下文，并严格校验其【函数签名/参数类型】是否对齐（≈AP-2）"
@@ -22,6 +27,8 @@ hard_constraints:
 # Dev: 领域严苛的纯净编码 (Adaptive Implementation)
 
 **触发条件**：用户输入 `/r-dev`。
+
+> ⚡ **fast 模式**：`/r-dev --fast` 或变更 ≤3 文件/≤30 行时自动触发。跳过步骤 2/5/7，不写产物文件，仅执行步骤 1→3→4→6 + 精简交付摘要。
 
 ## 执行流水线
 

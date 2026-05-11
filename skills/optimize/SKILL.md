@@ -4,6 +4,11 @@ version: "3.8.0"
 description: "Ritsu 领域自适应代码精简优化。不改功能/布局/结构/样式，只做精简、性能提升和平台适配优化。"
 when_to_use: "/r-opt, 优化, 精简, 性能优化, refactor, 代码瘦身, 提速"
 total_steps: 5
+fast_mode:
+  skip_steps: [4]
+  skip_artifacts: true
+  self_test: "ritsu_run_quality_gates"
+  description: "跳过详细报告(4)，直接执行优化+质量门禁自测，不写 optimize-report 产物"
 hard_constraints:
   - id: HC-1
     rule: "优化前后功能必须完全等价——任何行为变更视为违规，必须回滚"
