@@ -187,6 +187,42 @@ tools:
                   scope: { type: string }
                   rule: { type: string }
 
+  - name: ritsu_contract_validate
+    description: 契约测试（Contract Validation）。读取最近的 handoff（或指定路径），抽取实施清单中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
+    call_template:
+      tool: ritsu_contract_validate
+      params:
+        min_coverage: 0.8
+        cached: false
+      example:
+        min_coverage: 0.8
+        cached: false
+    input:
+      min_coverage:
+        type: number
+        required: false
+        description: "最低覆盖率阈值（0-1），默认 0.8"
+      cached:
+        type: boolean
+        required: false
+        description: "是否使用 git diff --cached（默认 false）"
+      handoff_path:
+        type: string
+        required: false
+        description: "显式指定 handoff 文件路径（可选），为空则自动选择 .ritsu 下最新的 handoff-*"
+    output_schema:
+      type: object
+      required: [passed, coverage_ratio, expected_total, handoff_path]
+      properties:
+        passed: { type: boolean }
+        min_coverage: { type: number }
+        coverage_ratio: { type: number }
+        expected_total: { type: integer }
+        covered: { type: array, items: { type: string } }
+        missing: { type: array, items: { type: string } }
+        handoff_path: { type: string }
+        cached: { type: boolean }
+
   - name: ritsu_write_artifact
     description: 写入产物文件到 .ritsu/ 目录。自动拦截含占位符（TODO/待定/暂不处理）的写入（ctx 类型除外）。所有产物统一 Markdown 格式
     call_template:

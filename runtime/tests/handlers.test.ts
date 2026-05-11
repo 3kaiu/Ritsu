@@ -527,8 +527,9 @@ describe("ritsu_emit_event handler integration", () => {
 });
 
 // ─── ritsu_validate handler 集成测试 ────────────────────────
+// NOTE: ritsu_validate 已移除，事件校验由 ritsu_emit_event 写入时自动完成
 
-describe("ritsu_validate handler integration", () => {
+describe.skip("ritsu_validate handler integration", () => {
   let validate: (params: Record<string, unknown>) => Promise<any>;
 
   beforeAll(async () => {

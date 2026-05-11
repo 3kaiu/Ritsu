@@ -56,6 +56,14 @@ hard_constraints:
 
 调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
 
+调用 `ritsu_contract_validate({min_coverage: 0.8})`：
+
+- `passed=true` → 继续 Hard Stop 检查
+- `passed=false` → 视为 FAIL：
+  - 在 Review Stamp 的 Hard Stop 命中中记录 "契约覆盖率不足"
+  - 在 `## 熔断反馈（给 /r-think）` 中写明 coverage_ratio 和 missing
+  - 停止审查，等待用户选择：补齐实现(/r-dev) 或 重审契约(/r-think)
+
 ### 3. Hard Stop 检查（HC-1 执行协议）
 
 `[Step 2 Complete]` 后进入步骤 3。

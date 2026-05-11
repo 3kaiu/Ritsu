@@ -127,6 +127,13 @@ hotfix 交付摘要格式：
 
 `[Step 5 Complete]` 后进入步骤 6。
 
+在执行 Lint/Test 之前，必须进行契约测试（Contract Validation）：
+
+- 调用 `ritsu_contract_validate({min_coverage: 0.8})`
+- 若 `passed=false`：
+  - 输出 coverage_ratio 与 missing 列表
+  - 禁止进入质量门禁，必须补齐实现或回到 `/r-think` 调整契约
+
 调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，等待结果：
 
 - passed: true → 可以交付
