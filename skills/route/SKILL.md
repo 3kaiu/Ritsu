@@ -38,6 +38,11 @@ hard_constraints:
 
 - `should_redirect` 非空 → 告知用户"检测到熔断状态（连续 {consecutive_fails} 次失败）"，建议先执行 `/r-think`
 
+**Token 炸弹防御（Context Pruning）**：
+
+- 优先读取 `recent_entries_pruned`（done/artifact_written 权重更高）而不是全量 recent_entries
+- failed 事件优先读取 `failed_summary`（按 skill 聚合）而不是逐条展开
+
 ### 2. 领域解析
 
 > 引用 `_shared/skill-common-steps.md` Step 1

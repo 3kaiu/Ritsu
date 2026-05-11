@@ -28,6 +28,11 @@
 - `circuit_breaker_status.should_redirect` 非空 → 提示"检测到熔断状态"，建议先执行 `/r-think`
 - `reality_check.desync_detected` 为 true → 提示"检测到 Git 时空错位"，自动忽略失效记录
 
+**Context Pruning（抗 Token 炸弹）**：
+
+- 优先使用 `recent_entries_pruned` 作为“近期上下文”输入（done/artifact_written 权重更高）
+- failed 事件优先读取 `failed_summary`（按 skill 聚合），避免逐条 failed 把 token 撑爆
+
 ### 0.3 环境确认
 
 - 通过读取 `package.json`/`.env`/`pom.xml` 等真实配置文件，抓取项目的**真实框架版本和运行端口**，禁止背诵"常见配置"
