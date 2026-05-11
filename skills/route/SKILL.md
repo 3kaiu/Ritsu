@@ -75,6 +75,7 @@ hard_constraints:
 流水线规则（引用 `_shared/state-machine.yaml` states.pipe.rules）：
 
 - 自动传递 correlation_id 和 domain
+- `/r-pipe --fast`：流水线中每个技能按其 `fast_mode` 声明执行（无声明则按 standard）
 - 任一技能 failed → 暂停，等待用户决定
 - 熔断触发 → 自动重定向至 think
 - `/r-pipe --skip` 跳过当前技能

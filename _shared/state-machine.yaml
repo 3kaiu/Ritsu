@@ -30,6 +30,7 @@ states:
       test_add: "test → review"
     rules:
       - "流水线内自动传递 correlation_id 和 domain，无需重新解析"
+      - "/r-pipe --fast：每个技能按其 fast_mode 声明执行（无声明则按 standard）"
       - "任一技能 failed 时，流水线暂停，等待用户决定（修复后继续 / 切换技能 / 终止）"
       - "熔断触发时，流水线自动重定向至 think，无需用户手动切换"
       - "用户可随时用 /r-pipe --skip 跳过当前技能，推进到下一步"
