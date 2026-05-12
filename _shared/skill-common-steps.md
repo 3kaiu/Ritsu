@@ -3,6 +3,9 @@
 > 所有 SKILL.md 中重复出现的步骤，统一引用此模板，禁止各自重写。
 > 引用方式：`> 引用 _shared/skill-common-steps.md Step N`
 > 目标不是堆更多治理动作，而是为 `intake → deliver → assure` 提供最小公共骨架。
+> 主产物模板统一维护在 `_shared/artifact-templates.md`，`route / pipe / review` 不得各自复制维护。
+> 产物层级统一维护在 `_shared/artifact-layers.md`；写 ctx 的 `artifact_meta` 时应尽量同时写入 `type` 与 `layer`。
+> 当前主链路主产物为：`intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice`。
 
 ---
 
@@ -32,6 +35,8 @@
 
 - 优先使用 `recent_entries_pruned`
 - failed 事件优先看 `failed_summary`
+
+若需要额外检索 `.ritsu/` 历史产物，默认先查主链路产物（`layers=["primary"]`）；仅当主链路信息不足时，再扩展到过程证据（`layers=["evidence"]`）或兼容镜像。
 
 ### 0.3 环境确认
 
@@ -162,7 +167,7 @@ ritsu_emit_event({
 ```markdown
 ## 律 (Ritsu) {skill_name} 落盘清单
 - 涉及文件: {路径 + 改动概述}
-- 溯源: {intake-ticket/handoff/diagnosis/delivery-report/assurance-report 路径 或 无}
+- 溯源: {intake-ticket/delivery-plan/handoff/diagnosis/delivery-report/assurance-report/release-advice 路径 或 无}
 - Lint: ✅/❌/跳过 | Test: ✅/❌/跳过
 ```
 

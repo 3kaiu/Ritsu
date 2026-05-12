@@ -7,6 +7,7 @@ import { cosineSimilarity, getEmbedder } from "./_semantic-embed.js";
 type IndexEntry = {
   id: string;
   artifact_type: string;
+  artifact_layer?: string;
   path: string;
   chunk_index: number;
   heading?: string;
@@ -28,6 +29,7 @@ type Match = {
   score: number;
   path: string;
   artifact_type: string;
+  artifact_layer: string;
   chunk_index: number;
   heading?: string;
   snippet: string;
@@ -76,6 +78,9 @@ export async function ritsu_semantic_search(
   const types = Array.isArray(params.types)
     ? (params.types as unknown[]).map((x) => String(x))
     : [];
+  const layers = Array.isArray(params.layers)
+    ? (params.layers as unknown[]).map((x) => String(x))
+    : [];
 
   const chunkSize = Math.min(Number(params.chunk_size ?? 1200), 4000);
   const overlap = Math.min(Number(params.chunk_overlap ?? 200), 1000);
@@ -108,11 +113,14 @@ export async function ritsu_semantic_search(
 
   for (const e of index.entries) {
     if (types.length > 0 && !types.includes(e.artifact_type)) continue;
+    const artifactLayer = e.artifact_layer ?? "system";
+    if (layers.length > 0 && !layers.includes(artifactLayer)) continue;
     const score = cosineSimilarity(q, e.embedding);
     matches.push({
       score,
       path: e.path,
       artifact_type: e.artifact_type,
+      artifact_layer: artifactLayer,
       chunk_index: e.chunk_index,
       heading: e.heading,
       snippet: "",

@@ -92,5 +92,9 @@ review:
     name: 安全漏洞引入
     pattern: "新增依赖存在已知 CVE，或代码中存在注入/越权风险"
     severity: HARD_STOP
+  - id: R-7
+    name: 高风险发布无建议
+    pattern: "变更已涉及高发布风险、灰度放量、复杂回滚窗口或跨角色协作，但 assure 未给出 release-advice 或未明确回滚条件"
+    severity: HARD_STOP
 
 dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"

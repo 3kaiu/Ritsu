@@ -1,5 +1,5 @@
-# Domain: DevOps / Infra (运维与基础设施) v3.8.0
-# 继承 _base.yaml 全部内容。以下仅声明 DevOps 领域增量。
+# Domain: Infra (运维与基础设施) v3.8.0
+# 继承 _base.yaml 全部内容。以下仅声明 infra 领域增量。
 
 extends: _base
 
@@ -31,12 +31,17 @@ attack_vectors:
   - id: OP-A2
     name: 破坏性变更
     check: "基础设施变更是否会导致服务中断？是否有蓝绿/金丝雀发布策略？"
+  - id: OP-A3
+    name: 发布建议缺失
+    check: "若本次 infra 变更涉及灰度、切流、配额调整或复杂回滚窗口，是否已有 release-advice 明确发布步骤、观察项和回滚条件？"
 
 pr_requirements:
   - id: OP-PR1
     rule: "必须提供 Plan 输出 (terraform plan / helm diff) 或变更影响范围说明"
   - id: OP-PR2
     rule: "检查是否修改了生产环境的配额或安全组"
+  - id: OP-PR3
+    rule: "生产发布若涉及切流、配额调整、证书轮换或复杂回滚窗口，必须在 assure 阶段补齐 release-advice"
 
 optimize_disciplines:
   - id: OP-O1

@@ -111,6 +111,8 @@ pr_requirements:
     rule: "PR 描述必须包含变更动机和影响范围"
   - id: B-PR3
     rule: "无 Hard Stop 命中（参照 /r-review 红线列表）"
+  - id: B-PR4
+    rule: "若变更涉及明确发布风险、灰度放量、复杂回滚窗口或跨角色协作，assure 阶段必须补齐 release-advice"
   - id: FE-PR1
     rule: "必须提供 UI 变更截图或录屏"
   - id: FE-PR2

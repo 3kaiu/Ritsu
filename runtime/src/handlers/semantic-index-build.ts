@@ -10,13 +10,15 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { getEmbedder } from "./_semantic-embed.js";
-import { getSharedDir } from "../shared.js";
+import { ARTIFACT_LAYER_MAP, getSharedDir } from "../shared.js";
 import { load as loadYaml } from "js-yaml";
 
 type ArtifactType =
   | "intake-ticket"
+  | "delivery-plan"
   | "delivery-report"
   | "assurance-report"
+  | "release-advice"
   | "handoff"
   | "diagnosis"
   | "review-stamp"
@@ -25,6 +27,7 @@ type ArtifactType =
 type IndexEntry = {
   id: string;
   artifact_type: ArtifactType;
+  artifact_layer: string;
   path: string;
   chunk_index: number;
   heading?: string;
@@ -53,8 +56,10 @@ function sha256(text: string): string {
 
 function detectArtifactType(fileName: string): ArtifactType | null {
   if (fileName.startsWith("intake-ticket-")) return "intake-ticket";
+  if (fileName.startsWith("delivery-plan-")) return "delivery-plan";
   if (fileName.startsWith("delivery-report-")) return "delivery-report";
   if (fileName.startsWith("assurance-report-")) return "assurance-report";
+  if (fileName.startsWith("release-advice-")) return "release-advice";
   if (fileName.startsWith("handoff-")) return "handoff";
   if (fileName.startsWith("diagnosis-")) return "diagnosis";
   if (fileName.startsWith("review-stamp-")) return "review-stamp";
@@ -93,8 +98,10 @@ function getImportantSectionTitlesByType(): Partial<
 
     return {
       "intake-ticket": pickTitles("intake_ticket"),
+      "delivery-plan": pickTitles("delivery_plan"),
       "delivery-report": pickTitles("delivery_report"),
       "assurance-report": pickTitles("assurance_report"),
+      "release-advice": pickTitles("release_advice"),
       handoff: pickTitles("handoff"),
       diagnosis: pickTitles("diagnosis"),
       // schema uses review_stamp key; runtime artifact type is review-stamp
@@ -254,6 +261,7 @@ export async function ritsu_semantic_index_build(
           newEntries.push({
             id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
             artifact_type: t,
+            artifact_layer: ARTIFACT_LAYER_MAP[t] ?? "system",
             path: abs,
             chunk_index: chunkIndex,
             heading: s.heading,
@@ -273,6 +281,7 @@ export async function ritsu_semantic_index_build(
         newEntries.push({
           id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
           artifact_type: t,
+          artifact_layer: ARTIFACT_LAYER_MAP[t] ?? "system",
           path: abs,
           chunk_index: chunkIndex,
           heading: s.heading,

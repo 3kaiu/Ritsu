@@ -46,11 +46,14 @@ hard_constraints:
 测试目标来源优先级：
 
 - 当前 diff
-- handoff 实施清单
-- intake-ticket 当前目标与风险等级（若无 handoff）
+- delivery-plan / delivery-report / intake-ticket 中的目标、风险和验收要求（优先）
+- handoff 实施清单（若存在，用于细化测试边界）
+- release-advice（若存在，用于对齐灰度、回滚和发布验证要求）
 - 用户显式指定
 
 若已有测试存在，则优先补缺口；若无，则从零补最关键路径。
+
+若需要检索 `.ritsu/` 历史记录，默认先查 `layers=["primary"]`；只有主链路产物不足以界定覆盖边界时，才补充 `layers=["evidence"]`。
 
 ### 3. 用例编写
 

@@ -1,6 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
 import { validateEvent } from "../event-validator.js";
+import { ARTIFACT_LAYER_MAP } from "../shared.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
 
 export async function ritsu_emit_event(
@@ -11,6 +12,12 @@ export async function ritsu_emit_event(
     ? String(params.correlation_id)
     : "";
   const step = params.step ? String(params.step) : undefined;
+  const rawArtifactMeta =
+    params.artifact_meta &&
+    typeof params.artifact_meta === "object" &&
+    !Array.isArray(params.artifact_meta)
+      ? (params.artifact_meta as Record<string, unknown>)
+      : undefined;
 
   if (!eventType) return errorResult("event_type is required");
 
@@ -28,7 +35,16 @@ export async function ritsu_emit_event(
   if (step) event.step = step;
   if (params.artifact !== undefined) event.artifact = params.artifact;
   if (params.error) event.error = String(params.error);
-  if (params.artifact_meta) event.artifact_meta = params.artifact_meta;
+  if (rawArtifactMeta) {
+    const artifactType =
+      typeof rawArtifactMeta.type === "string" ? rawArtifactMeta.type : "";
+    event.artifact_meta = {
+      ...rawArtifactMeta,
+      ...(artifactType && !rawArtifactMeta.layer
+        ? { layer: ARTIFACT_LAYER_MAP[artifactType] ?? "system" }
+        : {}),
+    };
+  }
 
   // Schema 校验（不含 correlation_id 时跳过，因为锁内才生成）
   if (correlationId) {

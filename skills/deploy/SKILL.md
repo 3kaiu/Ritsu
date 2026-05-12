@@ -39,6 +39,14 @@ hard_constraints:
 - deployable_with_risk
 - 无验收记录
 
+优先读取的主链路产物：
+
+- `assurance-report`：确认是否可上线、阻断项、剩余风险
+- `release-advice`：确认灰度方式、放量建议、回滚条件、协作说明
+- `delivery-report`：确认本次实际交付内容与验证结果
+
+若不存在 `release-advice`，但本次部署涉及灰度、放量、跨角色协作或复杂回滚窗口，应先回到 assure 补齐发布建议，而不是直接凭口头判断上线。
+
 无明确结论时，不默认直接上线。
 
 ### 2. 预发布检查
@@ -52,6 +60,7 @@ hard_constraints:
 - 环境变量和配置
 - 迁移可逆性
 - 发布说明或版本记录
+- `release-advice` 中要求的灰度/放量前置条件
 
 ### 3. 回滚方案确认
 
@@ -64,6 +73,8 @@ hard_constraints:
 - 重部署
 - 回滚后验证
 
+若 `release-advice` 已定义回滚条件或业务影响摘要，部署前必须逐条对齐，不得跳过。
+
 ### 4. 部署与冒烟验证
 
 `[Step 3 Complete]` 后进入步骤 4。
@@ -73,6 +84,7 @@ hard_constraints:
 - 健康检查
 - 关键路径可达
 - 日志无明显致命错误
+- `release-advice` 指定的灰度观察项或业务验证项
 
 若冒烟失败，立即执行回滚路径。
 

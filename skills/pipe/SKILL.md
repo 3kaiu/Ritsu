@@ -55,6 +55,33 @@ hard_constraints:
 - 预计路径: {内部阶段列表}
 ```
 
+当满足以下任一条件时，必须额外写入 **`delivery-plan`**：
+
+- 模式为 `standard` 或 `critical`
+- 存在明确的范围边界、前置依赖、验证计划或回滚要求
+- 需要多人协作或需要把实施计划留给后续阶段消费
+
+当模式为 `quick` 且任务边界非常明确时，可只在会话中输出 Deliver 计划，不强制落 `delivery-plan`。
+
+若写入 `delivery-plan`，内容至少包含：
+
+- `## 目标与范围`
+  - `交付目标`
+  - `纳入范围`
+  - `不纳入范围`
+- `## 实施计划`
+  - `实施步骤`
+  - `依赖与前置条件`
+- `## 验证与回滚`
+  - `验证计划`
+  - `回滚说明`
+
+推荐骨架：
+
+> 引用 `_shared/artifact-templates.md` Delivery Plan
+
+`delivery-plan` 的角色是主链路实施计划，不替代 `handoff` 的细粒度契约；若后续仍需 `handoff`，则将其视为 `delivery-plan` 的细化证据。
+
 写入 ctx：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=pipe, artifact=null）
@@ -90,6 +117,7 @@ hard_constraints:
 
 - 自动传递 `correlation_id` 和 `domain`
 - 内部模块可按任务需要调用 `think / dev / test / hunt`
+- 涉及历史产物检索时，默认先消费主链路产物（`layers=["primary"]`），不足时再扩到过程证据
 - 用户看到的是交付进度和风险状态，而不是内部技能细节
 
 ### 3. 交付控制指令
@@ -123,11 +151,21 @@ hard_constraints:
 
 随后调用 **`ritsu_write_artifact`**（type=`delivery-report`）写入主交付产物，内容至少包含：
 
-- 交付摘要
-- 变更与风险
-- 下一步
+- `## 交付摘要`
+  - `模式`
+  - `任务目标`
+  - `实施结果`
+  - `验证结果`
+- `## 变更与风险`
+  - `主要产出`
+  - `已知风险`
+  - `下一步`
 
-`delivery-report` 是对本次交付结果的正式归档；若内部仍产出 `handoff / diagnosis`，它们属于交付过程证据，不替代最终交付回执。
+推荐骨架：
+
+> 引用 `_shared/artifact-templates.md` Delivery Report
+
+`delivery-report` 是对本次交付结果的正式归档；若内部仍产出 `delivery-plan / handoff / diagnosis`，它们分别承担实施计划与过程证据角色，不替代最终交付回执。
 
 写入 ctx：
 

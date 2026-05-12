@@ -2,6 +2,8 @@
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { formatSkillWithStage, SKILL_MAPPING_DISPLAY } from "./shared.js";
 
 type CtxEvent = {
   ts: string;
@@ -30,11 +32,14 @@ function color(text: string, c: keyof typeof COLORS): string {
   return `${COLORS[c]}${text}${COLORS.reset}`;
 }
 
-function usage(): string {
+export function usage(): string {
   return [
     "ritsu cat <cid>            # 按 correlation_id 展示一条任务链路的 ctx 事件（彩色）",
     "ritsu cat --recent <N>     # 展示最近 N 条 ctx 事件",
     "ritsu cat --file <path>    # 直接指定 ctx jsonl 文件路径",
+    "",
+    "ctx skill display:",
+    `  ${SKILL_MAPPING_DISPLAY}`,
     "\nENV:",
     "  RITSU_PROJECT_ROOT       # 项目根目录（默认当前目录）",
   ].join("\n");
@@ -86,9 +91,13 @@ function statusColor(status: CtxEvent["status"]): keyof typeof COLORS {
   }
 }
 
-function formatEvent(e: CtxEvent): string {
+export function formatSkill(skill: string): string {
+  return formatSkillWithStage(skill);
+}
+
+export function formatEvent(e: CtxEvent): string {
   const left = `${color(e.ts, "gray")} ${color(e.correlation_id, "blue")}`;
-  const mid = `${color(e.skill, "yellow")} ${color(e.domain, "gray")}`;
+  const mid = `${color(formatSkill(e.skill), "yellow")} ${color(e.domain, "gray")}`;
   const st = color(e.status, statusColor(e.status));
 
   const extras: string[] = [];
@@ -164,9 +173,12 @@ function main() {
   }
 
   console.log(color(`ctx: ${filePath}`, "dim"));
+  console.log(color(`skill mapping: ${SKILL_MAPPING_DISPLAY}`, "dim"));
   for (const e of out) {
     console.log(formatEvent(e));
   }
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

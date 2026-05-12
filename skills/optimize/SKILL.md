@@ -50,6 +50,10 @@ hard_constraints:
 
 分析阶段只产出候选清单，不立即扩散改动。
 
+若需要检索 `.ritsu/` 历史产物以确认优化边界，默认先查 `layers=["primary"]`；只有主链路产物不足以说明历史约束时，才补充 `layers=["evidence"]`。
+
+若存在 `delivery-plan` 或 `release-advice`，优化不得破坏其中已经承诺的验证方式、回滚假设或发布约束。
+
 ### 3. 优化项确认
 
 `[Step 2 Complete]` 后进入步骤 3。

@@ -8,11 +8,29 @@ import {
   readAllEntries,
 } from "../ctx-reader.js";
 import { getCtxPath } from "../ctx-path.js";
+import { getStageForSkill } from "../shared.js";
 import { getProjectRoot, textResult, warnResult } from "./_utils.js";
 
 const SUMMARY_THRESHOLD = 50;
 
 const PRUNED_RECENT_LIMIT = 10;
+
+function attachStage(
+  entry: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!entry) return null;
+  const skill = String(entry.skill ?? "");
+  return {
+    ...entry,
+    stage: getStageForSkill(skill),
+  };
+}
+
+function attachStageToEntries(
+  entries: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return entries.map((entry) => attachStage(entry) ?? entry);
+}
 
 function computeSummary(
   entries: Record<string, unknown>[],
@@ -151,6 +169,7 @@ function checkRealityDesync(
 function computeCircuitBreaker(entries: Record<string, unknown>[]): {
   consecutive_fails: number;
   should_redirect: string | null;
+  recommended_stage: string | null;
   last_failed_skill: string | null;
   last_failed_cid: string | null;
 } {
@@ -177,6 +196,7 @@ function computeCircuitBreaker(entries: Record<string, unknown>[]): {
     return {
       consecutive_fails: 0,
       should_redirect: null,
+      recommended_stage: null,
       last_failed_skill: null,
       last_failed_cid: null,
     };
@@ -193,10 +213,14 @@ function computeCircuitBreaker(entries: Record<string, unknown>[]): {
   }
 
   const shouldRedirect = consecutiveFails >= 2 ? "think" : null;
+  const recommendedStage = shouldRedirect
+    ? getStageForSkill(shouldRedirect)
+    : null;
 
   return {
     consecutive_fails: consecutiveFails,
     should_redirect: shouldRedirect,
+    recommended_stage: recommendedStage,
     last_failed_skill: lastFailedSkill,
     last_failed_cid: lastFailedCid,
   };
@@ -215,6 +239,7 @@ function buildRecoveryContext(
   const cid = String(lastIncomplete.correlation_id ?? "");
   const domain = String(lastIncomplete.domain ?? "");
   const step = String(lastIncomplete.step ?? "");
+  const stage = getStageForSkill(skill);
 
   let lastArtifact: string | null = null;
   for (let i = entries.length - 1; i >= 0; i--) {
@@ -231,11 +256,12 @@ function buildRecoveryContext(
 
   return {
     skill,
+    stage,
     domain,
     step,
     correlation_id: cid,
     last_artifact: lastArtifact,
-    resume_hint: `🔄 会话恢复: /r-${skill} | 断点: step ${step} | 领域: ${domain}${lastArtifact ? ` | 产物: ${lastArtifact}` : ""}`,
+    resume_hint: `🔄 会话恢复: ${stage} (${skill}) | 断点: step ${step} | 领域: ${domain}${lastArtifact ? ` | 产物: ${lastArtifact}` : ""}`,
   };
 }
 
@@ -266,10 +292,10 @@ export async function ritsu_read_ctx(): Promise<CallToolResult> {
   );
   const failedSummary = summarizeFailedEntries(allEntries);
 
-  data.last_incomplete = lastIncomplete;
-  data.last_completed = lastCompleted;
-  data.recent_entries = recentEntries;
-  data.recent_entries_pruned = recentEntriesPruned;
+  data.last_incomplete = attachStage(lastIncomplete);
+  data.last_completed = attachStage(lastCompleted);
+  data.recent_entries = attachStageToEntries(recentEntries);
+  data.recent_entries_pruned = attachStageToEntries(recentEntriesPruned);
   data.failed_summary = failedSummary;
 
   data.recovery_context = buildRecoveryContext(

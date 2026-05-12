@@ -4,8 +4,9 @@
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
 #
 # 当前产品语义已经收敛为 intake / deliver / assure。
-# 但 runtime 目前仍以 legacy 产物（handoff / diagnosis / review-stamp / optimize-report）为主。
-# 因此本文件描述的是“当前运行时真实支持的工具”，不是未来目标图。
+# runtime 已打通主链路产物（intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice）的核心读写、列表与检索路径；
+# legacy 产物（handoff / diagnosis / review-stamp / optimize-report）仍保留为过程证据或兼容镜像。
+# 因此本文件描述的是“当前运行时真实支持的工具”，并以主链路优先的消费语义为准。
 #
 # 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
 # call_template 是 input 的快捷视图（DRY），若两者冲突以 input 为准。
@@ -43,7 +44,7 @@ tools:
       skill:
         type: string
         required: false
-        description: "当前技能名"
+        description: "当前技能名。ctx 落盘仍使用兼容 skill 名 / 文件名，如 route= intake、pipe=deliver、review=assure"
       domain:
         type: string
         required: false
@@ -59,7 +60,7 @@ tools:
       artifact_meta:
         type: object
         required: false
-        description: "artifact_written 事件时必填"
+        description: "artifact_written 事件时必填。至少包含 type/size_bytes/summary；若未显式传入 layer，运行时会在可判定时按类型自动补齐 primary|evidence|compatibility|system"
     validation: "写入前校验事件是否符合 _shared/ctx-event-schema.json 的 if-then 条件"
     concurrency_control: "原子追加锁"
     output_schema:
@@ -98,36 +99,68 @@ tools:
           type: object
           description: "最后一条未完成事件（status=started 且无对应 done/failed）"
           properties:
+            ts: { type: string }
             correlation_id: { type: string }
             skill: { type: string }
+            stage: &stage_field
+              type: string
+              description: "产品阶段语义。兼容 skill 名会映射为 intake / deliver / assure；其余内部模块名保持原义或按内部模块理解"
             domain: { type: string }
+            status: { type: string }
             step: { type: string }
+            artifact: { type: string }
+            error: { type: string }
         last_completed:
           type: object
           description: "最后一条已完成事件（status=done）"
           properties:
+            ts: { type: string }
             correlation_id: { type: string }
             skill: { type: string }
+            stage: *stage_field
             domain: { type: string }
+            status: { type: string }
+            step: { type: string }
             artifact: { type: string }
+            error: { type: string }
         recent_entries:
           type: array
           description: "最近 10 条事件"
-          items:
+          items: &recent_entry_item
             type: object
+            properties:
+              ts: { type: string }
+              correlation_id: { type: string }
+              skill: { type: string }
+              stage: *stage_field
+              domain: { type: string }
+              status: { type: string }
+              step: { type: string }
+              artifact: { type: string }
+              error: { type: string }
         recent_entries_pruned:
           type: array
           description: "剪枝后的最近事件（优先 done/artifact_written，failed 聚合到 failed_summary）"
           items:
-            type: object
+            <<: *recent_entry_item
         failed_summary:
           type: object
           description: "failed 事件摘要压缩（按 skill 聚合），用于节省 token"
+          properties:
+            total_failed:
+              type: integer
+              description: "failed 事件总数"
+            by_skill:
+              type: object
+              description: "按底层兼容 skill 值聚合的失败次数"
         recovery_context:
           type: object
           description: "可操作恢复上下文（仅 last_incomplete 存在时非 null）"
           properties:
             skill: { type: string }
+            stage: &stage_field_with_internal_deliver
+              type: string
+              description: "产品阶段语义。兼容 skill 名会映射为 intake / deliver / assure；如 think 也会归入 deliver"
             domain: { type: string }
             step: { type: string }
             correlation_id: { type: string }
@@ -137,16 +170,32 @@ tools:
           type: object
           description: "现实对账结果（检查 artifact 是否仍存在）"
           properties:
-            desync_detected: { type: boolean }
-            missing_artifacts: { type: array, items: { type: string } }
+            desync_detected:
+              type: boolean
+              description: "最近完成事件引用的产物是否与磁盘状态失配"
+            missing_artifacts:
+              type: array
+              description: "磁盘上不存在的 artifact 相对路径列表"
+              items: { type: string }
         circuit_breaker_status:
           type: object
-          description: "熔断状态。当前底层字段仍可能返回旧值（如 think），但产品语义上应理解为回到 intake 或升级交付模式"
+          description: "熔断状态。当前底层字段仍可能返回内部模块名或旧值（如 think），但产品语义上应理解为回到 intake 或升级交付模式"
           properties:
-            consecutive_fails: { type: integer }
-            should_redirect: { type: string }
-            last_failed_skill: { type: string }
-            last_failed_cid: { type: string }
+            consecutive_fails:
+              type: integer
+              description: "最后一个 failed 所属 correlation_id 下，末尾连续 failed 的次数"
+            should_redirect:
+              type: string
+              description: "底层兼容 skill 值。达到熔断阈值时当前返回 think，否则为 null"
+            recommended_stage: &recommended_stage_field
+              type: string
+              description: "产品阶段语义上的建议回退/转向阶段。保留 should_redirect 作为底层兼容字段；未熔断时为 null"
+            last_failed_skill:
+              type: string
+              description: "最近一条 failed 事件的底层兼容 skill 值；若无 failed 则为 null"
+            last_failed_cid:
+              type: string
+              description: "最近一条 failed 事件的 correlation_id；若无 failed 则为 null"
 
   - name: ritsu_read_agents
     description: 读取并解析项目根 AGENTS.md，返回结构化的 domain、ritsu_version、tech_fingerprints 以及 rules_overrides（项目级规则覆盖：disable/downgrade/add）
@@ -197,7 +246,7 @@ tools:
                   rule: { type: string }
 
   - name: ritsu_contract_validate
-    description: 契约测试（Contract Validation）。优先读取最近的 handoff；若不存在则回退到 intake-ticket（或使用显式指定路径），抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
+    description: 契约测试（Contract Validation）。这是主链路分层规则下的一个特例：它校验的是“实施契约”，因此自动选择时优先读取最近的 handoff；若不存在再回退到 intake-ticket（或使用显式指定路径）。随后抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
     call_template:
       tool: ritsu_contract_validate
       params:
@@ -218,7 +267,7 @@ tools:
       artifact_path:
         type: string
         required: false
-        description: "显式指定契约产物路径（推荐）。为空则自动选择最新 handoff，若无则回退到 intake-ticket"
+        description: "显式指定契约产物路径（推荐）。为空则自动选择实施契约来源：最新 handoff；若无则回退到 intake-ticket"
       handoff_path:
         type: string
         required: false
@@ -233,9 +282,15 @@ tools:
         expected_total: { type: integer }
         covered: { type: array, items: { type: string } }
         missing: { type: array, items: { type: string } }
-        artifact_path: { type: string }
-        artifact_type: { type: string }
-        handoff_path: { type: string }
+        artifact_path:
+          type: string
+          description: "当前主字段。实际参与本次契约校验的产物路径。"
+        artifact_type:
+          type: string
+          description: "当前主字段。实际参与本次契约校验的产物类型（如 handoff / intake-ticket）。"
+        handoff_path:
+          type: string
+          description: "兼容旧调用方的历史字段名。当前语义等同 artifact_path，不保证产物类型一定为 handoff。"
         cached: { type: boolean }
 
   - name: ritsu_build_kg
@@ -572,7 +627,7 @@ tools:
                   col: { type: integer }
 
   - name: ritsu_semantic_index_build
-    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描 intake-ticket/delivery-report/assurance-report 与 legacy 产物（handoff/diagnosis/review-stamp/optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
+    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描主链路产物（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice）与 legacy 产物（handoff/diagnosis/review-stamp/optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
     call_template:
       tool: ritsu_semantic_index_build
       params:
@@ -634,7 +689,11 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤（intake-ticket/delivery-report/assurance-report/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+        description: "产物类型过滤（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+      layers:
+        type: list
+        required: false
+        description: "产物层级过滤（primary/evidence/compatibility/system），为空表示全部"
       chunk_size:
         type: integer
         required: false
@@ -661,6 +720,7 @@ tools:
               score: { type: number }
               path: { type: string }
               artifact_type: { type: string }
+              artifact_layer: { type: string }
               chunk_index: { type: integer }
               heading: { type: string }
               snippet: { type: string }
@@ -697,7 +757,11 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤（intake-ticket/delivery-report/assurance-report/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+        description: "产物类型过滤（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+      layers:
+        type: list
+        required: false
+        description: "产物层级过滤（primary/evidence/compatibility/system），为空表示全部"
       focus_paths:
         type: list
         required: false
@@ -749,6 +813,7 @@ tools:
               kg_score: { type: number }
               path: { type: string }
               artifact_type: { type: string }
+              artifact_layer: { type: string }
               chunk_index: { type: integer }
               heading: { type: string }
               snippet: { type: string }
@@ -757,21 +822,33 @@ tools:
                 items: { type: string }
 
   - name: ritsu_write_artifact
-    description: 写入产物文件到 .ritsu/ 目录。当前运行时同时支持 intake-ticket/delivery-report/assurance-report 与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
+    description: 写入产物文件到 .ritsu/ 目录。当前运行时同时支持主链路产物（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
     call_template:
       tool: ritsu_write_artifact
       params:
-        type: "{intake-ticket|delivery-report|assurance-report|handoff|diagnosis|review-stamp|optimize-report}"
+        type: "{intake-ticket|delivery-plan|delivery-report|assurance-report|release-advice|handoff|diagnosis|review-stamp|optimize-report}"
         filename: "{文件名}"
         content: "{内容}"
       example:
         type: "delivery-report"
         filename: "delivery-report-20260511-auth.md"
-        content: "# Delivery Report..."
+        content: |
+          # Delivery Report
+
+          ## 交付摘要
+          - 模式: standard
+          - 任务目标: 登录态持久化与自动续期
+          - 实施结果: 已完成续期逻辑与状态持久化
+          - 验证结果: 单测通过，质量门禁通过
+
+          ## 变更与风险
+          - 主要产出: auth session 持久化代码与测试
+          - 已知风险: 旧 token 清理仍依赖定时任务
+          - 下一步: 进入 assure 验收
     input:
       type:
         type: enum
-        values: [intake-ticket, delivery-report, assurance-report, handoff, diagnosis, review-stamp, optimize-report]
+        values: [intake-ticket, delivery-plan, delivery-report, assurance-report, release-advice, handoff, diagnosis, review-stamp, optimize-report]
         required: true
         description: "当前运行时支持的产物类型"
       filename:
@@ -781,12 +858,12 @@ tools:
       content:
         type: string
         required: true
-        description: "文件内容（Markdown 格式）"
+        description: "文件内容（Markdown 格式）。主产物 intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice 应优先遵循 _shared/artifact-templates.md"
       artifact_meta:
         type: object
         required: false
-        description: "产物元数据（type/size_bytes/summary）"
-    placeholder_check: "自动检测并拒绝写入含占位符模式的产物（ctx 类型豁免）：TODO/待定/暂不处理/后续补充（=AP-6）。幻觉路径和未验证标识符属于 AI 行为层约束，由 SKILL.md HC 规则执行，工具层不拦截"
+        description: "产物元数据（可传 summary；返回值会规范化补齐 type/layer/size_bytes）"
+    placeholder_check: "自动检测并拒绝写入含占位符模式的产物（ctx 类型豁免）：TODO/待定/暂不处理/后续补充（=AP-6）。若 artifact-schema.yaml 为该类型定义了 required_sections，运行时会校验章节与字段标签存在。幻觉路径和未验证标识符属于 AI 行为层约束，由 SKILL.md HC 规则执行，工具层不拦截"
     output_schema:
       type: object
       required: [path, size_bytes]
@@ -799,10 +876,10 @@ tools:
           description: "文件大小"
         artifact_meta:
           type: object
-          description: "产物元数据"
+          description: "产物元数据。返回时至少包含 type/layer/size_bytes；若调用时提供 summary 会原样保留"
 
   - name: ritsu_list_artifacts
-    description: 列出 .ritsu/ 目录下的产物文件。当前支持按 intake-ticket/delivery-report/assurance-report 与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report/ctx）过滤
+    description: 列出 .ritsu/ 目录下的产物文件。当前支持按主链路产物（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report/ctx）过滤
     call_template:
       tool: ritsu_list_artifacts
       params:
@@ -813,7 +890,7 @@ tools:
       type:
         type: string
         required: false
-        description: "产物类型过滤（all/intake-ticket/delivery-report/assurance-report/handoff/diagnosis/review-stamp/optimize-report/ctx），默认 all"
+        description: "产物类型过滤（all/intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice/handoff/diagnosis/review-stamp/optimize-report/ctx），默认 all"
     output_schema:
       type: object
       required: [files, total_count]
@@ -827,6 +904,7 @@ tools:
               modified: { type: string }
               size_bytes: { type: integer }
               artifact_type: { type: string }
+              artifact_layer: { type: string }
         total_count:
           type: integer
 
@@ -897,7 +975,7 @@ tools:
           type: string
 
   - name: ritsu_get_diff
-    description: 获取 Git diff 的结构化分析结果。包含文件级统计、新增标识符提取、完整 diff 文本。替代 ritsu_exec("git diff") 的裸命令调用，review 技能的核心数据源
+    description: 获取 Git diff 的结构化分析结果。包含文件级统计、新增标识符提取、完整 diff 文本。替代 ritsu_exec("git diff") 的裸命令调用，是 assure 阶段以及兼容 review skill 的核心数据源
     call_template:
       tool: ritsu_get_diff
       params:

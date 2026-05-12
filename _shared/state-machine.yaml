@@ -7,7 +7,7 @@ states:
     next:
       [deliver.quick, deliver.standard, deliver.critical, assure, extensions]
     rules:
-      - "intake 的职责是形成执行单，而不是直接展开全部实现细节"
+      - "intake 的职责是形成 intake-ticket，而不是直接展开全部实现细节"
       - "若信息严重缺失，应先补信息，再进入 deliver"
 
   deliver.quick:
@@ -16,6 +16,7 @@ states:
     rules:
       - "适用于小改动、低风险、信息充分的任务"
       - "可降低交互成本，但不得跳过最小必要验证"
+      - "通常可直接进入 delivery-report；仅在边界仍需显式沉淀时补 delivery-plan"
       - "若实现中发现风险被低估，应升级到 deliver.standard"
 
   deliver.standard:
@@ -23,6 +24,7 @@ states:
     next: [assure, deliver.critical, intake]
     rules:
       - "默认交付路径"
+      - "应优先形成 delivery-plan，再推进实现、验证与 delivery-report"
       - "允许内部调用 think/dev/test/hunt"
       - "若需求边界失真或验证持续失败，可回到 intake 或升级到 critical"
 
@@ -31,14 +33,14 @@ states:
     next: [assure, intake]
     rules:
       - "适用于架构改动、数据迁移、高发布风险任务"
-      - "必须补充边界、关键验证和回滚方案"
+      - "必须形成 delivery-plan，并补充边界、关键验证和回滚方案"
       - "若前提条件仍不充分，可退回 intake 重新定义执行单"
 
   assure:
     owned_by: review
     next: [deliver.quick, deliver.standard, deliver.critical, extensions]
     rules:
-      - "assure 负责给出可合并、可上线、阻断项和剩余风险"
+      - "assure 至少负责形成 assurance-report；涉及明确发布姿态时再补 release-advice"
       - "命中阻断项后必须退回 deliver，而不是直接宣称完成"
       - "PASS 不等于必须部署；是否进入 extensions.deploy 取决于上下文"
 

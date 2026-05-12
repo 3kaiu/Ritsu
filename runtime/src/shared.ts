@@ -14,12 +14,37 @@ export function getSharedDir(): string {
   return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
 }
 
+// ─── Skill / Stage 语义映射 ────────────────────────────────
+
+export const SKILL_STAGE_MAP: Record<string, string> = {
+  route: "intake",
+  pipe: "deliver",
+  review: "assure",
+  think: "deliver",
+};
+
+export function getStageForSkill(skill: string): string {
+  return SKILL_STAGE_MAP[skill] ?? skill;
+}
+
+export function formatSkillWithStage(skill: string): string {
+  if (!["route", "pipe", "review"].includes(skill)) return skill;
+  const stage = SKILL_STAGE_MAP[skill];
+  if (!stage || stage === skill) return skill;
+  return `${skill}(${stage})`;
+}
+
+export const SKILL_MAPPING_DISPLAY =
+  "route(intake) / pipe(deliver) / review(assure)";
+
 // ─── Artifact 常量 ──────────────────────────────────────────
 
 export const ARTIFACT_VALID_TYPES = [
   "intake-ticket",
+  "delivery-plan",
   "delivery-report",
   "assurance-report",
+  "release-advice",
   "handoff",
   "diagnosis",
   "review-stamp",
@@ -27,17 +52,38 @@ export const ARTIFACT_VALID_TYPES = [
 ] as const;
 
 export type ArtifactType = (typeof ARTIFACT_VALID_TYPES)[number];
+export type ArtifactLayer =
+  | "primary"
+  | "evidence"
+  | "compatibility"
+  | "system";
 
 /** 产物类型 → 文件名前缀映射（含 ctx 用于 list 查询） */
 export const ARTIFACT_PREFIX_MAP: Record<string, string> = {
   "intake-ticket": "intake-ticket-",
+  "delivery-plan": "delivery-plan-",
   "delivery-report": "delivery-report-",
   "assurance-report": "assurance-report-",
+  "release-advice": "release-advice-",
   handoff: "handoff-",
   diagnosis: "diagnosis-",
   "review-stamp": "review-stamp-",
   "optimize-report": "optimize-report-",
   ctx: "ctx-",
+};
+
+/** 产物类型 → 产品层级映射 */
+export const ARTIFACT_LAYER_MAP: Record<string, ArtifactLayer> = {
+  "intake-ticket": "primary",
+  "delivery-plan": "primary",
+  "delivery-report": "primary",
+  "assurance-report": "primary",
+  "release-advice": "primary",
+  handoff: "evidence",
+  diagnosis: "evidence",
+  "optimize-report": "evidence",
+  "review-stamp": "compatibility",
+  ctx: "system",
 };
 
 // ─── ritsu_exec 安全边界常量 ────────────────────────────────

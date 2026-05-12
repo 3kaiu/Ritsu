@@ -40,12 +40,14 @@ hard_constraints:
 
 优先绑定当前交付目标：
 
-- handoff（若存在）
-- intake-ticket（若无 handoff）
+- delivery-plan / delivery-report / intake-ticket（优先）
+- handoff（若存在，用于实施细化）
 - diagnosis（若为 bugfix）
 - intake 执行单中的当前目标
 
 若无明确设计产物，可继续执行，但必须在交付摘要中标注“无上游设计溯源”。
+
+若需要检索 `.ritsu/` 历史记录，默认先查 `layers=["primary"]`；只有主链路产物不足以解释当前实现边界或历史决策时，才补充 `layers=["evidence"]`。
 
 ### 2. 编码边界与规则加载
 
@@ -60,7 +62,9 @@ hard_constraints:
 
 `standard / critical` 模式：
 
-- 更严格服从 handoff；若暂无 handoff，则至少服从 intake-ticket 的目标与风险边界
+- 更严格服从主链路产物的目标、风险和验收结论
+- 若存在 `delivery-plan`，优先按其范围、步骤、验证计划推进
+- 若存在 handoff，再将其作为实施细化约束
 
 ### 3. 标识符与签名校验
 
@@ -102,9 +106,11 @@ hard_constraints:
 
 `[Step 5 Complete]` 后进入步骤 6。
 
+若最终实现已推翻上游 `delivery-plan` 的目标范围、验证计划或回滚假设，必须先修正 `delivery-plan`。
+
 若最终实现已推翻上游 handoff 的关键契约，必须修正 handoff，避免设计与代码漂移。
 
-若本次仅基于 `intake-ticket` 直接交付完成，应在 `delivery-report` 中明确标注“未生成 handoff，按轻量契约执行”。
+若本次仅基于 `intake-ticket` 直接交付完成，应在 `delivery-report` 中明确标注“未生成 delivery-plan/handoff，按轻量契约执行”。
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=dev）
 

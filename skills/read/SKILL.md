@@ -39,6 +39,15 @@ hard_constraints:
 - IDE 焦点文件
 - 根据问题描述反查相关文件
 
+若为了理解当前问题必须补看历史产物，默认先查主链路产物（`layers=["primary"]`）；仅当主链路信息不足时，才补充 `layers=["evidence"]` 或兼容镜像。
+
+若问题涉及“为什么这样实现”或“为什么这样发布”，应优先检查：
+
+- `delivery-plan`
+- `delivery-report`
+- `assurance-report`
+- `release-advice`
+
 ### 2. 代码阅读与解释
 
 `[Step 1 Complete]` 后进入步骤 2。

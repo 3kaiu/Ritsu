@@ -6,7 +6,7 @@
  * - 事件写入 + 读取 + correlation_id 原子生成
  * - 产物写入校验（类型/前缀/路径穿越/占位符/覆盖保护/原子写入）
  * - 安全边界拦截（白名单/黑名单/元字符）
- * - Handler 集成测试（emit_event / read_ctx / validate / write_artifact / list_artifacts）
+ * - Handler 集成测试（emit_event / read_ctx / write_artifact / list_artifacts）
  */
 
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from "vitest";
@@ -17,16 +17,22 @@ import {
 } from "../src/ctx-writer.js";
 import { readRecentEntries, getNextSeq } from "../src/ctx-reader.js";
 import { validateEvent } from "../src/event-validator.js";
+import { compileToolsFromYaml } from "../src/schema-compiler.js";
 import {
   ALLOWED_BINARIES,
   RESIDUAL_BLACKLIST,
   DANGEROUS_ARGS,
   ARTIFACT_VALID_TYPES,
+  ARTIFACT_LAYER_MAP,
   ARTIFACT_PREFIX_MAP,
+  SKILL_MAPPING_DISPLAY,
+  getStageForSkill,
 } from "../src/shared.js";
+import { formatEvent, formatSkill, usage as cliUsage } from "../src/cli.js";
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -173,6 +179,518 @@ describe("validateEvent (JS ajv)", () => {
   });
 });
 
+describe("ritsu CLI display helpers", () => {
+  it("should keep stage classification separate from CLI display mapping", () => {
+    expect(getStageForSkill("think")).toBe("deliver");
+    expect(formatSkill("think")).toBe("think");
+  });
+
+  it("should render compatibility skill names with product-stage mapping", () => {
+    expect(formatSkill("route")).toBe("route(intake)");
+    expect(formatSkill("pipe")).toBe("pipe(deliver)");
+    expect(formatSkill("review")).toBe("review(assure)");
+  });
+
+  it("should keep non-stage internal skills unchanged", () => {
+    expect(formatSkill("think")).toBe("think");
+    expect(formatSkill("dev")).toBe("dev");
+  });
+
+  it("should include skill mapping guidance in CLI usage and event output", () => {
+    expect(cliUsage()).toContain(SKILL_MAPPING_DISPLAY);
+
+    const output = formatEvent({
+      ts: "20260509-171500",
+      correlation_id: "cid-20260509-001",
+      skill: "review",
+      domain: "frontend",
+      status: "done",
+      step: "3/3",
+    });
+    expect(output).toContain("review(assure)");
+  });
+});
+
+describe("compiled tool schemas", () => {
+  it("should keep ritsu_read_ctx output schema structurally complete", async () => {
+    const tools = await compileToolsFromYaml();
+    const readCtxTool = tools.find((tool) => tool.name === "ritsu_read_ctx");
+
+    expect(readCtxTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = readCtxTool?.outputSchema as Record<string, any>;
+    const properties = outputSchema.properties as Record<string, any>;
+
+    expect(properties.last_incomplete.properties).toMatchObject({
+      ts: { type: "string" },
+      correlation_id: { type: "string" },
+      skill: { type: "string" },
+      stage: { type: "string" },
+      domain: { type: "string" },
+      status: { type: "string" },
+      step: { type: "string" },
+      artifact: { type: "string" },
+      error: { type: "string" },
+    });
+
+    expect(properties.last_completed.properties).toMatchObject({
+      ts: { type: "string" },
+      correlation_id: { type: "string" },
+      skill: { type: "string" },
+      stage: { type: "string" },
+      domain: { type: "string" },
+      status: { type: "string" },
+      step: { type: "string" },
+      artifact: { type: "string" },
+      error: { type: "string" },
+    });
+
+    expect(properties.recent_entries.items.properties).toMatchObject({
+      ts: { type: "string" },
+      correlation_id: { type: "string" },
+      skill: { type: "string" },
+      stage: { type: "string" },
+      domain: { type: "string" },
+      status: { type: "string" },
+      step: { type: "string" },
+      artifact: { type: "string" },
+      error: { type: "string" },
+    });
+
+    expect(properties.recent_entries_pruned.items.properties).toMatchObject({
+      ts: { type: "string" },
+      correlation_id: { type: "string" },
+      skill: { type: "string" },
+      stage: { type: "string" },
+      domain: { type: "string" },
+      status: { type: "string" },
+      step: { type: "string" },
+      artifact: { type: "string" },
+      error: { type: "string" },
+    });
+
+    expect(properties.last_incomplete.properties.stage.description).toContain(
+      "兼容 skill 名会映射为 intake / deliver / assure",
+    );
+    expect(properties.recovery_context.properties.stage.description).toContain(
+      "think 也会归入 deliver",
+    );
+    expect(
+      properties.circuit_breaker_status.properties.recommended_stage
+        .description,
+    ).toContain("未熔断时为 null");
+
+    expect(properties.failed_summary.properties).toMatchObject({
+      total_failed: { type: "integer" },
+      by_skill: { type: "object" },
+    });
+
+    expect(properties.reality_check.properties).toMatchObject({
+      desync_detected: { type: "boolean" },
+      missing_artifacts: { type: "array" },
+    });
+
+    expect(properties.circuit_breaker_status.properties).toMatchObject({
+      consecutive_fails: { type: "integer" },
+      should_redirect: { type: "string" },
+      recommended_stage: { type: "string" },
+      last_failed_skill: { type: "string" },
+      last_failed_cid: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_emit_event output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const emitEventTool = tools.find((tool) => tool.name === "ritsu_emit_event");
+
+    expect(emitEventTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = emitEventTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["written", "line_count"]);
+    expect(outputSchema.properties).toMatchObject({
+      written: { type: "boolean" },
+      line_count: { type: "integer" },
+      correlation_id: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_contract_validate output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const contractValidateTool = tools.find(
+      (tool) => tool.name === "ritsu_contract_validate",
+    );
+
+    expect(contractValidateTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = contractValidateTool?.outputSchema as Record<
+      string,
+      any
+    >;
+    expect(outputSchema.required).toEqual([
+      "passed",
+      "coverage_ratio",
+      "expected_total",
+      "artifact_path",
+    ]);
+    expect(outputSchema.properties).toMatchObject({
+      passed: { type: "boolean" },
+      min_coverage: { type: "number" },
+      coverage_ratio: { type: "number" },
+      expected_total: { type: "integer" },
+      covered: { type: "array" },
+      missing: { type: "array" },
+      artifact_path: { type: "string" },
+      artifact_type: { type: "string" },
+      handoff_path: { type: "string" },
+      cached: { type: "boolean" },
+    });
+  });
+
+  it("should keep ritsu_write_artifact output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const writeArtifactTool = tools.find(
+      (tool) => tool.name === "ritsu_write_artifact",
+    );
+
+    expect(writeArtifactTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = writeArtifactTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["path", "size_bytes"]);
+    expect(outputSchema.properties).toMatchObject({
+      path: { type: "string" },
+      size_bytes: { type: "integer" },
+      artifact_meta: { type: "object" },
+    });
+  });
+
+  it("should keep ritsu_list_artifacts output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const listArtifactsTool = tools.find(
+      (tool) => tool.name === "ritsu_list_artifacts",
+    );
+
+    expect(listArtifactsTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = listArtifactsTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["files", "total_count"]);
+    expect(outputSchema.properties.total_count).toMatchObject({
+      type: "integer",
+    });
+    expect(outputSchema.properties.files).toMatchObject({
+      type: "array",
+    });
+    expect(outputSchema.properties.files.items.properties).toMatchObject({
+      path: { type: "string" },
+      modified: { type: "string" },
+      size_bytes: { type: "integer" },
+      artifact_type: { type: "string" },
+      artifact_layer: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_exec output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const execTool = tools.find((tool) => tool.name === "ritsu_exec");
+
+    expect(execTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = execTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["ok", "output"]);
+    expect(outputSchema.properties).toMatchObject({
+      ok: { type: "boolean" },
+      output: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_get_changed_files output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const changedFilesTool = tools.find(
+      (tool) => tool.name === "ritsu_get_changed_files",
+    );
+
+    expect(changedFilesTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = changedFilesTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["files", "total", "domain_hint"]);
+    expect(outputSchema.properties.total).toMatchObject({
+      type: "integer",
+    });
+    expect(outputSchema.properties.domain_hint).toMatchObject({
+      type: "string",
+    });
+    expect(outputSchema.properties.files).toMatchObject({
+      type: "array",
+    });
+    expect(outputSchema.properties.files.items.properties).toMatchObject({
+      path: { type: "string" },
+      status: { type: "string" },
+      extension: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_get_diff output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const diffTool = tools.find((tool) => tool.name === "ritsu_get_diff");
+
+    expect(diffTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = diffTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual([
+      "files",
+      "total_files",
+      "new_identifiers",
+      "diff",
+    ]);
+    expect(outputSchema.properties).toMatchObject({
+      total_files: { type: "integer" },
+      diff: { type: "string" },
+      truncated: { type: "boolean" },
+    });
+    expect(outputSchema.properties.files.items.properties).toMatchObject({
+      path: { type: "string" },
+      additions: { type: "integer" },
+      deletions: { type: "integer" },
+      patch_summary: { type: "string" },
+    });
+    expect(
+      outputSchema.properties.new_identifiers.items.properties,
+    ).toMatchObject({
+      name: { type: "string" },
+      file: { type: "string" },
+      line: { type: "integer" },
+    });
+  });
+
+  it("should keep ritsu_read_agents output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const readAgentsTool = tools.find(
+      (tool) => tool.name === "ritsu_read_agents",
+    );
+
+    expect(readAgentsTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = readAgentsTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["path", "domain"]);
+    expect(outputSchema.properties).toMatchObject({
+      path: { type: "string" },
+      ritsu_version: { type: "string" },
+      domain: { type: "string" },
+      tech_fingerprints: { type: "array" },
+      rules_overrides: { type: "object" },
+    });
+    expect(
+      outputSchema.properties.rules_overrides.properties.disable,
+    ).toMatchObject({
+      type: "array",
+    });
+    expect(
+      outputSchema.properties.rules_overrides.properties.downgrade.items
+        .properties,
+    ).toMatchObject({
+      id: { type: "string" },
+      severity: { type: "string" },
+    });
+    expect(
+      outputSchema.properties.rules_overrides.properties.add.items.properties,
+    ).toMatchObject({
+      id: { type: "string" },
+      name: { type: "string" },
+      scope: { type: "string" },
+      rule: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_run_quality_gates output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const qualityGatesTool = tools.find(
+      (tool) => tool.name === "ritsu_run_quality_gates",
+    );
+
+    expect(qualityGatesTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = qualityGatesTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual(["passed", "lint", "test"]);
+    expect(outputSchema.properties.passed).toMatchObject({
+      type: "boolean",
+    });
+    expect(outputSchema.properties.lint.properties).toMatchObject({
+      passed: { type: "boolean" },
+      output: { type: "string" },
+    });
+    expect(outputSchema.properties.test.properties).toMatchObject({
+      passed: { type: "boolean" },
+      total: { type: "integer" },
+      failures: { type: "array" },
+      output: { type: "string" },
+    });
+    expect(
+      outputSchema.properties.test.properties.failures.items.properties,
+    ).toMatchObject({
+      suite: { type: "string" },
+      test: { type: "string" },
+      error: { type: "string" },
+      file_hint: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_build_kg output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const buildKgTool = tools.find((tool) => tool.name === "ritsu_build_kg");
+
+    expect(buildKgTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = buildKgTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.required).toEqual([
+      "written",
+      "path",
+      "files_total",
+      "symbols_total",
+      "edges_total",
+    ]);
+    expect(outputSchema.properties).toMatchObject({
+      written: { type: "boolean" },
+      path: { type: "string" },
+      files_total: { type: "integer" },
+      symbols_total: { type: "integer" },
+      edges_total: { type: "integer" },
+      generated_at: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_query_kg output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const queryKgTool = tools.find((tool) => tool.name === "ritsu_query_kg");
+
+    expect(queryKgTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = queryKgTool?.outputSchema as Record<string, any>;
+    expect(outputSchema.properties).toMatchObject({
+      mode: { type: "string" },
+      target: { type: "string" },
+      depth: { type: "integer" },
+      impacted: { type: "array" },
+      impacted_count: { type: "integer" },
+      deps: { type: "array" },
+      deps_count: { type: "integer" },
+      symbol: { type: "string" },
+      defined_in: { type: "string" },
+      callers: { type: "array" },
+      callers_count: { type: "integer" },
+      kg_generated_at: { type: "string" },
+    });
+    expect(outputSchema.properties.paths.items.properties).toMatchObject({
+      node: { type: "string" },
+      path: { type: "array" },
+    });
+  });
+
+  it("should keep ritsu_semantic_index_build output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const semanticIndexBuildTool = tools.find(
+      (tool) => tool.name === "ritsu_semantic_index_build",
+    );
+
+    expect(semanticIndexBuildTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = semanticIndexBuildTool?.outputSchema as Record<
+      string,
+      any
+    >;
+    expect(outputSchema.required).toEqual([
+      "ok",
+      "index_path",
+      "embedder_model",
+      "entries_total",
+      "entries_added",
+    ]);
+    expect(outputSchema.properties).toMatchObject({
+      ok: { type: "boolean" },
+      index_path: { type: "string" },
+      embedder_model: { type: "string" },
+      generated_at: { type: "string" },
+      files_scanned: { type: "integer" },
+      entries_total: { type: "integer" },
+      entries_added: { type: "integer" },
+      entries_reused: { type: "integer" },
+      dim: { type: "integer" },
+    });
+  });
+
+  it("should keep ritsu_semantic_search output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const semanticSearchTool = tools.find(
+      (tool) => tool.name === "ritsu_semantic_search",
+    );
+
+    expect(semanticSearchTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = semanticSearchTool?.outputSchema as Record<
+      string,
+      any
+    >;
+    expect(outputSchema.required).toEqual(["ok", "query", "matches"]);
+    expect(outputSchema.properties).toMatchObject({
+      ok: { type: "boolean" },
+      query: { type: "string" },
+      top_k: { type: "integer" },
+      index_path: { type: "string" },
+      embedder_model: { type: "string" },
+      total_index_entries: { type: "integer" },
+      matches: { type: "array" },
+    });
+    expect(outputSchema.properties.matches.items.properties).toMatchObject({
+      score: { type: "number" },
+      path: { type: "string" },
+      artifact_type: { type: "string" },
+      artifact_layer: { type: "string" },
+      chunk_index: { type: "integer" },
+      heading: { type: "string" },
+      snippet: { type: "string" },
+    });
+  });
+
+  it("should keep ritsu_semantic_graph_rerank output schema stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const semanticGraphRerankTool = tools.find(
+      (tool) => tool.name === "ritsu_semantic_graph_rerank",
+    );
+
+    expect(semanticGraphRerankTool?.outputSchema).toBeTruthy();
+
+    const outputSchema = semanticGraphRerankTool?.outputSchema as Record<
+      string,
+      any
+    >;
+    expect(outputSchema.required).toEqual(["ok", "query", "matches"]);
+    expect(outputSchema.properties).toMatchObject({
+      ok: { type: "boolean" },
+      query: { type: "string" },
+      top_k: { type: "integer" },
+      focus_paths: { type: "array" },
+      index_path: { type: "string" },
+      kg_path: { type: "string" },
+      embedder_model: { type: "string" },
+      semantic_weight: { type: "number" },
+      kg_weight: { type: "number" },
+      kg_depth: { type: "integer" },
+      total_index_entries: { type: "integer" },
+      matches: { type: "array" },
+    });
+    expect(outputSchema.properties.matches.items.properties).toMatchObject({
+      score: { type: "number" },
+      semantic_score: { type: "number" },
+      kg_score: { type: "number" },
+      path: { type: "string" },
+      artifact_type: { type: "string" },
+      artifact_layer: { type: "string" },
+      chunk_index: { type: "integer" },
+      heading: { type: "string" },
+      snippet: { type: "string" },
+      kg_best_path: { type: "array" },
+    });
+  });
+});
+
 // ─── semantic index (vectorized memory) handler 集成测试 ─────
 
 describe("semantic index handlers integration", () => {
@@ -228,6 +746,81 @@ describe("semantic index handlers integration", () => {
     expect(Array.isArray(sd.matches)).toBe(true);
     expect(sd.matches.length).toBeGreaterThan(0);
     expect(typeof sd.matches[0].heading).toBe("string");
+    expect(sd.matches[0].artifact_layer).toBe("evidence");
+
+    delete process.env.RITSU_PROJECT_ROOT;
+    delete process.env.RITSU_EMBEDDINGS_BACKEND;
+  });
+
+  it("should filter semantic search results by artifact layer", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    process.env.RITSU_EMBEDDINGS_BACKEND = "hash";
+
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "delivery-report-search.md"),
+      "# 交付摘要\n已修复 cache poisoned 问题。\n",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "diagnosis-search.md"),
+      "# 根因确诊\ncache poisoned 来自旧缓存复用。\n",
+      "utf-8",
+    );
+
+    await indexBuild({ chunk_size: 200, chunk_overlap: 20, max_files: 50 });
+
+    const s = await semanticSearch({
+      query: "cache poisoned",
+      top_k: 5,
+      layers: ["primary"],
+    });
+    expect(s.isError).toBeFalsy();
+    const sd = JSON.parse(s.content[0].text);
+    expect(sd.ok).toBe(true);
+    expect(sd.matches.length).toBeGreaterThan(0);
+    expect(sd.matches.every((m: any) => m.artifact_layer === "primary")).toBe(
+      true,
+    );
+
+    delete process.env.RITSU_PROJECT_ROOT;
+    delete process.env.RITSU_EMBEDDINGS_BACKEND;
+  });
+
+  it("should find release-advice within primary-layer semantic search while excluding evidence", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    process.env.RITSU_EMBEDDINGS_BACKEND = "hash";
+
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "release-advice-search.md"),
+      "# 发布建议\n灰度观察项：payment rollback window 15m。\n",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "diagnosis-release.md"),
+      "# 根因确诊\npayment rollback window 15m 来自旧配置。\n",
+      "utf-8",
+    );
+
+    await indexBuild({ chunk_size: 200, chunk_overlap: 20, max_files: 50 });
+
+    const s = await semanticSearch({
+      query: "payment rollback window 15m",
+      top_k: 5,
+      layers: ["primary"],
+    });
+    expect(s.isError).toBeFalsy();
+    const sd = JSON.parse(s.content[0].text);
+    expect(sd.ok).toBe(true);
+    expect(sd.matches.length).toBeGreaterThan(0);
+    expect(sd.matches.every((m: any) => m.artifact_layer === "primary")).toBe(
+      true,
+    );
+    expect(
+      sd.matches.some((m: any) => m.artifact_type === "release-advice"),
+    ).toBe(true);
+    expect(sd.matches.some((m: any) => m.artifact_type === "diagnosis")).toBe(
+      false,
+    );
 
     delete process.env.RITSU_PROJECT_ROOT;
     delete process.env.RITSU_EMBEDDINGS_BACKEND;
@@ -268,6 +861,7 @@ describe("semantic index handlers integration", () => {
     if (rd.matches.length > 0) {
       expect(typeof rd.matches[0].semantic_score).toBe("number");
       expect(typeof rd.matches[0].kg_score).toBe("number");
+      expect(typeof rd.matches[0].artifact_layer).toBe("string");
     }
 
     delete process.env.RITSU_PROJECT_ROOT;
@@ -409,6 +1003,93 @@ describe("ctx-writer + ctx-reader", () => {
   });
 });
 
+describe("ritsu_read_ctx handler integration", () => {
+  let readCtx: () => Promise<any>;
+
+  beforeAll(async () => {
+    const mod = await import("../src/handlers/read-ctx.js");
+    readCtx = mod.ritsu_read_ctx;
+  });
+
+  it("should return product-stage recovery context alongside compatibility skill", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+
+    await appendEvent(TEST_ROOT, {
+      ts: "20260509-171500",
+      correlation_id: "cid-20260509-101",
+      skill: "route",
+      domain: "frontend",
+      status: "started",
+      step: "1/3",
+    });
+    await appendEvent(TEST_ROOT, {
+      ts: "20260509-171530",
+      correlation_id: "cid-20260509-102",
+      skill: "review",
+      domain: "frontend",
+      status: "done",
+      artifact: ".ritsu/assurance-report-auth.md",
+    });
+
+    const result = await readCtx();
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+
+    expect(data.last_incomplete.skill).toBe("route");
+    expect(data.last_incomplete.stage).toBe("intake");
+    expect(data.last_completed.skill).toBe("review");
+    expect(data.last_completed.stage).toBe("assure");
+    expect(data.recovery_context.skill).toBe("route");
+    expect(data.recovery_context.stage).toBe("intake");
+    expect(data.recent_entries[0].stage).toBe("intake");
+    expect(data.recent_entries[1].stage).toBe("assure");
+    expect(data.recent_entries_pruned[0].stage).toBe("intake");
+    expect(data.recent_entries_pruned[1].stage).toBe("assure");
+    expect(data.recovery_context.resume_hint).toContain(
+      "会话恢复: intake (route)",
+    );
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should keep legacy redirect skill and add recommended product stage", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+
+    await appendEvent(TEST_ROOT, {
+      ts: "20260509-171500",
+      correlation_id: "cid-20260509-202",
+      skill: "dev",
+      domain: "backend",
+      status: "started",
+      step: "1/2",
+    });
+    await appendEvent(TEST_ROOT, {
+      ts: "20260509-171510",
+      correlation_id: "cid-20260509-202",
+      skill: "dev",
+      domain: "backend",
+      status: "failed",
+      error: "first failure",
+    });
+    await appendEvent(TEST_ROOT, {
+      ts: "20260509-171520",
+      correlation_id: "cid-20260509-202",
+      skill: "dev",
+      domain: "backend",
+      status: "failed",
+      error: "second failure",
+    });
+
+    const result = await readCtx();
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+
+    expect(data.circuit_breaker_status.should_redirect).toBe("think");
+    expect(data.circuit_breaker_status.recommended_stage).toBe("deliver");
+    expect(data.circuit_breaker_status.last_failed_skill).toBe("dev");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
 // ─── 安全边界 ──────────────────────────────────────────────
 
 describe("ritsu_exec safety boundary", () => {
@@ -540,10 +1221,27 @@ describe("artifact validation rules", () => {
     expect(ARTIFACT_VALID_TYPES).toEqual(
       expect.arrayContaining([
         "intake-ticket",
+        "delivery-plan",
         "delivery-report",
         "assurance-report",
+        "release-advice",
       ]),
     );
+  });
+
+  it("should keep the five primary artifacts in canonical order", () => {
+    expect(ARTIFACT_VALID_TYPES.slice(0, 5)).toEqual([
+      "intake-ticket",
+      "delivery-plan",
+      "delivery-report",
+      "assurance-report",
+      "release-advice",
+    ]);
+    expect(
+      ARTIFACT_VALID_TYPES.slice(0, 5).every(
+        (type) => ARTIFACT_LAYER_MAP[type] === "primary",
+      ),
+    ).toBe(true);
   });
 
   it("should reject invalid artifact types", () => {
@@ -556,8 +1254,10 @@ describe("artifact validation rules", () => {
       if (type === "ctx") continue;
       const sampleByType: Record<string, string> = {
         "intake-ticket": "intake-ticket-auth.md",
+        "delivery-plan": "delivery-plan-auth.md",
         "delivery-report": "delivery-report-auth.md",
         "assurance-report": "assurance-report-auth.md",
+        "release-advice": "release-advice-auth.md",
         handoff: "handoff-auth.md",
         diagnosis: "diagnosis-bug.md",
         "review-stamp": "review-stamp-auth.md",
@@ -704,45 +1404,31 @@ describe("ritsu_emit_event handler integration", () => {
     expect(data.correlation_id).toBe("cid-20260509-042");
     delete process.env.RITSU_PROJECT_ROOT;
   });
-});
 
-// ─── ritsu_validate handler 集成测试 ────────────────────────
-// NOTE: ritsu_validate 已移除，事件校验由 ritsu_emit_event 写入时自动完成
-
-describe.skip("ritsu_validate handler integration", () => {
-  let validate: (params: Record<string, unknown>) => Promise<any>;
-
-  beforeAll(async () => {
-    const mod = await import("../src/handlers/validate.js");
-    validate = mod.ritsu_validate;
-  });
-
-  it("should reject missing data", async () => {
-    const result = await validate({});
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("data is required");
-  });
-
-  it("should reject invalid JSON", async () => {
-    const result = await validate({ data: "not json" });
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("invalid JSON");
-  });
-
-  it("should validate a correct event", async () => {
-    const result = await validate({
-      data: JSON.stringify({
-        ts: "20260509-171500",
-        correlation_id: "cid-20260509-001",
-        skill: "dev",
-        domain: "frontend",
-        status: "started",
-        step: "1/3",
-      }),
+  it("should auto-fill artifact_meta.layer for artifact_written events", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await emitEvent({
+      event_type: "artifact_written",
+      step: "3/3",
+      // ctx skill 仍记录兼容文件名；产品语义上这里对应 assure
+      skill: "review",
+      domain: "backend",
+      artifact: resolve(TEST_ROOT, RITSU_DIR, "assurance-report-auth.md"),
+      artifact_meta: {
+        type: "assurance-report",
+        size_bytes: 123,
+        summary: "final assurance result",
+      },
     });
     expect(result.isError).toBeFalsy();
-    const data = JSON.parse(result.content[0].text);
-    expect(data.valid).toBe(true);
+
+    const ctxPath = getCtxFilePath(TEST_ROOT);
+    const lines = readFileSync(ctxPath, "utf-8").trim().split("\n");
+    const lastEvent = JSON.parse(lines[lines.length - 1]);
+    expect(lastEvent.artifact_meta.type).toBe("assurance-report");
+    expect(lastEvent.artifact_meta.layer).toBe("primary");
+    expect(lastEvent.artifact_meta.summary).toBe("final assurance result");
+    delete process.env.RITSU_PROJECT_ROOT;
   });
 });
 
@@ -778,6 +1464,22 @@ describe("ritsu_write_artifact handler integration", () => {
 - [ ] \`src/auth/session.ts\`: 增加续期和持久化逻辑
 `;
 
+  const validIntakeTicketContent = `# Intake Ticket
+
+## 任务识别
+- 任务类型: Bug 修复
+- 当前目标: 修复登录态丢失
+
+## 风险与信息
+- 风险等级: quick
+- 信息完备度: 充分
+- 缺失信息: 无
+
+## 执行路径
+- 推荐路径: deliver.quick
+- 次要意图: 无
+`;
+
   const validDeliveryReportContent = `# Delivery Report
 
 ## 交付摘要
@@ -790,6 +1492,52 @@ describe("ritsu_write_artifact handler integration", () => {
 - 主要产出: auth session 持久化代码与测试
 - 已知风险: 旧 token 清理仍依赖定时任务
 - 下一步: 进入 assure 验收
+`;
+
+  const validDeliveryPlanContent = `# Delivery Plan
+
+## 目标与范围
+- 交付目标: 完成登录态持久化与自动续期
+- 纳入范围: session 持久化、refresh 流程、基础验证
+- 不纳入范围: 权限模型重构
+
+## 实施计划
+- 实施步骤: 1. 接入持久化 2. 增加续期 3. 补测试
+- 依赖与前置条件: 现有 session API 保持兼容
+
+## 验证与回滚
+- 验证计划: 执行单测并验证登录刷新流程
+- 回滚说明: 回退 session refresh 逻辑并清理新增状态
+`;
+
+  const validAssuranceReportContent = `# Assurance Report
+
+## 验收结论
+- 合并结论: mergeable
+- 上线结论: deployable_with_risk
+
+## 阻断项与风险
+- 阻断项: 无
+- 剩余风险: token 清理任务仍需持续观察
+
+## 建议动作
+- 建议下一步: 进入 deploy
+`;
+
+  const validReleaseAdviceContent = `# Release Advice
+
+## 发布建议
+- 合并建议: 建议合并
+- 上线建议: 建议灰度上线
+- 灰度/放量建议: 先对内部用户灰度，再逐步全量
+
+## 风险与回滚
+- 发布风险: token 清理任务仍需观察
+- 回滚条件: refresh 错误率显著升高或登录态异常丢失
+
+## 业务影响摘要
+- 业务影响: 登录体验更稳定，减少重复登录
+- 协作说明: 通知客服关注登录相关反馈
 `;
 
   beforeAll(async () => {
@@ -866,6 +1614,82 @@ describe("ritsu_write_artifact handler integration", () => {
     const data = JSON.parse(result.content[0].text);
     expect(data.path).toContain("delivery-report-test.md");
     expect(data.size_bytes).toBeGreaterThan(0);
+    expect(data.artifact_meta.type).toBe("delivery-report");
+    expect(data.artifact_meta.layer).toBe("primary");
+    expect(data.artifact_meta.size_bytes).toBe(data.size_bytes);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should write a valid intake-ticket artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "intake-ticket",
+      filename: "intake-ticket-test.md",
+      content: validIntakeTicketContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("intake-ticket-test.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should write a valid delivery-plan artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "delivery-plan",
+      filename: "delivery-plan-test.md",
+      content: validDeliveryPlanContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("delivery-plan-test.md");
+    expect(data.artifact_meta.layer).toBe("primary");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should write a valid assurance-report artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "assurance-report",
+      filename: "assurance-report-test.md",
+      content: validAssuranceReportContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("assurance-report-test.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should write a valid release-advice artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "release-advice",
+      filename: "release-advice-test.md",
+      content: validReleaseAdviceContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("release-advice-test.md");
+    expect(data.artifact_meta.layer).toBe("primary");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should preserve provided summary while normalizing artifact meta", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "handoff",
+      filename: "handoff-meta-test.md",
+      content: validHandoffContent,
+      artifact_meta: {
+        summary: "auth login flow handoff",
+      },
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.artifact_meta.summary).toBe("auth login flow handoff");
+    expect(data.artifact_meta.type).toBe("handoff");
+    expect(data.artifact_meta.layer).toBe("evidence");
+    expect(data.artifact_meta.size_bytes).toBe(data.size_bytes);
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
@@ -928,12 +1752,46 @@ describe("ritsu_list_artifacts handler integration", () => {
     const data = JSON.parse(result.content[0].text);
     expect(data.total_count).toBe(1);
     expect(data.files[0].artifact_type).toBe("delivery-report");
+    expect(data.files[0].artifact_layer).toBe("primary");
     expect(data.files[0].path).toContain("delivery-report-auth.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should recognize delivery-plan and release-advice as primary artifact types", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "delivery-plan-auth.md"),
+      "# delivery plan",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "release-advice-auth.md"),
+      "# release advice",
+      "utf-8",
+    );
+
+    const planResult = await listArtifacts({ type: "delivery-plan" });
+    expect(planResult.isError).toBeFalsy();
+    const planData = JSON.parse(planResult.content[0].text);
+    expect(planData.total_count).toBe(1);
+    expect(planData.files[0].artifact_type).toBe("delivery-plan");
+    expect(planData.files[0].artifact_layer).toBe("primary");
+
+    const releaseResult = await listArtifacts({ type: "release-advice" });
+    expect(releaseResult.isError).toBeFalsy();
+    const releaseData = JSON.parse(releaseResult.content[0].text);
+    expect(releaseData.total_count).toBe(1);
+    expect(releaseData.files[0].artifact_type).toBe("release-advice");
+    expect(releaseData.files[0].artifact_layer).toBe("primary");
+
     delete process.env.RITSU_PROJECT_ROOT;
   });
 });
 
 // ─── ritsu_contract_validate handler 集成测试 ──────────────────
+// NOTE: 该工具校验的是 implementation contract，
+// 因此自动选源优先 handoff；返回中的 handoff_path 仍为兼容字段名。
+// 主字段应视为 artifact_path / artifact_type。
 
 describe("ritsu_contract_validate handler integration", () => {
   let contractValidate: (params: Record<string, unknown>) => Promise<any>;
@@ -943,7 +1801,7 @@ describe("ritsu_contract_validate handler integration", () => {
     contractValidate = mod.ritsu_contract_validate;
   });
 
-  it("should prefer handoff over intake-ticket when auto-selecting contract artifact", async () => {
+  it("should prefer handoff as the implementation-contract source when auto-selecting contract artifact", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     execSync("git init", { cwd: TEST_ROOT, stdio: "ignore" });
     writeFileSync(
@@ -966,7 +1824,7 @@ describe("ritsu_contract_validate handler integration", () => {
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
-  it("should fall back to intake-ticket when no handoff exists", async () => {
+  it("should fall back to intake-ticket when no handoff implementation contract exists", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     execSync("git init", { cwd: TEST_ROOT, stdio: "ignore" });
     writeFileSync(

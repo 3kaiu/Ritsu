@@ -12,6 +12,7 @@ import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { load as loadYaml } from "js-yaml";
 import {
+  ARTIFACT_LAYER_MAP,
   ARTIFACT_VALID_TYPES,
   ARTIFACT_PREFIX_MAP,
   getSharedDir,
@@ -21,8 +22,10 @@ import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 const RITSU_DIR = ".ritsu";
 const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
   "intake-ticket": "intake_ticket",
+  "delivery-plan": "delivery_plan",
   "delivery-report": "delivery_report",
   "assurance-report": "assurance_report",
+  "release-advice": "release_advice",
   handoff: "handoff",
   diagnosis: "diagnosis",
   "review-stamp": "review_stamp",
@@ -196,12 +199,18 @@ export async function ritsu_write_artifact(
     return errorResult(`atomic write failed: ${e.message}`);
   }
   const sizeBytes = statSync(mdPath).size;
+  const normalizedArtifactMeta = {
+    ...(artifactMeta ?? {}),
+    type,
+    layer: ARTIFACT_LAYER_MAP[type] ?? "system",
+    size_bytes: sizeBytes,
+  };
 
   return textResult(
     JSON.stringify({
       path: mdPath,
       size_bytes: sizeBytes,
-      artifact_meta: artifactMeta ?? null,
+      artifact_meta: normalizedArtifactMeta,
     }),
   );
 }

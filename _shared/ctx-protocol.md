@@ -22,6 +22,20 @@
 
 JSONL（每行一个 JSON 对象，追加不覆盖）。示例见 `_shared/ctx-event-schema.json`。
 
+`skill` 字段当前仍记录底层兼容 `skill` 值（runtime 模块名 / 文件名），而不是产品阶段名。读取时应按下面映射理解：
+
+- `route` = `intake`
+- `pipe` = `deliver`
+- `review` = `assure`
+- 其余如 `think / dev / test / hunt / read / deploy` 继续表示对应内部模块或扩展模块
+
+当 `status=artifact_written` 时，`artifact_meta.type` 必须填写真实产物类型；若当前调用方已知层级，建议同时补充 `artifact_meta.layer`：
+
+- `primary` = `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice`
+- `evidence` = `handoff / diagnosis / optimize-report`
+- `compatibility` = `review-stamp`
+- `system` = `ctx`
+
 ### 读取时机
 
 当用户执行 `/r-route`（当前承担 intake）或新会话开始时，AI **必须先读取当月最新的** `.ritsu/ctx-{YYYY-MM}.jsonl`（若存在）：
@@ -34,19 +48,22 @@ JSONL（每行一个 JSON 对象，追加不覆盖）。示例见 `_shared/ctx-e
 
 当检测到未完成任务并用户确认继续时，按以下规则恢复：
 
-1. **定位断点**：`ritsu_read_ctx` 返回 `recovery_context`，包含未完成任务的 skill/domain/step 信息
+1. **定位断点**：`ritsu_read_ctx` 返回 `last_incomplete` / `last_completed` / `recovery_context` / `recent_entries` / `recent_entries_pruned`。这些结构都保留底层兼容 `skill` 值，并通过 `stage` 字段给出产品阶段语义
 2. **现实对账**：`ritsu_read_ctx` 返回 `reality_check`，检查 handoff/diagnosis 等产物文件是否仍存在于磁盘（git reset --hard 后文件可能丢失）
-3. **熔断检测**：`ritsu_read_ctx` 返回 `circuit_breaker_status`。当前产品语义上应理解为“先回到 intake 或升级交付模式”，即使底层旧字段仍可能表现为 `think`
+3. **熔断检测**：`ritsu_read_ctx` 返回 `circuit_breaker_status`。优先读取 `recommended_stage` 作为产品阶段建议；`should_redirect` 仅保留底层兼容值，仍可能表现为 `think` 这类内部模块名
 4. **恢复后首行输出**：
    ```
-   🔄 会话恢复: /r-{skill} | 断点: step {N}/{M} | 领域: {domain}
+   🔄 会话恢复: {stage} ({skill}) | 断点: step {N}/{M} | 领域: {domain}
    ```
+
+其中 `{skill}` 若为 `route / pipe / review`，应分别按 `intake / deliver / assure` 理解。
+若出现 `think`，应按 `deliver` 内部的设计/诊断模块理解，而不是新的产品入口。
 
 ### 文件管理与长期记忆检索 (Local RAG)
 
 - `.ritsu/ctx-{YYYY-MM}.jsonl` 只追加，不修改历史记录（append-only）。
 - **天然防膨胀**：因采用按月分片路由（Time-based Sharding），单文件体积得到物理遏制。
-- **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。必须调用 `ritsu_exec` 执行 `grep -rni "{关键字}" .ritsu/ --include="*.md" --include="*.jsonl"`，通过底层检索抓取相关的 `handoff`、`diagnosis` 碎片，实现本地 RAG 问答。
+- **长期记忆回溯**：AI 在执行 `/r-think`、`/r-hunt` 或用户提问时，严禁加载过去数月的 `ctx` 文件。若已构建语义索引，优先调用 `ritsu_semantic_search` 或 `ritsu_semantic_graph_rerank`，默认先查 `layers=["primary"]`，主链路信息不足时再扩到 `layers=["evidence"]`。仅在没有索引或需要底层兜底时，才调用 `ritsu_exec` 执行 `grep -rni "{关键字}" .ritsu/ --include="*.md" --include="*.jsonl"`。
 
 ### 月度归档机制 (Monthly Archival)
 

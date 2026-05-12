@@ -34,6 +34,8 @@ hard_constraints:
 - 优先读取 `recent_entries_pruned`
 - failed 事件优先读取 `failed_summary`
 
+若为澄清当前任务而需要额外查看历史产物，默认先查主链路产物（`intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice`）；只有主链路不足以解释上下文时，才补充 `handoff / diagnosis` 等过程证据。
+
 ### 2. 领域解析
 
 > 引用 `_shared/skill-common-steps.md` Step 1
@@ -99,11 +101,29 @@ hard_constraints:
 
 执行单形成后，调用 **`ritsu_write_artifact`**（type=`intake-ticket`）写入主受理产物，内容至少包含：
 
-- 任务识别
-- 风险与信息
-- 执行路径
+- `## 任务识别`
+  - `任务类型`
+  - `当前目标`
+- `## 风险与信息`
+  - `风险等级`
+  - `信息完备度`
+  - `缺失信息`
+- `## 执行路径`
+  - `推荐路径`
+  - `次要意图`
 
-`intake-ticket` 的职责是沉淀“需求已被如何理解、下一步应如何推进”，不是替代后续 `handoff` 的实施清单。
+推荐骨架：
+
+> 引用 `_shared/artifact-templates.md` Intake Ticket
+
+`intake-ticket` 的职责是沉淀“需求已被如何理解、下一步应如何推进”，不是替代后续 `delivery-plan` 或 `handoff` 的实施清单。
+
+**与后续主产物的边界**：
+
+- `intake-ticket`：定义需求理解、风险、执行路径
+- `delivery-plan`：定义实施目标范围、步骤、验证计划、回滚说明
+- `delivery-report`：定义实际交付结果与风险
+- `assurance-report / release-advice`：定义验收与发布建议
 
 ### 5. 写入 ctx
 

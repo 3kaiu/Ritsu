@@ -8,7 +8,7 @@ fast_mode:
   skip_steps: [4]
   skip_artifacts: false
   self_test: null
-  description: "跳过领域语义深审，优先产出快速验收结论，仍写 assurance-report（必要时附兼容镜像）"
+  description: "跳过领域语义深审，优先产出快速验收结论，仍写 assurance-report；命中发布判断场景时仍补 release-advice"
 hard_constraints:
   - id: HC-1
     rule: "阻断项命中后必须给出不可合并/不可上线结论，禁止继续包装成可接受风险"
@@ -47,7 +47,8 @@ hard_constraints:
 同时收集本次交付的核心证据：
 
 - 变更内容
-- intake-ticket / handoff / diagnosis（若存在）
+- intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice（优先）
+- handoff / diagnosis（作为过程证据补充）
 - 质量门禁结果
 - 契约覆盖情况
 - 是否存在高风险变更
@@ -56,16 +57,26 @@ hard_constraints:
 
 - 若存在 `rules_overrides.add` 且 `scope=review`，将其视为额外阻断项
 
-调用 **`ritsu_list_artifacts`**（优先 `type=handoff`，必要时回退检查 `type=intake-ticket`）：
+调用 **`ritsu_list_artifacts`**：
 
-- 若存在 handoff，逐条核对契约和实施清单
+- 先检查 `intake-ticket / delivery-report / assurance-report` 是否齐全，确认主链路溯源是否完整
+- 若任务属于 `standard / critical`，或本次存在明确发布姿态判断，再进一步检查 `delivery-plan / release-advice` 是否应存在且已对账
+- 若存在 `delivery-plan`，核对其目标范围、验证计划与最终交付是否一致
+- 若存在 handoff，再逐条核对契约和实施清单
 - 若仅存在 intake-ticket，明确标注“仅有 intake 溯源，缺少细化实施契约”
-- 若均不存在，明确标注“无契约溯源”
+- 若主链路与 handoff 均不存在，明确标注“无契约溯源”
+
+若需要做历史相似问题或历史验收结论检索，默认策略为：
+
+1. 先调用 `ritsu_semantic_search` 或 `ritsu_semantic_graph_rerank`，使用 `layers=["primary"]`
+2. 若主链路产物不足以解释风险或实施偏差，再扩展为 `layers=["evidence"]`
+3. `review-stamp` 仅作为兼容镜像参考，不作为默认首查对象
 
 调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
 
 调用 `ritsu_contract_validate({min_coverage: 0.8})`：
 
+- 该工具校验的是“实施契约”，因此自动选源时优先读取 handoff；这不改变历史检索默认仍应先查 `primary`
 - `passed=true` → 继续
 - `passed=false` → 记为高风险或阻断项，视情况要求回补实现或回到设计
 - 若 `artifact_type=intake-ticket`，应额外说明该覆盖率仅代表粗粒度契约，不等同 handoff 级实施清单覆盖
@@ -105,11 +116,51 @@ hard_constraints:
 
 内容至少覆盖：
 
-- 验收结论
-- 阻断项与风险
-- 建议动作
+- `## 验收结论`
+  - `合并结论`
+  - `上线结论`
+- `## 阻断项与风险`
+  - `阻断项`
+  - `剩余风险`
+- `## 建议动作`
+  - `建议下一步`
+
+推荐骨架：
+
+> 引用 `_shared/artifact-templates.md` Assurance Report
+
+当本次验收需要给出明确发布姿态时，必须额外调用 **`ritsu_write_artifact`**（type=`release-advice`）写入发布建议产物。
+
+建议触发条件：
+
+- 需要解释如何上线，而不只是判断能否上线
+- 任务涉及灰度、放量、回滚窗口或跨角色协作
+- 需要把“能否上线”翻译成“如何上线/如何暂缓上线”的可执行建议
+
+`release-advice` 内容至少包含：
+
+- `## 发布建议`
+  - `合并建议`
+  - `上线建议`
+  - `灰度/放量建议`
+- `## 风险与回滚`
+  - `发布风险`
+  - `回滚条件`
+- `## 业务影响摘要`
+  - `业务影响`
+  - `协作说明`
+
+推荐骨架：
+
+> 引用 `_shared/artifact-templates.md` Release Advice
 
 如当前下游仍依赖 legacy 产物，可附加写入一份精简 **`review-stamp`** 作为兼容镜像；但产品语义上，`assurance-report` 才是主验收结论。
+
+若同时产出 `release-advice`，则：
+
+- `assurance-report` 负责验收判定
+- `release-advice` 负责发布建议与业务影响说明
+- 二者共同构成 assure 阶段的完整主输出
 
 按 `_shared/artifact-schema.yaml` 对应 Schema 写入，同时在会话末尾内联输出。
 

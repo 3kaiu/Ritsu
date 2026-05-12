@@ -34,12 +34,12 @@
         "read",
         "refactor"
       ],
-      "description": "技能名"
+      "description": "技能名（当前落盘仍使用兼容 skill 名 / 文件名，如 route= intake、pipe=deliver、review=assure）"
     },
     "domain": {
       "type": "string",
       "enum": ["frontend", "backend", "fullstack", "infra", "data"],
-      "description": "领域值"
+      "description": "领域值。基础设施领域统一使用 infra；devops 仅作为口语描述，不再作为独立枚举"
     },
     "status": {
       "type": "string",
@@ -67,15 +67,22 @@
           "type": "string",
           "enum": [
             "intake-ticket",
+            "delivery-plan",
             "delivery-report",
             "assurance-report",
+            "release-advice",
             "handoff",
             "diagnosis",
             "review-stamp",
             "optimize-report",
             "ctx"
           ],
-          "description": "产物类型"
+          "description": "产物类型。取值和层级划分应与 _shared/artifact-layers.md 保持一致"
+        },
+        "layer": {
+          "type": "string",
+          "enum": ["primary", "evidence", "compatibility", "system"],
+          "description": "产物层级。建议显式写入，便于下游按主链路/过程证据/兼容镜像分层消费"
         },
         "size_bytes": {
           "type": "integer",

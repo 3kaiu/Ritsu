@@ -36,7 +36,9 @@ hard_constraints:
 绑定当前诊断上下文：
 
 - 报错信息
-- diagnosis 历史
+- 最近的 delivery-plan / delivery-report / assurance-report（优先）
+- release-advice（若故障发生在发布或灰度阶段）
+- diagnosis 历史（作为过程证据补充）
 - 当前 diff
 - 失败的 lint/test 输出
 
@@ -51,6 +53,12 @@ hard_constraints:
 - 最可能涉及哪些模块
 
 历史案例召回、semantic 检索、KG、sandbox 都只能作为增强手段；它们的职责是加速取证，不是直接代替结论。
+
+如需检索 `.ritsu/` 历史记录，默认策略为：
+
+1. 先调用 `ritsu_semantic_search` 或 `ritsu_semantic_graph_rerank`，使用 `layers=["primary"]`
+2. 若主链路产物不足以解释故障演化，再扩展为 `layers=["evidence"]`
+3. `review-stamp` 仅在需要兼容旧链路判断时才查看
 
 ### 3. 根因假设
 

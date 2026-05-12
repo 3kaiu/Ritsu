@@ -2,6 +2,9 @@
 # 定义所有跨技能中间产物的强制格式。
 # 下游技能读取上游产物时，必须按此 Schema 解析，禁止自由解读。
 # ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
+# 产物的产品层级划分见 _shared/artifact-layers.md。
+# 默认消费顺序：优先主链路产物（intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice），
+# 主链路不足时再补充过程证据（handoff / diagnosis / optimize-report）与兼容镜像（review-stamp）。
 
 schemas:
   intake_ticket:
@@ -29,6 +32,31 @@ schemas:
             label: "推荐路径"
           - name: secondary_intents
             label: "次要意图"
+
+  delivery_plan:
+    id: 10.5
+    path: ".ritsu/delivery-plan-{YYYYMMDD-HHMMSS}.md"
+    required_sections:
+      - title: "目标与范围"
+        fields:
+          - name: delivery_goal
+            label: "交付目标"
+          - name: in_scope
+            label: "纳入范围"
+          - name: out_of_scope
+            label: "不纳入范围"
+      - title: "实施计划"
+        fields:
+          - name: implementation_steps
+            label: "实施步骤"
+          - name: dependencies
+            label: "依赖与前置条件"
+      - title: "验证与回滚"
+        fields:
+          - name: verification_plan
+            label: "验证计划"
+          - name: rollback_notes
+            label: "回滚说明"
 
   delivery_report:
     id: 11
@@ -77,6 +105,31 @@ schemas:
           - name: recommended_next_step
             label: "建议下一步"
 
+  release_advice:
+    id: 12.5
+    path: ".ritsu/release-advice-{YYYYMMDD-HHMMSS}.md"
+    required_sections:
+      - title: "发布建议"
+        fields:
+          - name: merge_recommendation
+            label: "合并建议"
+          - name: deploy_recommendation
+            label: "上线建议"
+          - name: rollout_guidance
+            label: "灰度/放量建议"
+      - title: "风险与回滚"
+        fields:
+          - name: release_risks
+            label: "发布风险"
+          - name: rollback_condition
+            label: "回滚条件"
+      - title: "业务影响摘要"
+        fields:
+          - name: business_impact
+            label: "业务影响"
+          - name: stakeholder_note
+            label: "协作说明"
+
   agents_md:
     id: 0
     path: "{项目根}/AGENTS.md"
@@ -89,6 +142,7 @@ schemas:
       - field: domain
         type: enum
         values: [frontend, backend, fullstack, infra, data]
+        description: "基础设施领域统一使用 infra；devops 作为口语别名，不单列为 schema 枚举值"
       - field: 技术栈底座.语言/运行时
         type: string
         placeholder: "待补充"
@@ -252,7 +306,7 @@ schemas:
         id: traceability
         fields:
           - name: traceability
-            format: "已对账: .ritsu/handoff-{slug}.md | 无 Handoff 存档（风险已知悉）"
+            format: "已对账: .ritsu/assurance-report-{ts}.md | .ritsu/delivery-report-{ts}.md | .ritsu/intake-ticket-{ts}.md | 可选: .ritsu/delivery-plan-{ts}.md | 可选: .ritsu/release-advice-{ts}.md | 附: .ritsu/handoff-{slug}.md | 无主链路存档（风险已知悉）"
       - title: "质量门禁执行结果"
         id: quality-gates
         fields:
