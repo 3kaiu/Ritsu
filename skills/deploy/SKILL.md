@@ -1,7 +1,7 @@
 ---
 name: deploy
 version: "3.8.0"
-description: "Ritsu 扩展模块。用于部署、冒烟验证和回滚准备，建立在 assure 结论之上。"
+description: "Ritsu 辅助入口。用于部署、冒烟验证和回滚准备，建立在 review 结论之上。"
 when_to_use: "/r-deploy, 部署, 发布, 上线, deploy, release, 推到生产"
 total_steps: 5
 fast_mode:
@@ -21,85 +21,16 @@ hard_constraints:
     severity: FATAL
 ---
 
-# Deploy: Extensions 发布模块 (Deployment Extension)
+# Deploy: 发布入口
 
-**触发条件**：用户输入 `/r-deploy`，或 assure 结论明确后进入上线动作。
+**触发条件**：用户输入 `/r-deploy`，或 `review` 已明确允许进入上线动作时调用。  
 
-> 该模块属于扩展能力，不属于主链路一线入口。
+> 它属于 `review` 之后的扩展动作，不替代默认验收流程；部署前应先对齐最近一次 `review` 相关产物和 flow state。
 
-## 执行流水线
+优先读取：
 
-### 1. 验收状态确认
+- `review-report`（兼容旧名 `assurance-report`）
+- `review-advice`（兼容旧名 `release-advice`）
+- `dev-report`（兼容旧名 `delivery-report`）
 
-> 引用 `_shared/skill-common-steps.md` Step 1
-
-确认最近的验收状态：
-
-- mergeable / deployable
-- deployable_with_risk
-- 无验收记录
-
-优先读取的主链路产物：
-
-- `assurance-report`：确认是否可上线、阻断项、剩余风险
-- `release-advice`：确认灰度方式、放量建议、回滚条件、协作说明
-- `delivery-report`：确认本次实际交付内容与验证结果
-
-若不存在 `release-advice`，但本次部署涉及灰度、放量、跨角色协作或复杂回滚窗口，应先回到 assure 补齐发布建议，而不是直接凭口头判断上线。
-
-无明确结论时，不默认直接上线。
-
-### 2. 预发布检查
-
-`[Step 1 Complete]` 后进入步骤 2。
-
-检查：
-
-- 版本一致性
-- 工作区状态
-- 环境变量和配置
-- 迁移可逆性
-- 发布说明或版本记录
-- `release-advice` 中要求的灰度/放量前置条件
-
-### 3. 回滚方案确认
-
-`[Step 2 Complete]` 后进入步骤 3。
-
-必须给出明确回滚指令：
-
-- 代码回滚
-- 数据回滚
-- 重部署
-- 回滚后验证
-
-若 `release-advice` 已定义回滚条件或业务影响摘要，部署前必须逐条对齐，不得跳过。
-
-### 4. 部署与冒烟验证
-
-`[Step 3 Complete]` 后进入步骤 4。
-
-按项目定义执行部署，并完成最小冒烟：
-
-- 健康检查
-- 关键路径可达
-- 日志无明显致命错误
-- `release-advice` 指定的灰度观察项或业务验证项
-
-若冒烟失败，立即执行回滚路径。
-
-### 5. 交付摘要
-
-`[Step 4 Complete]` 后进入步骤 5。
-
-> 引用 `_shared/skill-common-steps.md` Step 4（skill=deploy）
-
-写入 ctx：
-
-> 引用 `_shared/skill-common-steps.md` Step 2（skill=deploy, artifact=null）
-
----
-
-## 关联流转
-
-> 引用 `_shared/skill-common-steps.md` Step 3（skill=deploy）
+若不存在 `review-advice`（或兼容旧名 `release-advice`），但本次部署涉及灰度、放量、跨角色协作或复杂回滚窗口，应先回到 `review` 补齐发布建议。

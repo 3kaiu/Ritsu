@@ -3,13 +3,15 @@
 # 下游技能读取上游产物时，必须按此 Schema 解析，禁止自由解读。
 # ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
 # 产物的产品层级划分见 _shared/artifact-layers.md。
-# 默认消费顺序：优先主链路产物（intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice），
-# 主链路不足时再补充过程证据（handoff / diagnosis / optimize-report）与兼容镜像（review-stamp）。
+# 默认消费顺序：优先主产物（推荐别名：think-ticket / think-plan / dev-report / review-report / review-advice；
+# 兼容旧名：intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice），
+# 这些产物服务于显式工作流 think / dev / test / hunt / review；
+# 主产物不足时再补充过程证据（handoff / diagnosis / optimize-report）与兼容镜像（review-stamp）。
 
 schemas:
   intake_ticket:
     id: 10
-    path: ".ritsu/intake-ticket-{YYYYMMDD-HHMMSS}.md"
+    path: ".ritsu/think-ticket-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "任务识别"
         fields:
@@ -35,7 +37,7 @@ schemas:
 
   delivery_plan:
     id: 10.5
-    path: ".ritsu/delivery-plan-{YYYYMMDD-HHMMSS}.md"
+    path: ".ritsu/think-plan-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "目标与范围"
         fields:
@@ -60,7 +62,7 @@ schemas:
 
   delivery_report:
     id: 11
-    path: ".ritsu/delivery-report-{YYYYMMDD-HHMMSS}.md"
+    path: ".ritsu/dev-report-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "交付摘要"
         fields:
@@ -84,7 +86,7 @@ schemas:
 
   assurance_report:
     id: 12
-    path: ".ritsu/assurance-report-{YYYYMMDD-HHMMSS}.md"
+    path: ".ritsu/review-report-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "验收结论"
         fields:
@@ -107,7 +109,7 @@ schemas:
 
   release_advice:
     id: 12.5
-    path: ".ritsu/release-advice-{YYYYMMDD-HHMMSS}.md"
+    path: ".ritsu/review-advice-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "发布建议"
         fields:
@@ -273,7 +275,7 @@ schemas:
       - title: "推荐修复入口"
         items:
           - "简单修复（< 2h）→ /r-dev [...]"
-          - "架构级修复 → /r-think [...]"
+          - "边界或方案需要重审 → /r-think [...]"
 
   review_stamp:
     id: 3
@@ -306,7 +308,7 @@ schemas:
         id: traceability
         fields:
           - name: traceability
-            format: "已对账: .ritsu/assurance-report-{ts}.md | .ritsu/delivery-report-{ts}.md | .ritsu/intake-ticket-{ts}.md | 可选: .ritsu/delivery-plan-{ts}.md | 可选: .ritsu/release-advice-{ts}.md | 附: .ritsu/handoff-{slug}.md | 无主链路存档（风险已知悉）"
+            format: "已对账: .ritsu/review-report-{ts}.md | .ritsu/dev-report-{ts}.md | .ritsu/think-ticket-{ts}.md | 可选: .ritsu/think-plan-{ts}.md | 可选: .ritsu/review-advice-{ts}.md | 附: .ritsu/handoff-{slug}.md | 无主产物存档（风险已知悉）"
       - title: "质量门禁执行结果"
         id: quality-gates
         fields:

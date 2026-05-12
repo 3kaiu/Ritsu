@@ -1,0 +1,45 @@
+flow_id: test-verify
+phase: test
+intent: verification_and_gates
+required_inputs:
+  - delivery_target
+prechecks:
+  - step_id: load_ctx
+    title: Restore delivery context
+    executor_type: tool
+    action: read_ctx
+    success_condition: "ctx snapshot loaded"
+    on_failure: "record recovery point and continue with explicit fresh-session warning"
+  - step_id: collect_changed_files
+    title: Inspect current changed files
+    executor_type: tool
+    action: get_changed_files
+    optional: true
+    success_condition: "changed files snapshot collected or skipped"
+    on_failure: "continue with validation-only assumptions"
+steps:
+  - step_id: run_quality_gates
+    title: Run lint and test gates
+    executor_type: tool
+    action: run_quality_gates
+    success_condition: "all configured quality gates passed"
+    on_failure: "route back to dev when failure is obvious; otherwise route to hunt"
+verifications:
+  - step_id: verify_gate_result
+    title: Verify gate result is persisted in flow state
+    executor_type: deterministic
+    action: noop
+    success_condition: "quality gate result captured in step output"
+    on_failure: "hold test phase and preserve failure details"
+artifacts: []
+failure_recovery:
+  - persist recovery_point=current_step
+  - preserve gate output and failure summary
+  - recommend dev or hunt based on failure clarity
+next_phase_rules:
+  - when: "quality gates passed"
+    next_phase: review
+  - when: "failure root cause is obvious"
+    next_phase: dev
+  - when: "failure root cause is unclear"
+    next_phase: hunt

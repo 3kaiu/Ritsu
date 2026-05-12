@@ -1,14 +1,32 @@
 # 律 (Ritsu)
 
-Ritsu 不是“更多 skill 的集合”，而是一套把 AI 交付流程收敛成可执行闭环的工程协议。
+Ritsu 是一套面向工程交付的 AI 工作流，不再把“编排层”放在用户前面。
 
-如果你只想先用起来，记住这一句就够了：
+当前运行时已经开始把主链路固化成**交付流程系统**：
 
-`/r-init -> /r-route -> /r-pipe -> /r-review`
+- 显式 flow manifests：`_shared/flows/*.yaml`
+- 流程状态记录：`.ritsu/flows/*.json`
+- 脚本优先执行：`ritsu_list_flows / ritsu_run_flow / ritsu_resume_flow / ritsu_get_flow_state / ritsu_apply_flow_decision`
+
+从现在开始，Ritsu 的主使用逻辑只有这一条：
+
+```text
+/r-init -> /r-think -> /r-dev -> /r-test or /r-hunt -> /r-review
+```
+
+这条链路的目标很明确：
+
+- `think` 负责需求审核、边界澄清、实现判断
+- `dev` 负责实现主任务
+- `test` 负责验证与补测
+- `hunt` 负责定位故障与恢复交付
+- `review` 负责最终验收
+
+你看到的 skill，就是 AI 当前所处的工作阶段。默认不再让用户面对黑盒编排入口。
 
 ---
 
-## 先说怎么用
+## 快速开始
 
 ### 1. 安装
 
@@ -27,302 +45,311 @@ npx skills add 3kaiu/Ritsu -a cline -g -y
 
 ### 2. 初始化项目
 
-在新仓库里先执行：
-
 ```text
 /r-init
 ```
 
-它会建立 Ritsu 的项目基线，包括：
+它会建立项目基线：
 
 - 扫描技术栈
 - 生成 `AGENTS.md`
 - 注入必要忽略规则
-- 为后续交付准备上下文与产物目录
+- 准备 `.ritsu/` 下的上下文与产物目录
 
-### 3. 跑一轮最短闭环
+### 3. 跑一轮完整闭环
 
 ```text
-/r-route "实现：用户登录态持久化 + 自动续期"
-/r-pipe standard "实现：用户登录态持久化 + 自动续期"
+/r-think "实现：用户登录态持久化 + 自动续期"
+/r-dev "按已确认范围完成实现"
+/r-test
 /r-review
 ```
 
-如果需求很小，也可以直接：
+如果是报错排障链路：
 
 ```text
-/r-pipe quick "修复登录页按钮禁用状态错误"
-/r-review --fast
+/r-think "分析登录态为什么会随机失效"
+/r-hunt
+/r-dev
+/r-test
+/r-review
 ```
 
 ---
 
 ## 你真正需要记住的命令
 
-对大多数人来说，日常只需要 4 个主命令，外加 2 个补充命令。
-
-| 命令 | 什么时候用 | 结果 |
+| 命令 | 什么时候用 | 你会得到什么 |
 | --- | --- | --- |
-| `/r-init` | 第一次接入项目 | 建立项目基线 |
-| `/r-route` | 不确定从哪开始，或需求还不清晰 | 生成 intake 执行单，给出路径和风险等级 |
-| `/r-pipe` | 要开始真正交付 | 按 quick / standard / critical 推进实现与验证 |
-| `/r-review` | 要最终判断能不能合并、能不能上线 | 输出 assurance 结论 |
-| `/r-read` | 你只想读代码、理解逻辑、不改东西 | 只读分析 |
-| `/r-deploy` | 真的要部署或发布 | 基于 assurance 结论执行上线动作 |
+| `/r-init` | 第一次接入项目 | 项目基线 |
+| `/r-think` | 需求审核、范围澄清、方案判断 | 审核结论、边界、契约、实施清单 |
+| `/r-dev` | 开始实现 | 代码改动、局部验证、交付回执 |
+| `/r-test` | 补测试、跑验证、确认覆盖 | 测试结果与验证摘要 |
+| `/r-hunt` | 报错、失败、难以定位的问题 | 根因、证据、修复方向 |
+| `/r-review` | 最终验收 | 是否可合并、是否可上线、剩余风险 |
+| `/r-read` | 只读理解代码 | 阅读摘要 |
+| `/r-deploy` | 真的要部署 | 发布动作与冒烟验证 |
 
-结论很直接：
+一句话判断：
 
-- 不确定时，用 `/r-route`
-- 要干活时，用 `/r-pipe`
-- 要收口时，用 `/r-review`
-- 只看不改时，用 `/r-read`
-
----
-
-## 什么时候不要自己选内部 skill
-
-这是目前最容易把人绕晕的地方。
-
-`think / dev / test / hunt / optimize / refactor` 这些 skill 仍然存在，但它们更适合被 `deliver` 内部调用，而不是让用户先判断该点哪一个。
-
-默认原则：
-
-- 用户入口优先：`route / pipe / review`
-- 内部能力后置：`think / dev / test / hunt`
-- 扩展动作单列：`read / deploy / document / triage`
-
-换句话说：
-
-- 你不是在“选择 skill”
-- 你是在“选择当前处于受理、交付、还是验收阶段”
+- 不确定该怎么做，用 `/r-think`
+- 要开始动手，用 `/r-dev`
+- 要验证，用 `/r-test`
+- 出问题了，用 `/r-hunt`
+- 要收口，用 `/r-review`
 
 ---
 
-## 一张图看懂主流程
+## 主流程，不再黑盒
 
 ```text
-用户需求
-  ↓
-/r-route
-  ↓
-intake-ticket
-  ↓
-/r-pipe (quick | standard | critical)
-  ↓
-delivery-plan   [按需要产出]
-delivery-report
-  ↓
+需求 / 问题
+   ↓
+/r-think
+   ↓
+边界 / 风险 / 契约 / 实施清单
+   ↓
+/r-dev
+   ↓
+代码与交付回执
+   ↓
+/r-test   或   /r-hunt
+   ↓
+验证通过 / 根因确认
+   ↓
 /r-review
-  ↓
-assurance-report
-release-advice  [涉及发布判断时产出]
+   ↓
+验收结论 / 发布建议
 ```
 
-这是 Ritsu 当前唯一应该优先理解的主链路。
+这套设计和之前最大的区别是：
+
+- 你不再需要猜 AI 在黑盒里做了什么
+- skill 名称就是当前动作
+- 阶段切换是显式的，不是编排器代你隐藏
 
 ---
 
-## 三个主阶段
+## 每个主 skill 的角色
 
-### 1. Route = Intake
+### `think`
 
-`/r-route` 负责把自然语言需求变成可以执行的受理单。
+`think` 是正式的一线入口，不是隐藏在别的编排层后面的内部模块。
 
-它主要回答：
+它负责：
 
-- 这是什么任务
-- 风险高不高
-- 信息够不够
-- 下一步走什么路径
+- 审核需求是否清楚
+- 识别风险等级
+- 确定边界和不做项
+- 给出契约、验收标准和实施清单
 
-常见输出是：
+适合场景：
 
-- `deliver.quick`
-- `deliver.standard`
-- `deliver.critical`
-- `assure`
-- 某个扩展模块
+- 新需求刚进来
+- 需求描述不完整
+- 想先判断值不值得做、该怎么做
+- 验收失败后需要重新定边界
 
-### 2. Pipe = Deliver
+### `dev`
 
-`/r-pipe` 是真正的交付主入口。
+`dev` 是正式的实现主入口。
 
-它内部可能会用到：
+它负责：
 
-- `think`：补边界、补契约
-- `dev`：实现改动
-- `test`：补测试、做验证
-- `hunt`：定位故障、恢复交付
+- 按边界实现代码
+- 校验标识符与签名
+- 执行最小必要验证
+- 写出交付回执
 
-但这些通常不需要用户手动调度。
+适合场景：
 
-Ritsu 对外只暴露 3 种交付模式：
+- 已经知道要改什么
+- 需要推进功能开发或 bugfix
+- 需要在既定边界内完成交付
 
-| 模式 | 适用场景 |
-| --- | --- |
-| `quick` | 小改动、低风险、需求明确 |
-| `standard` | 常规功能、常规 bugfix |
-| `critical` | 架构改动、迁移、高发布风险 |
+### `test`
 
-### 3. Review = Assure
+`test` 是正式的验证入口。
 
-`/r-review` 不是普通代码 review，而是最终验收关口。
+它负责：
 
-它要明确给出：
+- 编写或补齐测试
+- 执行验证
+- 对齐交付目标、风险和回滚要求
 
-- 是否可合并
-- 是否可上线
-- 阻断项是什么
-- 剩余风险是什么
-- 下一步建议是什么
+适合场景：
 
-如果涉及明确发布姿态，它还会产出 `release-advice`。
+- 需要补单测 / 集成测试
+- 需要确认质量门禁
+- 想把“看起来完成”变成“可验证完成”
 
----
+### `hunt`
 
-## 我到底该怎么选模式
+`hunt` 是正式的诊断入口。
 
-### Quick
+它负责：
 
-用于：
+- 收集证据
+- 提出可验证假设
+- 锁定根因
+- 决定回到 `dev` 还是回到 `think`
 
-- 改动很小
-- 风险很低
-- 验收标准明确
+适合场景：
 
-例子：
+- 报错定位不清楚
+- 验证失败但原因不明
+- 需要先查清再修
 
-- 修一个 UI 显示错误
-- 修一段文案逻辑
-- 补一个很明确的判空
+### `review`
 
-### Standard
+`review` 是正式的最终验收入口。
 
-默认选这个。
+它负责：
 
-用于：
+- 判断是否可合并
+- 判断是否可上线
+- 给出阻断项和剩余风险
+- 给出建议动作
 
-- 正常功能开发
-- 常规 bug 修复
-- 需要补测试或做完整验证
-
-例子：
-
-- 新增登录态续期
-- 修复接口状态同步问题
-- 调整表单提交流程
-
-### Critical
-
-用于：
-
-- 数据迁移
-- 核心流程改造
-- 高风险发布
-- 回滚复杂
-
-例子：
-
-- 改鉴权链路
-- 调整计费流程
-- 重构状态管理主干
+它不是普通 code review，而是交付闭环的最后一道门。
 
 ---
 
-## 主产物只有五类
+## 默认工作流
 
-现在主链路统一收敛为五类主产物：
+### 需求开发链路
+
+```text
+/r-think
+/r-dev
+/r-test
+/r-review
+```
+
+### 排障修复链路
+
+```text
+/r-think
+/r-hunt
+/r-dev
+/r-test
+/r-review
+```
+
+### 小改动快路径
+
+```text
+/r-think --fast
+/r-dev --hotfix
+/r-test --fast
+/r-review --fast
+```
+
+这里的 `--fast` 和 `--hotfix` 只是降低交互成本，不等于跳过验证。
+
+## Flow Runtime 怎么介入
+
+默认主链路现在既有显式 skill，也有对应的内建 flow 骨架：
+
+| Skill | Built-in Flow | 作用 |
+| --- | --- | --- |
+| `think` | `think-clarify` | 恢复上下文、完成澄清、沉淀 `think-ticket / think-plan` |
+| `dev` | `dev-delivery` | 对账变更、推进实现、沉淀 `dev-report` |
+| `test` | `test-verify` | 运行质量门禁并决定回流方向 |
+| `hunt` | `hunt-recovery` | 固化取证、假设、诊断恢复路径 |
+| `review` | `review-acceptance` | 汇总交付证据并输出最终验收结论 |
+
+这些 flow 的定位很克制：
+
+- 确定性步骤交给 runtime
+- 恢复点写进 `.ritsu/flows/*.json`
+- AI 只处理判断位，而不是每次重组整条流程
+
+一个完整恢复链路现在应按这个顺序理解：
+
+1. `ritsu_run_flow` 建立 flow state，并在首个 `ai_decision` 前停住
+2. `ritsu_get_flow_state` 或 `ritsu_resume_flow` 用于找回断点
+3. `ritsu_apply_flow_decision` 用于提交当前判断位，并可选同时写入该步骤声明的 artifacts
+4. runtime 继续推进到下一个 `ai_decision`、失败恢复点或完成态
+
+同一条 flow run 会复用同一个 `correlation_id`，因此 `.ritsu/flows/*.json` 和 `.ritsu/ctx-*.jsonl` 可以按同一任务链路对账。
+此外，`ai_decision` 步骤现在可以声明自己的 decision contract。调用 `ritsu_apply_flow_decision` 时，`decision_output` 和关联 artifacts 必须满足该 step 的最小字段要求。
+这份 contract 现在还可以进一步约束 artifact 内容锚点，例如某个 `think-ticket` 必须包含指定的推荐路径或验证语句。
+
+扩展技能如 `read / document / deploy / optimize / refactor / triage / init` 不会替代主链路，只是围绕交付闭环提供辅助动作。
+
+---
+
+## 主产物有五类
+
+对外工作流已经切到显式 skill，`.ritsu/` 主产物现在推荐使用显式命名；旧名仍兼容可读可写：
 
 | 类型 | 作用 |
 | --- | --- |
-| `intake-ticket` | 记录需求理解、风险分级、执行路径 |
-| `delivery-plan` | 记录实施目标、范围、步骤、验证计划、回滚说明 |
-| `delivery-report` | 记录实际交付结果与风险 |
-| `assurance-report` | 记录最终验收结论 |
-| `release-advice` | 记录发布方式、灰度建议、回滚条件、业务影响 |
+| `think-ticket`（兼容旧名 `intake-ticket`） | 记录需求理解、风险分级、执行路径 |
+| `think-plan`（兼容旧名 `delivery-plan`） | 记录实施目标、范围、步骤、验证计划、回滚说明 |
+| `dev-report`（兼容旧名 `delivery-report`） | 记录实际交付结果与风险 |
+| `review-report`（兼容旧名 `assurance-report`） | 记录最终验收结论 |
+| `review-advice`（兼容旧名 `release-advice`） | 记录发布方式、灰度建议、回滚条件、业务影响 |
 
-这五类之外的产物不是没用，而是地位不同：
+这里要明确一件事：
 
-| 类型 | 角色 |
-| --- | --- |
-| `handoff` | 设计/契约细化证据 |
-| `diagnosis` | 故障定位证据 |
-| `review-stamp` | 兼容镜像 |
-| `optimize-report` | 优化类过程证据 |
+- 这些是 **持久化格式**
+- 括号内是兼容旧名
+- 不是要求你继续按 `route / pipe / assure` 那套黑盒阶段去理解系统
 
-默认读取顺序也应当是：
-
-1. `primary`
-2. `evidence`
-3. `compatibility`
-
-更多解释见 [_shared/artifact-layers.md](/Users/edy/CascadeProjects/Ritsu/_shared/artifact-layers.md:1)。
-
----
-
-## Skill 冗余问题，结论是什么
-
-结论是：**有一些“入口级冗余”还存在，但大部分不是能力冗余，而是暴露层级冗余。**
-
-更具体地说：
-
-### 真正应该让用户直接感知的
-
-- `init`
-- `route`
-- `pipe`
-- `review`
-- `read`
-- `deploy`
-
-### 更适合作为内部能力的
+你在日常使用里仍然只需要关心：
 
 - `think`
 - `dev`
 - `test`
 - `hunt`
-
-### 更适合作为交付模式而不是单独入口的
-
-- `optimize`
-- `refactor`
-
-### 保留为扩展模块的
-
-- `document`
-- `triage`
-
-所以“skill 还多不多”的答案是：
-
-- 从仓库结构看，还是多
-- 从产品入口看，已经应该收敛到很少
-
-当前真正的问题不是必须立刻删文件，而是：
-
-- README 没把“主入口”和“内部能力”分开讲清楚
-- 用户还会误以为自己要在 `think/dev/test/hunt` 之间做路由决策
-
-这次 README 重写，核心就是把这层误解拆掉。
+- `review`
 
 ---
 
-## 如果你只做一种用法
+## 辅助 skill 的定位
 
-最稳的默认方式就是：
+这些 skill 保留，但不是默认交付链路：
 
-```text
-/r-route "描述任务"
-/r-pipe standard "描述任务"
-/r-review
-```
+| skill | 定位 |
+| --- | --- |
+| `read` | 只读理解代码 |
+| `deploy` | 在验收之后执行发布 |
+| `document` | 更新 README、API 文档、CHANGELOG |
+| `triage` | 处理 issue / PR / 工单流转 |
 
-除非你非常明确：
+下面这些不是一线产品入口，而是专项模式能力：
 
-- 只是读代码：`/r-read`
-- 只是发布：`/r-deploy`
-- 已知是极小改动：`/r-pipe quick`
+| skill | 定位 |
+| --- | --- |
+| `optimize` | 减法优化 / 等价替换 |
+| `refactor` | 保持行为不变的结构改善 |
 
-其余 skill 不必先碰。
+---
+
+## 为什么要这样改
+
+旧的编排型入口会有一个根本问题：
+
+- 你知道系统在“交付”
+- 但你不知道它现在是在审需求、写代码、补测试、还是排障
+
+这会导致两个实际问题：
+
+1. 用户判断成本高  
+   因为入口是抽象的，动作是不透明的。
+
+2. AI 行为像黑盒  
+   因为你看到的是“编排状态”，不是“当前技能动作”。
+
+现在这套模型反过来做：
+
+- skill 名就是动作
+- 阶段切换显式可见
+- 用户可以直接决定走 `think`、`dev`、`test`、`hunt`、`review`
+
+这不是功能变少，而是控制感变强。
 
 ---
 
@@ -330,7 +357,7 @@ Ritsu 对外只暴露 3 种交付模式：
 
 ```text
 Ritsu/
-├── skills/     # 兼容入口、内部能力、扩展模块
+├── skills/     # 用户入口、专项模式、扩展模块
 ├── runtime/    # MCP 工具执行层
 ├── _shared/    # 公共协议、schema、模板、产物定义
 ├── rules/      # 全局底线
@@ -339,9 +366,9 @@ Ritsu/
 
 你可以这样理解：
 
-- `skills/` 决定“流程怎么走”
-- `runtime/` 决定“工具怎么执行”
-- `_shared/` 决定“大家说同一种协议”
+- `skills/` 决定 AI 以什么工作动作与你协作
+- `runtime/` 决定工具怎样执行
+- `_shared/` 决定整个系统怎样保持同一套协议
 
 ---
 
@@ -353,23 +380,24 @@ Ritsu/
 - artifact 写入和列出
 - diff / changed-files / exec
 - 质量门禁
-- semantic / kg / sandbox / ts 等增强能力
+- semantic / KG / sandbox / TS 等增强能力
 
-设计原则是：
+设计原则不变：
 
-- 稳定能力进入主链路
+- 稳定能力进入默认交付链路
 - 增强能力按需启用
 - 实验能力不包装成默认承诺
 
 ---
 
-## 当前推荐理解
+## 现在的推荐理解
 
-如果你读完整个仓库后只带走 4 个判断，这就够了：
+如果你读完整个仓库后只带走 5 个判断，这就够了：
 
-1. 主入口是 `route / pipe / review`
-2. 主产物是五类：`intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice`
-3. `think / dev / test / hunt` 主要是 `deliver` 的内部能力，不是默认用户入口
-4. `read` 和 `deploy` 是少数值得单独保留的一线补充命令
+1. 正式主入口是 `think / dev / test / hunt / review`
+2. `read / deploy / document / triage` 是辅助入口
+3. `optimize / refactor` 是专项模式，不是一线入口
+4. 五类主产物只是持久化格式，不是新的黑盒阶段模型
+5. Ritsu 的目标是让 AI 的动作更白盒，而不是把更多编排层塞到用户前面
 
-这也是 Ritsu 现在的收敛方向：不是再加 skill，而是把“需求到交付”的闭环变短、变稳、变清楚。
+这也是当前版本真正的收敛方向：不是再加 skill，而是让你始终知道 AI 正在做哪一种工程动作。

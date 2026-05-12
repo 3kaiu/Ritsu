@@ -1,7 +1,7 @@
 ---
 name: hunt
 version: "3.8.0"
-description: "Ritsu 交付诊断子模块。为 bugfix 和验证失败场景提供证据收集、假设验证和根因定位。"
+description: "Ritsu 主入口。用于证据收集、假设验证、根因定位和交付恢复。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 total_steps: 5
 fast_mode:
@@ -21,13 +21,13 @@ hard_constraints:
     severity: FATAL
 ---
 
-# Hunt: Deliver 诊断子模块 (Bugfix Investigation Module)
+# Hunt: 排障与诊断入口
 
-**触发条件**：用户输入 `/r-hunt`，或 `deliver` 在 bugfix / 验证失败路径中调用。
-
-> 该模块现在主要服务于交付恢复，而不是独立产品入口。
+**触发条件**：用户输入 `/r-hunt`，或 `dev / test / review` 遇到原因不明的问题时调用。
 
 ## 执行流水线
+
+> 若 runtime 可用，先用 `ritsu_run_flow(flow_id="hunt-recovery")` 建立执行骨架；AI 主要处理证据归纳、根因判断和诊断结论，并在判断位结束后用 `ritsu_apply_flow_decision` 回写。
 
 ### 1. 领域解析与上下文绑定
 
@@ -36,9 +36,9 @@ hard_constraints:
 绑定当前诊断上下文：
 
 - 报错信息
-- 最近的 delivery-plan / delivery-report / assurance-report（优先）
-- release-advice（若故障发生在发布或灰度阶段）
-- diagnosis 历史（作为过程证据补充）
+- 最近的 `think-plan / dev-report / review-report`（兼容旧名 `delivery-plan / delivery-report / assurance-report` 同样可读）
+- `review-advice`（兼容旧名 `release-advice`）
+- `diagnosis` 历史
 - 当前 diff
 - 失败的 lint/test 输出
 
@@ -51,14 +51,6 @@ hard_constraints:
 - 当前症状是什么
 - 影响路径在哪
 - 最可能涉及哪些模块
-
-历史案例召回、semantic 检索、KG、sandbox 都只能作为增强手段；它们的职责是加速取证，不是直接代替结论。
-
-如需检索 `.ritsu/` 历史记录，默认策略为：
-
-1. 先调用 `ritsu_semantic_search` 或 `ritsu_semantic_graph_rerank`，使用 `layers=["primary"]`
-2. 若主链路产物不足以解释故障演化，再扩展为 `layers=["evidence"]`
-3. `review-stamp` 仅在需要兼容旧链路判断时才查看
 
 ### 3. 根因假设
 
@@ -76,9 +68,9 @@ hard_constraints:
 
 按置信度从高到低逐个验证：
 
-- 命中 → 锁定根因
-- 排除 → 进入下一条
-- 全部排除 → 回到取证
+- 命中 -> 锁定根因
+- 排除 -> 进入下一条
+- 全部排除 -> 回到取证
 
 ### 5. 根因结论与诊断产物
 
@@ -89,7 +81,7 @@ hard_constraints:
 - 表象是什么
 - 根因是什么
 - 证据是什么
-- 应该回到 `dev` 还是升级到 `think`
+- 应该回到 `dev` 还是回到 `think`
 
 如需落盘，调用 `ritsu_write_artifact`（type=diagnosis）。
 
@@ -98,9 +90,3 @@ hard_constraints:
 写入 ctx：
 
 > 引用 `_shared/skill-common-steps.md` Step 2（skill=hunt, artifact=.ritsu/diagnosis-{ts}.md）
-
----
-
-## 关联流转
-
-> 引用 `_shared/skill-common-steps.md` Step 3（skill=hunt）

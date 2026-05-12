@@ -3,6 +3,11 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { runGit } from "./_git-utils.js";
 import {
+  detectArtifactTypeFromFileName,
+  getCanonicalArtifactType,
+  getPreferredArtifactType,
+} from "../shared.js";
+import {
   getProjectRoot,
   errorResult,
   textResult,
@@ -11,6 +16,7 @@ import {
 
 const CONTRACT_ARTIFACT_PRIORITY = [
   { type: "handoff", prefix: "handoff-" },
+  { type: "think-ticket", prefix: "think-ticket-" },
   { type: "intake-ticket", prefix: "intake-ticket-" },
 ] as const;
 
@@ -77,10 +83,7 @@ function extractExpectedIdentifiersFromContract(content: string): string[] {
 
 function detectContractArtifactType(path: string): string {
   const fileName = path.split("/").pop() ?? path;
-  return (
-    CONTRACT_ARTIFACT_PRIORITY.find(({ prefix }) => fileName.startsWith(prefix))
-      ?.type ?? "unknown"
-  );
+  return detectArtifactTypeFromFileName(fileName) ?? "unknown";
 }
 
 function findLatestContractArtifact(root: string): {
@@ -192,7 +195,9 @@ export async function ritsu_contract_validate(
       covered: coverage.covered,
       missing: coverage.missing,
       artifact_path: artifactPath,
-      artifact_type: artifactType,
+      artifact_type: getPreferredArtifactType(artifactType),
+      canonical_type: getCanonicalArtifactType(artifactType),
+      detected_type: artifactType,
       handoff_path: artifactPath,
       cached,
     }),

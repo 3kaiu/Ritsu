@@ -1,7 +1,11 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
 import { validateEvent } from "../event-validator.js";
-import { ARTIFACT_LAYER_MAP } from "../shared.js";
+import {
+  ARTIFACT_LAYER_MAP,
+  getCanonicalArtifactType,
+  getPreferredArtifactType,
+} from "../shared.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
 
 export async function ritsu_emit_event(
@@ -36,10 +40,20 @@ export async function ritsu_emit_event(
   if (params.artifact !== undefined) event.artifact = params.artifact;
   if (params.error) event.error = String(params.error);
   if (rawArtifactMeta) {
-    const artifactType =
+    const rawArtifactType =
       typeof rawArtifactMeta.type === "string" ? rawArtifactMeta.type : "";
+    const artifactType = rawArtifactType
+      ? getPreferredArtifactType(rawArtifactType)
+      : "";
+    const canonicalType = rawArtifactType
+      ? getCanonicalArtifactType(rawArtifactType)
+      : "";
     event.artifact_meta = {
       ...rawArtifactMeta,
+      ...(artifactType ? { type: artifactType } : {}),
+      ...(canonicalType && !rawArtifactMeta.canonical_type
+        ? { canonical_type: canonicalType }
+        : {}),
       ...(artifactType && !rawArtifactMeta.layer
         ? { layer: ARTIFACT_LAYER_MAP[artifactType] ?? "system" }
         : {}),

@@ -38,7 +38,7 @@ export function usage(): string {
     "ritsu cat --recent <N>     # 展示最近 N 条 ctx 事件",
     "ritsu cat --file <path>    # 直接指定 ctx jsonl 文件路径",
     "",
-    "ctx skill display:",
+    "legacy ctx alias display:",
     `  ${SKILL_MAPPING_DISPLAY}`,
     "\nENV:",
     "  RITSU_PROJECT_ROOT       # 项目根目录（默认当前目录）",

@@ -1,0 +1,84 @@
+flow_id: dev-delivery
+phase: dev
+intent: implementation_delivery
+required_inputs:
+  - task_contract
+prechecks:
+  - step_id: load_ctx
+    title: Restore delivery context
+    executor_type: tool
+    action: read_ctx
+    success_condition: "ctx snapshot loaded"
+    on_failure: "record recovery point and continue with explicit fresh-session warning"
+  - step_id: collect_changed_files
+    title: Inspect current changed files
+    executor_type: tool
+    action: get_changed_files
+    success_condition: "changed files snapshot collected"
+    on_failure: "stop and repair git reality before implementation"
+  - step_id: collect_diff
+    title: Inspect current diff
+    executor_type: tool
+    action: get_diff
+    success_condition: "diff summary collected"
+    on_failure: "stop and repair git reality before implementation"
+  - step_id: load_agents
+    title: Read project rules baseline
+    executor_type: tool
+    action: read_agents
+    optional: true
+    success_condition: "AGENTS.md parsed or skipped"
+    on_failure: "continue with workspace heuristics and flag assumptions"
+steps:
+  - step_id: implement_change
+    title: Apply the implementation
+    executor_type: ai_decision
+    required_context:
+      - task_contract
+      - changed_files
+      - diff
+    decision_contract:
+      required_decision_keys:
+        - implementation_summary
+        - changed_files_summary
+        - validation_notes
+    success_condition: "requested change is implemented within scope"
+    on_failure: "write recovery point and return to think or hunt based on failure type"
+  - step_id: write_dev_report
+    title: Produce dev-report
+    executor_type: ai_decision
+    required_context:
+      - implementation_delta
+      - validation_notes
+    decision_contract:
+      required_decision_keys:
+        - delivery_summary
+        - residual_risks
+      required_artifacts:
+        - dev-report
+    writes_artifact:
+      - dev-report
+    success_condition: "delivery evidence and residual risks are explicit"
+    on_failure: "hold before test"
+verifications:
+  - step_id: verify_dev_report_inventory
+    title: Verify dev-report inventory
+    executor_type: tool
+    action: list_artifacts
+    action_params:
+      type: dev-report
+    success_condition: "dev-report exists for this delivery cycle"
+    on_failure: "hold before test or review"
+artifacts:
+  - dev-report
+failure_recovery:
+  - persist recovery_point=current_step
+  - preserve changed files and diff snapshots
+  - recommend test or hunt only after implementation scope is restated
+next_phase_rules:
+  - when: "implementation is complete and validation is needed"
+    next_phase: test
+  - when: "implementation revealed unclear root cause"
+    next_phase: hunt
+  - when: "scope was invalidated"
+    next_phase: think

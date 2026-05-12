@@ -34,7 +34,7 @@
         "read",
         "refactor"
       ],
-      "description": "技能名（当前落盘仍使用兼容 skill 名 / 文件名，如 route= intake、pipe=deliver、review=assure）"
+      "description": "技能名。默认记录实际工作技能；读取旧历史时仍可能遇到 legacy alias，如 route=旧版 think、pipe=旧版编排入口"
     },
     "domain": {
       "type": "string",
@@ -66,6 +66,11 @@
         "type": {
           "type": "string",
           "enum": [
+            "think-ticket",
+            "think-plan",
+            "dev-report",
+            "review-report",
+            "review-advice",
             "intake-ticket",
             "delivery-plan",
             "delivery-report",
@@ -77,12 +82,28 @@
             "optimize-report",
             "ctx"
           ],
-          "description": "产物类型。取值和层级划分应与 _shared/artifact-layers.md 保持一致"
+          "description": "对外首选产物类型别名；非主产物保持原名。取值和层级划分应与 _shared/artifact-layers.md 保持一致"
+        },
+        "canonical_type": {
+          "type": "string",
+          "enum": [
+            "intake-ticket",
+            "delivery-plan",
+            "delivery-report",
+            "assurance-report",
+            "release-advice",
+            "handoff",
+            "diagnosis",
+            "review-stamp",
+            "optimize-report",
+            "ctx"
+          ],
+          "description": "兼容旧名或底层 schema key 的 canonical 产物类型。主产物推荐在已知时显式填写"
         },
         "layer": {
           "type": "string",
           "enum": ["primary", "evidence", "compatibility", "system"],
-          "description": "产物层级。建议显式写入，便于下游按主链路/过程证据/兼容镜像分层消费"
+          "description": "产物层级。建议显式写入，便于下游按主产物/过程证据/兼容镜像分层消费"
         },
         "size_bytes": {
           "type": "integer",

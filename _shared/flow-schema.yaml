@@ -1,0 +1,73 @@
+# Ritsu Flow Manifest Schema v3.8.0
+#
+# 这是交付流程运行时消费的声明式结构定义。
+# 首版目标不是覆盖所有自动化，而是把交付闭环里稳定、重复的骨架固化下来。
+
+required_top_level:
+  - flow_id
+  - phase
+  - intent
+  - required_inputs
+  - prechecks
+  - steps
+  - verifications
+  - artifacts
+  - failure_recovery
+  - next_phase_rules
+
+phase_enum:
+  - think
+  - dev
+  - test
+  - hunt
+  - review
+  - extensions
+
+executor_types:
+  - deterministic
+  - tool
+  - ai_decision
+
+step_contract:
+  required_fields:
+    - step_id
+    - executor_type
+    - success_condition
+    - on_failure
+  optional_fields:
+    - title
+    - action
+    - required_context
+    - action_params
+    - decision_contract
+    - writes_artifact
+    - optional
+    - notes
+
+ai_decision_contract:
+  optional_fields:
+    - required_decision_keys
+    - required_artifacts
+    - artifact_expectations
+    - allow_empty_decision_output
+    - notes
+
+# 语义说明
+# - required_decision_keys: ritsu_apply_flow_decision 时，decision_output 中必须存在的顶层字段
+# - required_artifacts: 本次判断位必须同时写入的 artifact 类型，且必须是该 step.writes_artifact 的子集
+# - artifact_expectations: 针对某个 artifact 类型声明额外内容锚点，例如 required_contains
+# - allow_empty_decision_output: 为 true 时，允许 decision_output 为空；否则至少应提供对象
+
+phase_artifact_expectations:
+  think:
+    preferred_any_of: [think-ticket, think-plan]
+  dev:
+    preferred_any_of: [dev-report]
+  test:
+    preferred_any_of: []
+  hunt:
+    preferred_any_of: [diagnosis]
+  review:
+    preferred_any_of: [review-report, review-advice]
+  extensions:
+    preferred_any_of: []

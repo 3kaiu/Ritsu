@@ -4,10 +4,16 @@ import { resolve, relative } from "node:path";
 import { getProjectRoot, errorResult, textResult } from "./_utils.js";
 import { cosineSimilarity, getEmbedder } from "./_semantic-embed.js";
 import { bfsWithParents, reconstructPath } from "./_graph-utils.js";
+import {
+  getCanonicalArtifactType,
+  getPreferredArtifactType,
+  isArtifactTypeInSameFamily,
+} from "../shared.js";
 
 type SemanticIndexEntry = {
   id: string;
   artifact_type: string;
+  canonical_type?: string;
   artifact_layer?: string;
   path: string;
   chunk_index: number;
@@ -42,6 +48,7 @@ type Match = {
   kg_score: number;
   path: string;
   artifact_type: string;
+  canonical_type: string;
   artifact_layer: string;
   chunk_index: number;
   heading?: string;
@@ -199,9 +206,17 @@ export async function ritsu_semantic_graph_rerank(
   const matches: Match[] = [];
 
   for (const e of index.entries) {
-    if (types.length > 0 && !types.includes(e.artifact_type)) continue;
+    if (
+      types.length > 0 &&
+      !types.some((type) => isArtifactTypeInSameFamily(type, e.artifact_type))
+    ) {
+      continue;
+    }
     const artifactLayer = e.artifact_layer ?? "system";
     if (layers.length > 0 && !layers.includes(artifactLayer)) continue;
+    const artifactType = getPreferredArtifactType(e.artifact_type);
+    const canonicalType =
+      e.canonical_type ?? getCanonicalArtifactType(e.artifact_type);
 
     const semanticScore = cosineSimilarity(q, e.embedding);
 
@@ -226,7 +241,8 @@ export async function ritsu_semantic_graph_rerank(
       semantic_score: semanticScore,
       kg_score: kgScore,
       path: e.path,
-      artifact_type: e.artifact_type,
+      artifact_type: artifactType,
+      canonical_type: canonicalType,
       artifact_layer: artifactLayer,
       chunk_index: e.chunk_index,
       heading: e.heading,

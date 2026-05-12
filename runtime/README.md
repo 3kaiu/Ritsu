@@ -2,24 +2,58 @@
 
 > Runtime: `3.5.1` · Protocol: `v3.8.0`
 
-`runtime/` 是 Ritsu 的工具执行层，不负责定义产品入口。  
-产品面已经收敛为 `intake / deliver / assure`，而 runtime 的职责是提供这些阶段会调用到的稳定工具和增强工具。
+`runtime/` 是 Ritsu 的工具执行层，不负责定义新的用户入口。
 
-从 runtime 视角，所有能力都应被明确归入以下三类之一：
+当前默认工作流已经切到显式 skill：
 
-1. `Core Stable`：主链路默认依赖，必须优先保证稳定性
-2. `Advanced Plugin`：可选增强，默认不承诺总能带来收益
-3. `Experimental Track`：探索性能力，不进入默认交付承诺
+- `think`
+- `dev`
+- `test`
+- `hunt`
+- `review`
 
-当前状态需要明确区分两层：
+runtime 的职责是为这套白盒工作流提供稳定工具，而不是再把用户包进黑盒编排里。
 
-1. **产品语义**：`intake / deliver / assure`
-2. **运行时现实**：主链路产物 `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice` 已接入核心读写、列表与检索路径；legacy 产物 `handoff / diagnosis / review-stamp / optimize-report` 仍保留为过程证据或兼容镜像
+现在 runtime 还额外提供一层轻量的 flow runtime：
 
-这意味着：
+- `Flow Registry`：从 `_shared/flows/*.yaml` 加载交付流程模板
+- `Flow Runner`：按 precheck -> steps -> verifications 执行，并在 `.ritsu/flows/*.json` 写恢复状态
+- `Execution Adapters`：把 `read_ctx / read_agents / get_diff / quality_gates` 之类的稳定动作接成可复用 flow step
 
-- README 和 skill 文档已经按新模型收敛
-- runtime 已完成主链路对齐，但增强能力仍不应被包装成默认承诺
+主链路的最小闭环是：
+
+1. `ritsu_run_flow` 创建 flow run，并在 `ai_decision` 步骤停下
+2. AI 根据当前判断位产出结论
+3. `ritsu_apply_flow_decision` 提交 decision payload，必要时同时写主产物
+4. runtime 自动继续推进，直到下一个 `ai_decision`、失败或完成
+
+flow state 中会保存 `correlation_id`，用于和 ctx 事件流对账。
+若某个 `ai_decision` step 在 manifest 中声明了 `decision_contract`，runtime 会在 `ritsu_apply_flow_decision` 时校验 `decision_output` 的必填字段，以及必须附带的 artifact 类型。
+`decision_contract` 还支持对 artifact 内容做最小语义校验，例如要求某种 artifact 至少包含若干 `required_contains` 标记。
+当这些 contract 校验失败时，`ritsu_apply_flow_decision` 会返回 `isError=true`，并在响应文本中提供结构化 JSON：`error.type / error.message / error.violations[]`。
+`error.violations[]` 现在会尽量一次性收集同一轮提交里可观察到的全部 contract 问题，而不是在第一条失败时立即停止。
+`error.violations[]` 也会按稳定顺序返回，当前排序规则是 `severity -> step_id -> path -> code`。
+对于 artifact schema 校验，同一份 artifact 内的多个缺 section / 缺 field label 问题也会被一起收集返回。
+`error.violations[].path` 现在会区分不同层级，例如：
+
+- `decision_output`
+- `artifacts.think-ticket.content.markers.<marker>`
+- `artifacts.think-ticket.artifact.sections.<section>`
+- `artifacts.think-ticket.artifact.sections.<section>.fields.<label>`
+
+`error.violations[].actual` 也会尽量返回当前观测值：
+
+- 对 `missing_decision_keys`，表示已收到的 decision 顶层 keys
+- 对 `artifact_content_missing_markers`，表示 artifact 中同标签的实际内容行
+- 对 `artifact_schema_missing_section`，表示 artifact 中当前已有的 section 标题
+- 对 `artifact_schema_missing_field_label`，表示该 section 中当前检测到的字段标签
+
+`error.violations[].severity` 当前固定为 `error`，用于给上层保留稳定的优先级字段。
+
+直接调用 `ritsu_write_artifact` 时，如果命中 artifact schema 校验失败，也会返回结构化 JSON：
+`error.type / error.message / error.violations[]`。这组 `violations[]` 与 flow decision 中的 artifact schema violation 字段语义保持一致，只是不包含 `step_id`，且 `path` 直接从 `artifact.sections...` 开始。
+对于常见写入拒绝（缺必填字段、placeholder、非法 type、文件名前缀不匹配、路径穿越、文件已存在），`ritsu_write_artifact` 现在同样返回结构化 JSON，`error.type` 为 `ArtifactWriteError`。
+底层原子写入失败（例如 rename/write 阶段的 IO 异常）现在也会返回同一类 `ArtifactWriteError`。
 
 ---
 
@@ -32,44 +66,6 @@ npm run build
 npm start
 ```
 
-CLI 辅助查看 ctx 时，`ritsu cat` 会保留底层兼容 `skill` 值，并在适用时附带产品阶段映射：
-
-- `route -> intake`
-- `pipe -> deliver`
-- `review -> assure`
-
-同时会在输出头部打印一行 `skill mapping`，避免只看单条事件时误把兼容 `skill` 值当成产品阶段名。
-
----
-
-## IDE 集成
-
-### Cursor
-
-在 `.cursorrules` 或项目 MCP 配置中添加：
-
-```json
-{
-  "mcpServers": {
-    "ritsu": {
-      "command": "node",
-      "args": ["/path/to/ritsu/runtime/dist/index.js"],
-      "env": {
-        "RITSU_PROJECT_ROOT": "/path/to/your/project"
-      }
-    }
-  }
-}
-```
-
-### Windsurf
-
-在 `.windsurfrules` 或 MCP 配置中添加相同配置。
-
-### Claude Desktop
-
-在 `claude_desktop_config.json` 中添加相同结构。
-
 ---
 
 ## Runtime 角色
@@ -80,6 +76,7 @@ runtime 主要负责四类能力：
    - ctx 读写
    - artifact 落盘
    - artifact 列表和检索
+   - flow state 读写与恢复
 
 2. **工作区证据**
    - changed files
@@ -103,11 +100,15 @@ runtime 主要负责四类能力：
 
 ### Core Stable
 
-这些工具属于主链路默认依赖：
-
 - `ritsu_emit_event`
 - `ritsu_read_ctx`
 - `ritsu_read_agents`
+- `ritsu_list_flows`
+- `ritsu_validate_flow`
+- `ritsu_run_flow`
+- `ritsu_resume_flow`
+- `ritsu_get_flow_state`
+- `ritsu_apply_flow_decision`
 - `ritsu_write_artifact`
 - `ritsu_list_artifacts`
 - `ritsu_exec`
@@ -115,14 +116,7 @@ runtime 主要负责四类能力：
 - `ritsu_get_diff`
 - `ritsu_run_quality_gates`
 
-说明：
-
-- `ritsu_exec` 当前仍在 `Core Stable`，但它的定位应保持克制：主要作为受控工作区证据工具，而不是泛化执行引擎
-- 未来若其使用边界继续扩大，应重新评估是否降级为插件能力
-
 ### Advanced Plugin
-
-这些工具保留，但默认作为可选增强项消费：
 
 - `ritsu_contract_validate`
 - `ritsu_build_kg`
@@ -137,21 +131,43 @@ runtime 主要负责四类能力：
 - `ritsu_semantic_search`
 - `ritsu_semantic_graph_rerank`
 
-说明：
-
-- `ritsu_contract_validate` 虽然和主链路强相关，但当前仍是启发式“实施契约覆盖率”工具，应被视作辅助信号，而不是最终事实来源
-- semantic / KG / TS / sandbox / env 系列工具当前都应按“best-effort plugin”理解
-
 ### Experimental Track
-
-这些能力已经存在方向或实现雏形，但当前不应被当作默认运行时承诺：
 
 - `runtime/core` 中的 Rust/WASM 加速路径
 
-说明：
+---
 
-- 只有当 Rust/WASM 真实接入事件校验、ctx 索引或 correlation 热路径后，它才能从 `Experimental Track` 升级
-- 在接入之前，不应把它写成 runtime 的默认能力
+## 当前语义
+
+用户看到的主工作流是：
+
+```text
+think -> dev -> test / hunt -> review
+```
+
+底层持久化产物推荐使用显式别名，旧名兼容：
+
+- `think-ticket`（兼容旧名 `intake-ticket`）
+- `think-plan`（兼容旧名 `delivery-plan`）
+- `dev-report`（兼容旧名 `delivery-report`）
+- `review-report`（兼容旧名 `assurance-report`）
+- `review-advice`（兼容旧名 `release-advice`）
+
+这两层不要混淆：
+
+- **工作流语义**：你当前在做什么
+- **产物语义**：系统把过程怎样落盘
+
+---
+
+## Legacy 兼容
+
+runtime 仍可能读取到旧 ctx 记录里的 alias：
+
+- `route` -> 旧版 `think`
+- `pipe` -> 旧版编排入口，读取时按接近的开发阶段理解
+
+CLI 会把它们标成 legacy alias，避免误导成当前推荐入口。
 
 ---
 
@@ -159,123 +175,22 @@ runtime 主要负责四类能力：
 
 ```text
 runtime/src/
-├── index.ts            # MCP Server 入口（stdio transport）
-├── schema-compiler.ts  # mcp-tools.yaml → JSON Schema 编译器
-├── event-validator.ts  # ctx-event-schema.json + ajv 校验
+├── index.ts            # MCP Server 入口
+├── schema-compiler.ts  # mcp-tools.yaml -> JSON Schema
+├── event-validator.ts  # ctx-event-schema.json 校验
 ├── ctx-reader.ts       # ctx 读取
 ├── ctx-writer.ts       # ctx 写入
 └── handlers/           # 工具 handler 注册与实现
 ```
 
-> `handlers/index.ts` 当前注册的 handler 数量已经明显多于早期文档中的“8/9 个工具”。  
-> 文档应以实际注册表为准，而不是历史数字。
-
 ---
 
-## Legacy 产物现实
-
-虽然产品语义已经转向 `intake / deliver / assure`，runtime 仍会接触 legacy 产物与过程证据：
-
-- `handoff-*`
-- `diagnosis-*`
-- `review-stamp-*`
-- `optimize-report-*`
-- `ctx-*`
-
-但主链路产物已经进入稳定运行时能力：
-
-- `ritsu_write_artifact` 返回标准化 `artifact_meta`
-- `ritsu_emit_event` 会为 `artifact_written` 自动补 `artifact_meta.layer`
-- `ritsu_list_artifacts` 返回 `artifact_type + artifact_layer`
-- `ritsu_semantic_index_build / search / graph_rerank` 已写入并返回 `artifact_layer`
-
-因此当前更准确的理解是：五类主链路产物已打通，legacy 保留兼容。
-
-对 runtime 的实施原则应理解为：
+## 产物原则
 
 - `primary` 产物优先
 - `evidence` 产物补充解释
 - `compatibility` 产物只为迁移期或旧调用方保留
 
-ctx 事件里的 `skill` 字段也仍保留兼容命名：
+更多解释见：
 
-- `route` = `intake`
-- `pipe` = `deliver`
-- `review` = `assure`
-
-也就是说，ctx 恢复和事件审计看到的是底层兼容 `skill` 值；产品解释仍按 `intake / deliver / assure` 阅读。
-若看到 `think`，应理解为 `deliver` 内部的设计/诊断模块，而不是额外的产品入口。
-
-`ritsu_read_ctx` 现在同时返回两层信息：
-
-- `recovery_context.skill` / `circuit_breaker_status.should_redirect` = 底层兼容 `skill` 值
-- `recovery_context.stage` / `circuit_breaker_status.recommended_stage` = 产品阶段语义
-
-同样，`last_incomplete` 与 `last_completed` 也会附带 `stage`，这样整个恢复相关返回结构保持一致。
-`recent_entries` 与 `recent_entries_pruned` 现在也会附带 `stage`，因此所有主要 ctx 事件视图都能直接按产品阶段消费。
-
-产物层级解释统一见：
-
-- `_shared/artifact-layers.md`
-
-按当前约定：
-
-- `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice` = 主链路产物
-- `handoff / diagnosis / optimize-report` = 过程证据产物
-- `review-stamp` = 兼容镜像产物
-
-其中 `ritsu_contract_validate` 当前语义为：
-
-- 它校验的是“实施契约”，因此是分层消费规则下的特例
-- 优先读取最新 `handoff-*`
-- 若不存在则回退到最新 `intake-ticket-*`
-- `delivery-report` 与 `assurance-report` 仍不作为实施契约来源
-- 返回中的 `artifact_path / artifact_type` 是当前主字段；`handoff_path` 仅为兼容旧调用方保留，当前语义等同 `artifact_path`
-
-而历史检索工具的默认消费顺序应理解为：
-
-- 先查 `primary`
-- 不足时再查 `evidence`
-- 必要时才查看 `compatibility`
-
-主产物模板当前统一维护在：
-
-- `_shared/artifact-templates.md`
-
-若调整 `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice` 的章节名或字段标签，必须同时检查：
-
-- `_shared/artifact-schema.yaml`
-- `_shared/artifact-templates.md`
-- `_shared/mcp-tools.yaml`
-- `skills/route|pipe|review/SKILL.md`（当前兼容文件名，对应 `intake / deliver / assure`）
-
----
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-| --- | --- | --- |
-| `RITSU_PROJECT_ROOT` | `process.cwd()` | 目标项目根目录 |
-| `RITSU_SHARED_DIR` | 内置解析 | 可选，共享协议目录覆盖 |
-
----
-
-## 开发
-
-```bash
-npm run dev
-npm run lint
-npm run build
-npm run test
-```
-
----
-
-## 现阶段原则
-
-当前 runtime 的演进原则很简单：
-
-- 先把产品面和协议层讲清楚
-- 再让 `Core Stable` 工具层逐步做硬
-- `Advanced Plugin` 只在证明确实带来收益时才抬升地位
-- 不用夸大实验能力的默认可靠性
+- [_shared/artifact-layers.md](/Users/edy/CascadeProjects/Ritsu/_shared/artifact-layers.md:1)

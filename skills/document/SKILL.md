@@ -1,7 +1,7 @@
 ---
 name: document
 version: "3.8.0"
-description: "Ritsu 扩展模块。用于维护 README、API 文档、CHANGELOG 和注释，不属于主交付链路。"
+description: "Ritsu 扩展模块。用于维护 README、API 文档、CHANGELOG 和注释，不属于默认交付链路。"
 when_to_use: "/r-doc, 写文档, 更新文档, API文档, CHANGELOG, README, JSDoc"
 total_steps: 4
 fast_mode:
@@ -25,7 +25,8 @@ hard_constraints:
 
 **触发条件**：用户输入 `/r-doc`，或交付完成后需要补文档时调用。
 
-> 该模块属于扩展能力，不属于主链路一线入口。
+> 该模块属于扩展能力，不属于默认交付链路的一线入口。
+> 它通常挂在某次 `think/dev/review` 交付之后，用来补齐主链路已经确认的事实，不应反向改写交付结论。
 
 ## 执行流水线
 

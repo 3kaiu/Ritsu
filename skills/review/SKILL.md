@@ -1,14 +1,14 @@
 ---
 name: review
 version: "3.8.0"
-description: "Ritsu 最终验收入口。基于代码、验证结果和风险状态，给出是否可合并、可上线的结论。"
-when_to_use: "/r-review, review, code review, 审查代码, 看看有没有漏洞"
+description: "Ritsu 主入口。基于代码、验证结果和风险状态给出最终验收结论。"
+when_to_use: "/r-review, review, code review, 审查代码, 最终验收, 看看能不能合并"
 total_steps: 5
 fast_mode:
   skip_steps: [4]
   skip_artifacts: false
   self_test: null
-  description: "跳过领域语义深审，优先产出快速验收结论，仍写 assurance-report；命中发布判断场景时仍补 release-advice"
+  description: "跳过深度风险扩展，优先产出快速验收结论"
 hard_constraints:
   - id: HC-1
     rule: "阻断项命中后必须给出不可合并/不可上线结论，禁止继续包装成可接受风险"
@@ -20,19 +20,17 @@ hard_constraints:
     rule: "变更获取必须同时使用工作区和暂存区两个命令"
     severity: FATAL
   - id: HC-4
-    rule: "验收结论必须同时覆盖阻断项、剩余风险和建议动作，禁止只给模糊结论"
+    rule: "验收结论必须同时覆盖阻断项、剩余风险和建议动作"
     severity: FATAL
 ---
 
-# Review: Assure 最终验收入口 (Final Assurance Gate)
+# Review: 最终验收入口
 
 **触发条件**：用户输入 `/r-review`。
 
-> 当前文件名仍为 `review`，但产品语义上承担 `assure`。
-
-> ⚡ **fast 模式**：`/r-review --fast` 或变更 ≤3 文件/≤30 行时自动触发。优先产出快速验收结论，再决定是否需要深审。
-
 ## 执行流水线
+
+> 若 runtime 可用，先用 `ritsu_run_flow(flow_id="review-acceptance")` 建立执行骨架；AI 主要处理阻断判断、验收结论和发布姿态，并在判断位结束后用 `ritsu_apply_flow_decision` 回写。
 
 ### 1. 领域解析
 
@@ -47,53 +45,23 @@ hard_constraints:
 同时收集本次交付的核心证据：
 
 - 变更内容
-- intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice（优先）
-- handoff / diagnosis（作为过程证据补充）
+- `think-ticket / think-plan / dev-report / review-report / review-advice`（兼容旧名 `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice` 同样可读）
+- `handoff / diagnosis`
 - 质量门禁结果
 - 契约覆盖情况
 - 是否存在高风险变更
-
-调用 `ritsu_read_agents` 获取项目级规则覆盖：
-
-- 若存在 `rules_overrides.add` 且 `scope=review`，将其视为额外阻断项
-
-调用 **`ritsu_list_artifacts`**：
-
-- 先检查 `intake-ticket / delivery-report / assurance-report` 是否齐全，确认主链路溯源是否完整
-- 若任务属于 `standard / critical`，或本次存在明确发布姿态判断，再进一步检查 `delivery-plan / release-advice` 是否应存在且已对账
-- 若存在 `delivery-plan`，核对其目标范围、验证计划与最终交付是否一致
-- 若存在 handoff，再逐条核对契约和实施清单
-- 若仅存在 intake-ticket，明确标注“仅有 intake 溯源，缺少细化实施契约”
-- 若主链路与 handoff 均不存在，明确标注“无契约溯源”
-
-若需要做历史相似问题或历史验收结论检索，默认策略为：
-
-1. 先调用 `ritsu_semantic_search` 或 `ritsu_semantic_graph_rerank`，使用 `layers=["primary"]`
-2. 若主链路产物不足以解释风险或实施偏差，再扩展为 `layers=["evidence"]`
-3. `review-stamp` 仅作为兼容镜像参考，不作为默认首查对象
-
-调用 **`ritsu_run_quality_gates`** 执行 Lint + Test，记录结果。
-
-调用 `ritsu_contract_validate({min_coverage: 0.8})`：
-
-- 该工具校验的是“实施契约”，因此自动选源时优先读取 handoff；这不改变历史检索默认仍应先查 `primary`
-- `passed=true` → 继续
-- `passed=false` → 记为高风险或阻断项，视情况要求回补实现或回到设计
-- 若 `artifact_type=intake-ticket`，应额外说明该覆盖率仅代表粗粒度契约，不等同 handoff 级实施清单覆盖
 
 ### 3. 阻断项检查
 
 `[Step 2 Complete]` 后进入步骤 3。
 
-按优先级检查 `_shared/anti-patterns.yaml` review 红线 R-1~R-6。
+按优先级检查 `_shared/anti-patterns.yaml` review 红线。
 
 一旦命中阻断项，必须立即给出：
 
 - 不可合并 / 不可上线
 - 阻断原因
 - 建议回退路径
-
-若未命中阻断项，则继续进入风险与建议评估。
 
 ### 4. 风险与建议评估
 
@@ -103,104 +71,28 @@ hard_constraints:
 
 同时必须额外输出：
 
-- 至少 **3 条潜在风险**（触发条件 + 影响 + 如何验证）
-- 至少 **2 条改进建议**（不要求本次立即处理）
+- 至少 3 条潜在风险（触发条件 + 影响 + 如何验证）
+- 至少 2 条改进建议
 
 ### 5. 写入验收结论
 
 `[Step 4 Complete]` 后进入步骤 5。
 
-优先调用 **`ritsu_write_artifact`**（type=`assurance-report`）写入主验收产物：
+优先写 `review-report`。
 
-- md 路径：`.ritsu/assurance-report-{YYYYMMDD-HHMMSS}.md`
+当本次验收需要给出明确发布姿态时，额外写 `review-advice`。
 
-内容至少覆盖：
+若结果为 FAIL，必须明确建议回到：
 
-- `## 验收结论`
-  - `合并结论`
-  - `上线结论`
-- `## 阻断项与风险`
-  - `阻断项`
-  - `剩余风险`
-- `## 建议动作`
-  - `建议下一步`
+- `dev`
+- `test`
+- `hunt`
+- `think`
 
-推荐骨架：
-
-> 引用 `_shared/artifact-templates.md` Assurance Report
-
-当本次验收需要给出明确发布姿态时，必须额外调用 **`ritsu_write_artifact`**（type=`release-advice`）写入发布建议产物。
-
-建议触发条件：
-
-- 需要解释如何上线，而不只是判断能否上线
-- 任务涉及灰度、放量、回滚窗口或跨角色协作
-- 需要把“能否上线”翻译成“如何上线/如何暂缓上线”的可执行建议
-
-`release-advice` 内容至少包含：
-
-- `## 发布建议`
-  - `合并建议`
-  - `上线建议`
-  - `灰度/放量建议`
-- `## 风险与回滚`
-  - `发布风险`
-  - `回滚条件`
-- `## 业务影响摘要`
-  - `业务影响`
-  - `协作说明`
-
-推荐骨架：
-
-> 引用 `_shared/artifact-templates.md` Release Advice
-
-如当前下游仍依赖 legacy 产物，可附加写入一份精简 **`review-stamp`** 作为兼容镜像；但产品语义上，`assurance-report` 才是主验收结论。
-
-若同时产出 `release-advice`，则：
-
-- `assurance-report` 负责验收判定
-- `release-advice` 负责发布建议与业务影响说明
-- 二者共同构成 assure 阶段的完整主输出
-
-按 `_shared/artifact-schema.yaml` 对应 Schema 写入，同时在会话末尾内联输出。
-
-**验收结论必须显式包含**：
-
-- 合并结论：`mergeable / not_mergeable`
-- 上线结论：`deployable / not_deployable / deployable_with_risk`
-- 阻断项
-- 剩余风险
-- 建议下一步
-
-若本次结果为 FAIL，或检测到熔断将重定向至 `/r-think`，则主验收产物需追加：
-
-```markdown
-## 熔断反馈（给 /r-think）
-
-- 失败摘要: {一句话}
-- 命中规则: {规则列表}
-- 需要升维确认的问题:
-  - {问题1}
-  - {问题2}
-- 推荐的重设边界/契约调整:
-  - {建议1}
-```
-
-**交付摘要**：
+之一，而不是只给模糊结论。
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=review）
 
-**⚠️ 熔断检测 (Circuit Breaker)**：
+写入 ctx：
 
-- 若连续失败达到阈值，禁止继续在原路径上来回重试
-- 必须引导回 `/r-think` 或要求人工介入
-
-写入 ctx-{YYYY-MM}.jsonl：
-
-> 引用 `_shared/skill-common-steps.md` Step 2（skill=review, artifact=.ritsu/assurance-report-{ts}.md）
-
----
-
-## 关联流转
-
-> 引用 `_shared/skill-common-steps.md` Step 3（skill=review）
+> 引用 `_shared/skill-common-steps.md` Step 2（skill=review, artifact=.ritsu/review-report-{ts}.md；兼容旧名前缀）

@@ -1,71 +1,69 @@
 # Ritsu 全局状态机 v3.8.0
-# 优先表达产品阶段流转，而不是让用户承受过细的 skill 心智负担。
+# 优先表达显式 skill 工作流，而不是隐藏式编排阶段。
 
 states:
-  intake:
-    owned_by: route
-    next:
-      [deliver.quick, deliver.standard, deliver.critical, assure, extensions]
+  think:
+    owned_by: think
+    next: [dev, review, extensions]
     rules:
-      - "intake 的职责是形成 intake-ticket，而不是直接展开全部实现细节"
-      - "若信息严重缺失，应先补信息，再进入 deliver"
+      - "think 负责需求审核、范围澄清、风险判断与契约确认"
+      - "当信息严重缺失时，应先补信息，而不是直接进入实现"
+      - "若边界已清晰，可直接把实施清单交给 dev"
 
-  deliver.quick:
-    owned_by: pipe
-    next: [assure, deliver.standard]
+  dev:
+    owned_by: dev
+    next: [test, hunt, review, think]
     rules:
-      - "适用于小改动、低风险、信息充分的任务"
-      - "可降低交互成本，但不得跳过最小必要验证"
-      - "通常可直接进入 delivery-report；仅在边界仍需显式沉淀时补 delivery-plan"
-      - "若实现中发现风险被低估，应升级到 deliver.standard"
+      - "dev 是实现主入口，不得擅自扩大 think 已确认的范围"
+      - "实现中若发现边界失真、依赖冲突或方案假设被推翻，应回到 think"
+      - "实现完成后，应进入 test 或 review；验证失败时可转入 hunt"
 
-  deliver.standard:
-    owned_by: pipe
-    next: [assure, deliver.critical, intake]
+  test:
+    owned_by: test
+    next: [review, dev, hunt, think]
     rules:
-      - "默认交付路径"
-      - "应优先形成 delivery-plan，再推进实现、验证与 delivery-report"
-      - "允许内部调用 think/dev/test/hunt"
-      - "若需求边界失真或验证持续失败，可回到 intake 或升级到 critical"
+      - "test 负责补测、执行验证与确认质量门禁"
+      - "若失败原因明确，可回到 dev；若失败原因不明，可转入 hunt"
+      - "若测试暴露需求边界错误，应回到 think"
 
-  deliver.critical:
-    owned_by: pipe
-    next: [assure, intake]
+  hunt:
+    owned_by: hunt
+    next: [dev, think, test, review]
     rules:
-      - "适用于架构改动、数据迁移、高发布风险任务"
-      - "必须形成 delivery-plan，并补充边界、关键验证和回滚方案"
-      - "若前提条件仍不充分，可退回 intake 重新定义执行单"
+      - "hunt 负责取证、假设验证与根因定位"
+      - "确诊后应明确回到 dev 修复，或回到 think 重设边界"
+      - "hunt 的目标是恢复交付，不是替代开发或验收"
 
-  assure:
+  review:
     owned_by: review
-    next: [deliver.quick, deliver.standard, deliver.critical, extensions]
+    next: [dev, test, hunt, think, extensions]
     rules:
-      - "assure 至少负责形成 assurance-report；涉及明确发布姿态时再补 release-advice"
-      - "命中阻断项后必须退回 deliver，而不是直接宣称完成"
-      - "PASS 不等于必须部署；是否进入 extensions.deploy 取决于上下文"
+      - "review 至少负责形成 review-report（兼容旧名 assurance-report）；涉及发布姿态时再补 review-advice（兼容旧名 release-advice）"
+      - "命中阻断项后必须显式退回 dev / test / think，不得模糊宣称完成"
+      - "PASS 不等于必须部署；是否进入 deploy 取决于上下文"
 
   extensions:
-    owned_by: init/document/deploy/triage
-    next: [intake, deliver.quick, deliver.standard, assure]
+    owned_by: init/read/deploy/document/triage/optimize/refactor
+    next: [think, dev, test, hunt, review]
     rules:
-      - "扩展能力不属于主链路一线入口"
-      - "文档、部署、工单处理等动作应在主交付链路之外明确说明目的"
+      - "扩展能力不替代默认交付链路"
+      - "专项模式和辅助动作应明确说明与默认交付链路的关系"
 
 skill_mapping:
-  route: intake
-  pipe: deliver.standard
-  review: assure
-  think: deliver.standard
-  dev: deliver.standard
-  test: deliver.standard
-  hunt: deliver.standard
-  optimize: deliver.standard
-  refactor: deliver.standard
+  think: think
+  dev: dev
+  test: test
+  hunt: hunt
+  review: review
+  optimize: dev
+  refactor: dev
   init: extensions
-  document: extensions
+  read: extensions
   deploy: extensions
+  document: extensions
   triage: extensions
-  read: intake
+  route: think
+  pipe: dev
 
 mode_hints:
   quick:
@@ -85,12 +83,32 @@ mode_hints:
       - "上线风险高"
 
 circuit_breaker:
-  - stage: assure
+  - stage: review
     condition: "连续两次 FAIL"
-    action: route_to_intake
-  - stage: deliver.standard
-    condition: "同一目标在 deliver→assure 循环超过 3 次"
-    action: escalate_to_critical
-  - stage: deliver.quick
-    condition: "发现超出 quick 边界的架构/契约风险"
-    action: escalate_to_standard
+    action: return_to_think
+  - stage: dev
+    condition: "同一目标在 dev→test→review 循环超过 3 次"
+    action: escalate_scope_review
+  - stage: test
+    condition: "验证持续失败且根因不明"
+    action: route_to_hunt
+
+flow_runtime:
+  registry:
+    manifests_dir: "_shared/flows/"
+    schema_ref: "_shared/flow-schema.yaml"
+  state:
+    dir: ".ritsu/flows/"
+    record:
+      - run_id
+      - flow_id
+      - phase
+      - current_step
+      - completed_steps
+      - verification_status
+      - artifact_outputs
+      - recovery_point
+  execution_rule:
+    deterministic_first: true
+    ai_decision_pauses_by_default: true
+    failure_must_persist_recovery_point: true

@@ -1,11 +1,11 @@
 # Skill 公共步骤模板 v3.8.0
 
-> 所有 SKILL.md 中重复出现的步骤，统一引用此模板，禁止各自重写。
+> 所有 `SKILL.md` 中重复出现的步骤，统一引用此模板，禁止各自重写。
 > 引用方式：`> 引用 _shared/skill-common-steps.md Step N`
-> 目标不是堆更多治理动作，而是为 `intake → deliver → assure` 提供最小公共骨架。
-> 主产物模板统一维护在 `_shared/artifact-templates.md`，`route / pipe / review` 不得各自复制维护。
+> 目标不是再加一层编排，而是为 `think -> dev/test/hunt -> review` 提供最小公共骨架。
+> 自 v3.8 起，若 runtime 已提供对应 flow，应优先使用 `ritsu_run_flow / ritsu_resume_flow / ritsu_get_flow_state / ritsu_apply_flow_decision` 作为执行骨架，再由 AI 补齐判断位。
+> 主产物模板统一维护在 `_shared/artifact-templates.md`。
 > 产物层级统一维护在 `_shared/artifact-layers.md`；写 ctx 的 `artifact_meta` 时应尽量同时写入 `type` 与 `layer`。
-> 当前主链路主产物为：`intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice`。
 
 ---
 
@@ -25,18 +25,19 @@
 
 ### 0.2 上下文恢复检查
 
-调用 `ritsu_read_ctx`：
+调用 `ritsu_read_ctx`；若项目中已有 flow run，再补 `ritsu_get_flow_state`：
 
 - 若存在未完成任务，提示是否继续
 - 若存在熔断状态，提示当前风险
 - 若存在产物失配，提示状态已失真
+- 若存在 flow recovery point，优先按 `current_step / recovery_point / verification_status` 恢复
 
 **精简原则**：
 
 - 优先使用 `recent_entries_pruned`
 - failed 事件优先看 `failed_summary`
 
-若需要额外检索 `.ritsu/` 历史产物，默认先查主链路产物（`layers=["primary"]`）；仅当主链路信息不足时，再扩展到过程证据（`layers=["evidence"]`）或兼容镜像。
+若需要额外检索 `.ritsu/` 历史产物，默认先查主产物（`layers=["primary"]`）；仅当主产物信息不足时，再扩展到过程证据（`layers=["evidence"]`）或兼容镜像。
 
 ### 0.3 环境确认
 
@@ -58,6 +59,25 @@
 - `--hotfix` 视为 `quick` 的极小改动子集
 - `--fast` 视为降低输出和交互密度，而不是跳过关键验证
 
+### 0.5 Flow 骨架选择
+
+若当前技能有对应内建 flow，优先执行：
+
+- `think` -> `think-clarify`
+- `dev` -> `dev-delivery`
+- `test` -> `test-verify`
+- `hunt` -> `hunt-recovery`
+- `review` -> `review-acceptance`
+
+执行规则：
+
+- 先用 `ritsu_list_flows` / `ritsu_validate_flow` 对账可用模板
+- 若已有未完成 run，优先 `ritsu_get_flow_state` + `ritsu_resume_flow`
+- 否则用 `ritsu_run_flow` 建立 flow state
+- 若 runtime 停在 `awaiting_ai`，AI 只负责当前判断位，不重复手搓整条流程
+- 当前判断位完成后，必须优先 `ritsu_apply_flow_decision` 回写 decision 和关联 artifacts，而不是重新开新 flow
+- 若会话中断，恢复时优先 `ritsu_resume_flow`
+
 ---
 
 ## Step 1: 领域解析 + ctx started
@@ -72,7 +92,7 @@
 
 - 加载 `domains/_base.yaml` + `domains/[domain].yaml`
 - `fullstack` 直接使用扁平化配置
-- `route / triage` 可不加载详细领域增量
+- `read / triage / document` 可不加载详细领域增量
 
 随后调用 `ritsu_emit_event` 追加 started 事件：
 
@@ -85,7 +105,7 @@ ritsu_emit_event({
 })
 ```
 
-> correlation_id 由 `ritsu_emit_event` 自动生成并沿链路继承。
+> correlation_id 由 flow runtime 首次 `started` 事件生成，并沿 `artifact_written / done / failed` 继承；若未走 flow runtime，则由 `ritsu_emit_event` 自动生成。
 
 ---
 
@@ -145,16 +165,18 @@ ritsu_emit_event({
 
 完成后按 `_shared/state-machine.yaml` 输出下一步建议。
 
-状态机现在优先表达产品阶段流转，而不是暴露过多内部 skill 跳转：
+状态机现在优先表达显式 skill 流转，而不是抽象阶段：
 
-- `intake`
-- `deliver.quick`
-- `deliver.standard`
-- `deliver.critical`
-- `assure`
+- `think`
+- `dev`
+- `test`
+- `hunt`
+- `review`
 - `extensions.*`
 
-若某个内部 skill 仍需细粒度跳转，应服从所属阶段的边界。
+若某个专项 skill 仍需细粒度跳转，应服从主工作流边界。
+
+若当前任务已绑定 flow run，下一步建议还应和 flow state 的 `next_phase_recommendations` 对账。
 
 ---
 
@@ -167,7 +189,7 @@ ritsu_emit_event({
 ```markdown
 ## 律 (Ritsu) {skill_name} 落盘清单
 - 涉及文件: {路径 + 改动概述}
-- 溯源: {intake-ticket/delivery-plan/handoff/diagnosis/delivery-report/assurance-report/release-advice 路径 或 无}
+- 溯源: {think-ticket/think-plan/handoff/diagnosis/dev-report/review-report/review-advice 路径，或对应兼容旧名路径，或 无}
 - Lint: ✅/❌/跳过 | Test: ✅/❌/跳过
 ```
 

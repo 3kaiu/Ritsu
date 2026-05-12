@@ -3,10 +3,10 @@
 # AI 执行时应将此文件视为“可用工具菜单”，按 Schema 构造调用参数。
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
 #
-# 当前产品语义已经收敛为 intake / deliver / assure。
-# runtime 已打通主链路产物（intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice）的核心读写、列表与检索路径；
+# 当前产品语义已经收敛为 think / dev / test / hunt / review。
+# runtime 已打通主产物（首选别名：think-ticket / think-plan / dev-report / review-report / review-advice；兼容旧名：intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice）的核心读写、列表与检索路径；
 # legacy 产物（handoff / diagnosis / review-stamp / optimize-report）仍保留为过程证据或兼容镜像。
-# 因此本文件描述的是“当前运行时真实支持的工具”，并以主链路优先的消费语义为准。
+# 因此本文件描述的是“当前运行时真实支持的工具”，并以主产物优先、显式工作流优先的消费语义为准。
 #
 # 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
 # call_template 是 input 的快捷视图（DRY），若两者冲突以 input 为准。
@@ -44,7 +44,7 @@ tools:
       skill:
         type: string
         required: false
-        description: "当前技能名。ctx 落盘仍使用兼容 skill 名 / 文件名，如 route= intake、pipe=deliver、review=assure"
+        description: "当前技能名。默认记录实际工作技能；读取旧历史时仍可能遇到 legacy alias，如 route=旧版 think、pipe=旧版编排入口"
       domain:
         type: string
         required: false
@@ -60,7 +60,7 @@ tools:
       artifact_meta:
         type: object
         required: false
-        description: "artifact_written 事件时必填。至少包含 type/size_bytes/summary；若未显式传入 layer，运行时会在可判定时按类型自动补齐 primary|evidence|compatibility|system"
+        description: "artifact_written 事件时必填。至少包含 type/size_bytes/summary；推荐同时补 canonical_type。若传入旧主产物名，运行时会将 type 归一为首选 alias，并在缺失时自动补 canonical_type 与 layer"
     validation: "写入前校验事件是否符合 _shared/ctx-event-schema.json 的 if-then 条件"
     concurrency_control: "原子追加锁"
     output_schema:
@@ -104,7 +104,7 @@ tools:
             skill: { type: string }
             stage: &stage_field
               type: string
-              description: "产品阶段语义。兼容 skill 名会映射为 intake / deliver / assure；其余内部模块名保持原义或按内部模块理解"
+              description: "当前工作流语义。显式技能通常保持原名；legacy alias 会映射为接近的当前工作技能"
             domain: { type: string }
             status: { type: string }
             step: { type: string }
@@ -158,9 +158,9 @@ tools:
           description: "可操作恢复上下文（仅 last_incomplete 存在时非 null）"
           properties:
             skill: { type: string }
-            stage: &stage_field_with_internal_deliver
+            stage: &stage_field_explicit_workflow
               type: string
-              description: "产品阶段语义。兼容 skill 名会映射为 intake / deliver / assure；如 think 也会归入 deliver"
+              description: "当前工作流语义。显式技能保持原名；legacy alias 会映射为接近的当前工作技能"
             domain: { type: string }
             step: { type: string }
             correlation_id: { type: string }
@@ -179,7 +179,7 @@ tools:
               items: { type: string }
         circuit_breaker_status:
           type: object
-          description: "熔断状态。当前底层字段仍可能返回内部模块名或旧值（如 think），但产品语义上应理解为回到 intake 或升级交付模式"
+          description: "熔断状态。当前底层字段仍可能返回旧值或技能名；工作流语义上应理解为回到 think、转入 hunt，或重新进入显式修复链路"
           properties:
             consecutive_fails:
               type: integer
@@ -245,8 +245,322 @@ tools:
                   scope: { type: string }
                   rule: { type: string }
 
+  - name: ritsu_list_flows
+    description: 列出当前 runtime 内建的交付流程模板。返回每个 flow 的 phase、intent、步骤数量、产物声明以及 manifest 校验结果，供 AI 在显式工作流下选择合适的执行骨架
+    call_template:
+      tool: ritsu_list_flows
+      params: {}
+    input: {}
+    output_schema:
+      type: object
+      required: [flows, total_count]
+      properties:
+        flows:
+          type: array
+          items:
+            type: object
+            properties:
+              flow_id: { type: string }
+              phase: { type: string }
+              intent: { type: string }
+              source_path: { type: string }
+              required_inputs:
+                type: array
+                items: { type: string }
+              precheck_count: { type: integer }
+              step_count: { type: integer }
+              verification_count: { type: integer }
+              artifacts:
+                type: array
+                items: { type: string }
+              next_phases:
+                type: array
+                items: { type: string }
+              valid: { type: boolean }
+              errors:
+                type: array
+                items: { type: string }
+              warnings:
+                type: array
+                items: { type: string }
+        total_count:
+          type: integer
+
+  - name: ritsu_validate_flow
+    description: 校验指定 flow manifest 是否符合 Ritsu 交付流程约束，包括顶层字段、step contract、failure recovery、artifact 声明和 phase 对账
+    call_template:
+      tool: ritsu_validate_flow
+      params:
+        flow_id: "{flow_id}"
+      example:
+        flow_id: "dev-delivery"
+    input:
+      flow_id:
+        type: string
+        required: true
+        description: "要校验的 flow_id"
+    output_schema:
+      type: object
+      required: [flow_id, valid, errors, warnings]
+      properties:
+        flow_id: { type: string }
+        valid: { type: boolean }
+        errors:
+          type: array
+          items: { type: string }
+        warnings:
+          type: array
+          items: { type: string }
+
+  - name: ritsu_run_flow
+    description: 按 flow_id 或 phase/intent 选择内建交付流程并执行。deterministic/tool 步骤由 runtime 运行；遇到 ai_decision 步骤时默认停下并把恢复点写入 flow state
+    call_template:
+      tool: ritsu_run_flow
+      params:
+        flow_id: "{flow_id|optional}"
+        phase: "{think|dev|test|hunt|review|optional}"
+        intent: "{intent|optional}"
+        stop_before_ai: true
+        dry_run: false
+    input:
+      flow_id:
+        type: string
+        required: false
+        description: "显式指定的 flow_id"
+      phase:
+        type: string
+        required: false
+        description: "按 phase 选择 flow 的兜底入口"
+      intent:
+        type: string
+        required: false
+        description: "按 intent 进一步选择 flow"
+      stop_before_ai:
+        type: boolean
+        required: false
+        description: "默认 true。遇到 ai_decision 步骤时暂停，返回 awaiting_ai"
+      dry_run:
+        type: boolean
+        required: false
+        description: "仅创建 flow state 和步骤骨架，不执行任何步骤"
+      input_context:
+        type: object
+        required: false
+        description: "额外注入的输入上下文"
+    output_schema:
+      type: object
+      required:
+        [
+          run_id,
+          flow_id,
+          phase,
+          intent,
+          status,
+          current_step,
+          completed_steps,
+          pending_steps,
+          verification_status,
+          artifact_outputs,
+          recovery_point,
+          step_results,
+        ]
+      properties:
+        run_id: { type: string }
+        flow_id: { type: string }
+        phase: { type: string }
+        intent: { type: string }
+        correlation_id: { type: string }
+        status: { type: string }
+        current_step: { type: string }
+        completed_steps:
+          type: array
+          items: { type: string }
+        pending_steps:
+          type: array
+          items: { type: string }
+        verification_status: { type: string }
+        artifact_outputs:
+          type: array
+          items: { type: string }
+        recovery_point: { type: string }
+        step_results:
+          type: array
+          items:
+            type: object
+            properties:
+              step_id: { type: string }
+              section: { type: string }
+              executor_type: { type: string }
+              status: { type: string }
+              summary: { type: string }
+
+  - name: ritsu_resume_flow
+    description: 从已有的 flow state 恢复执行。默认延续 stop_before_ai=true 的行为，因此 deterministic/tool 步骤会继续推进，直到下一个 ai_decision 或失败恢复点
+    call_template:
+      tool: ritsu_resume_flow
+      params:
+        run_id: "{run_id}"
+        stop_before_ai: true
+        dry_run: false
+      example:
+        run_id: "flow-dev-delivery-20260512-102030-ab12cd34"
+    input:
+      run_id:
+        type: string
+        required: true
+        description: "已有 flow run 的 run_id"
+      stop_before_ai:
+        type: boolean
+        required: false
+        description: "默认 true"
+      dry_run:
+        type: boolean
+        required: false
+        description: "只重写 flow state，不继续执行"
+    output_schema:
+      type: object
+      required: [run_id, flow_id, status, current_step, recovery_point]
+      properties:
+        run_id: { type: string }
+        flow_id: { type: string }
+        correlation_id: { type: string }
+        status: { type: string }
+        current_step: { type: string }
+        recovery_point: { type: string }
+
+  - name: ritsu_get_flow_state
+    description: 读取 flow state。传 run_id 时读取指定记录；不传时返回最近一次 flow run，用于上下文恢复、查看断点和验证进度
+    call_template:
+      tool: ritsu_get_flow_state
+      params:
+        run_id: "{run_id|optional}"
+    input:
+      run_id:
+        type: string
+        required: false
+        description: "已有 flow run 的 run_id；省略时读取最近一次"
+    output_schema:
+      type: object
+      required: [run_id, flow_id, status, step_results]
+      properties:
+        run_id: { type: string }
+        flow_id: { type: string }
+        phase: { type: string }
+        correlation_id: { type: string }
+        status: { type: string }
+        current_step: { type: string }
+        recovery_point: { type: string }
+        step_results:
+          type: array
+          items:
+            type: object
+            properties:
+              step_id: { type: string }
+              status: { type: string }
+              summary: { type: string }
+
+  - name: ritsu_apply_flow_decision
+    description: 提交某个 ai_decision 步骤的判断结果，可选同时写入该步骤声明的 artifacts，并默认在提交后继续执行 flow，直到下一个 ai_decision、失败恢复点或完成态。若该 step 定义了 decision_contract，runtime 会校验 decision_output、artifact 类型以及 artifact 内容锚点
+    call_template:
+      tool: ritsu_apply_flow_decision
+      params:
+        run_id: "{run_id}"
+        step_id: "{step_id|optional}"
+        summary: "{one_line_summary|optional}"
+        continue_after_apply: true
+        stop_before_ai: true
+    input:
+      run_id:
+        type: string
+        required: true
+        description: "已有 flow run 的 run_id"
+      step_id:
+        type: string
+        required: false
+        description: "显式指定要完成的 ai_decision step_id；默认使用 current_step"
+      summary:
+        type: string
+        required: false
+        description: "写入 step_results 的一句话摘要"
+      decision_output:
+        type: object
+        required: false
+        description: "AI 对该判断位的结构化结果"
+      artifacts:
+        type: array
+        required: false
+        description: "可选。为该 ai_decision 步骤同时写入的 artifacts"
+        items:
+          type: object
+          properties:
+            type: { type: string }
+            filename: { type: string }
+            content: { type: string }
+            artifact_meta: { type: object }
+            overwrite: { type: boolean }
+      continue_after_apply:
+        type: boolean
+        required: false
+        description: "默认 true。提交判断位后继续推进 flow"
+      stop_before_ai:
+        type: boolean
+        required: false
+        description: "继续推进时默认 true，遇到下一个 ai_decision 再次暂停"
+    output_schema:
+      type: object
+      required: [run_id, flow_id, status, verification_status, step_results]
+      properties:
+        run_id: { type: string }
+        flow_id: { type: string }
+        correlation_id: { type: string }
+        status: { type: string }
+        current_step: { type: string }
+        recovery_point: { type: string }
+        verification_status: { type: string }
+        artifact_outputs:
+          type: array
+          items: { type: string }
+        step_results:
+          type: array
+          items:
+            type: object
+            properties:
+              step_id: { type: string }
+              status: { type: string }
+              summary: { type: string }
+    error_shape:
+      type: object
+      description: "当 isError=true 且命中 decision contract 校验失败时，content[0].text 为该 JSON"
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            message: { type: string }
+            violations:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  severity:
+                    type: string
+                    description: "当前固定为 error，预留给上层做稳定优先级展示"
+                  step_id: { type: string }
+                  path:
+                    type: string
+                    description: "定位失败层级，例如 decision_output、artifacts.<type>.content.markers.<marker>、artifacts.<type>.artifact.sections.<section>.fields.<label>"
+                  artifact_type: { type: string }
+                  message: { type: string }
+                  expected:
+                    type: array
+                    items: { type: string }
+                  actual:
+                    type: array
+                    items: { type: string }
+
   - name: ritsu_contract_validate
-    description: 契约测试（Contract Validation）。这是主链路分层规则下的一个特例：它校验的是“实施契约”，因此自动选择时优先读取最近的 handoff；若不存在再回退到 intake-ticket（或使用显式指定路径）。随后抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
+    description: 契约测试（Contract Validation）。这是显式工作流下的一个特例：它校验的是“实施契约”，因此自动选择时优先读取最近的 handoff；若不存在再回退到 think-ticket / intake-ticket（或使用显式指定路径）。随后抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
     call_template:
       tool: ritsu_contract_validate
       params:
@@ -267,7 +581,7 @@ tools:
       artifact_path:
         type: string
         required: false
-        description: "显式指定契约产物路径（推荐）。为空则自动选择实施契约来源：最新 handoff；若无则回退到 intake-ticket"
+        description: "显式指定契约产物路径（推荐）。为空则自动选择实施契约来源：最新 handoff；若无则回退到 think-ticket / intake-ticket"
       handoff_path:
         type: string
         required: false
@@ -287,7 +601,13 @@ tools:
           description: "当前主字段。实际参与本次契约校验的产物路径。"
         artifact_type:
           type: string
-          description: "当前主字段。实际参与本次契约校验的产物类型（如 handoff / intake-ticket）。"
+          description: "当前主字段。对外返回的首选产物类型别名（如 think-ticket / think-plan / dev-report / review-report / review-advice；非主产物如 handoff 保持原名）。"
+        canonical_type:
+          type: string
+          description: "兼容字段。对应的 canonical 产物类型（如 intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice）。"
+        detected_type:
+          type: string
+          description: "兼容调试字段。实际从文件名前缀识别到的产物类型；旧文件可能与 artifact_type 不同。"
         handoff_path:
           type: string
           description: "兼容旧调用方的历史字段名。当前语义等同 artifact_path，不保证产物类型一定为 handoff。"
@@ -627,7 +947,7 @@ tools:
                   col: { type: integer }
 
   - name: ritsu_semantic_index_build
-    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描主链路产物（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice）与 legacy 产物（handoff/diagnosis/review-stamp/optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
+    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描主产物（首选别名：think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样会被纳入）与 legacy 产物（handoff/diagnosis/review-stamp/optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
     call_template:
       tool: ritsu_semantic_index_build
       params:
@@ -672,11 +992,11 @@ tools:
       params:
         query: "{natural_language_query}"
         top_k: 5
-        types: [intake-ticket, diagnosis, assurance-report]
+        types: [think-ticket, intake-ticket, diagnosis, review-report, assurance-report]
       example:
         query: "CI 里 vitest 报错但本地不报"
         top_k: 5
-        types: [delivery-report, diagnosis]
+        types: [dev-report, delivery-report, diagnosis]
     input:
       query:
         type: string
@@ -689,7 +1009,7 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+        description: "产物类型过滤。主产物优先使用别名 think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可传；另支持 handoff/diagnosis/review-stamp/optimize-report。为空表示全部"
       layers:
         type: list
         required: false
@@ -719,7 +1039,12 @@ tools:
             properties:
               score: { type: number }
               path: { type: string }
-              artifact_type: { type: string }
+              artifact_type:
+                type: string
+                description: "对外返回的首选产物类型别名。传入兼容旧名过滤时，结果也会统一归一到别名。"
+              canonical_type:
+                type: string
+                description: "对应的 canonical 产物类型。用于与历史旧名或底层 schema key 对账。"
               artifact_layer: { type: string }
               chunk_index: { type: integer }
               heading: { type: string }
@@ -732,7 +1057,7 @@ tools:
       params:
         query: "{natural_language_query}"
         top_k: 5
-        types: [delivery-report, assurance-report]
+        types: [dev-report, delivery-report, review-report, assurance-report]
         focus_paths: ["{可选: 当前错误涉及的文件路径}"]
         semantic_weight: 0.7
         kg_weight: 0.3
@@ -740,7 +1065,7 @@ tools:
       example:
         query: "CI 与本地不一致，怀疑缓存污染"
         top_k: 5
-        types: [delivery-report, diagnosis]
+        types: [dev-report, delivery-report, diagnosis]
         focus_paths: ["src/app/app.tsx"]
         semantic_weight: 0.7
         kg_weight: 0.3
@@ -757,7 +1082,7 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice/handoff/diagnosis/review-stamp/optimize-report），为空表示全部"
+        description: "产物类型过滤。主产物优先使用别名 think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可传；另支持 handoff/diagnosis/review-stamp/optimize-report。为空表示全部"
       layers:
         type: list
         required: false
@@ -812,7 +1137,12 @@ tools:
               semantic_score: { type: number }
               kg_score: { type: number }
               path: { type: string }
-              artifact_type: { type: string }
+              artifact_type:
+                type: string
+                description: "对外返回的首选产物类型别名。传入兼容旧名过滤时，结果也会统一归一到别名。"
+              canonical_type:
+                type: string
+                description: "对应的 canonical 产物类型。用于与历史旧名或底层 schema key 对账。"
               artifact_layer: { type: string }
               chunk_index: { type: integer }
               heading: { type: string }
@@ -822,18 +1152,18 @@ tools:
                 items: { type: string }
 
   - name: ritsu_write_artifact
-    description: 写入产物文件到 .ritsu/ 目录。当前运行时同时支持主链路产物（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
+    description: 写入产物文件到 .ritsu/ 目录。当前运行时支持主产物（首选别名：think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可写）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
     call_template:
       tool: ritsu_write_artifact
       params:
-        type: "{intake-ticket|delivery-plan|delivery-report|assurance-report|release-advice|handoff|diagnosis|review-stamp|optimize-report}"
+        type: "{think-ticket|think-plan|dev-report|review-report|review-advice|intake-ticket|delivery-plan|delivery-report|assurance-report|release-advice|handoff|diagnosis|review-stamp|optimize-report}"
         filename: "{文件名}"
         content: "{内容}"
       example:
-        type: "delivery-report"
-        filename: "delivery-report-20260511-auth.md"
+        type: "dev-report"
+        filename: "dev-report-20260511-auth.md"
         content: |
-          # Delivery Report
+          # Dev Report
 
           ## 交付摘要
           - 模式: standard
@@ -844,25 +1174,25 @@ tools:
           ## 变更与风险
           - 主要产出: auth session 持久化代码与测试
           - 已知风险: 旧 token 清理仍依赖定时任务
-          - 下一步: 进入 assure 验收
+          - 下一步: 进入 review
     input:
       type:
         type: enum
-        values: [intake-ticket, delivery-plan, delivery-report, assurance-report, release-advice, handoff, diagnosis, review-stamp, optimize-report]
+        values: [think-ticket, think-plan, dev-report, review-report, review-advice, intake-ticket, delivery-plan, delivery-report, assurance-report, release-advice, handoff, diagnosis, review-stamp, optimize-report]
         required: true
         description: "当前运行时支持的产物类型"
       filename:
         type: string
         required: true
-        description: "文件名（如 delivery-report-20260511-auth.md）"
+        description: "文件名（如 dev-report-20260511-auth.md；兼容旧名前缀）"
       content:
         type: string
         required: true
-        description: "文件内容（Markdown 格式）。主产物 intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice 应优先遵循 _shared/artifact-templates.md"
+        description: "文件内容（Markdown 格式）。主产物优先遵循 _shared/artifact-templates.md；兼容旧名写入时也应满足同一模板要求"
       artifact_meta:
         type: object
         required: false
-        description: "产物元数据（可传 summary；返回值会规范化补齐 type/layer/size_bytes）"
+        description: "产物元数据（可传 summary；返回值会规范化补齐 type/canonical_type/layer/size_bytes）"
     placeholder_check: "自动检测并拒绝写入含占位符模式的产物（ctx 类型豁免）：TODO/待定/暂不处理/后续补充（=AP-6）。若 artifact-schema.yaml 为该类型定义了 required_sections，运行时会校验章节与字段标签存在。幻觉路径和未验证标识符属于 AI 行为层约束，由 SKILL.md HC 规则执行，工具层不拦截"
     output_schema:
       type: object
@@ -876,21 +1206,50 @@ tools:
           description: "文件大小"
         artifact_meta:
           type: object
-          description: "产物元数据。返回时至少包含 type/layer/size_bytes；若调用时提供 summary 会原样保留"
+          description: "产物元数据。返回时至少包含 type/canonical_type/layer/size_bytes；若调用时提供 summary 会原样保留"
+    error_shape:
+      type: object
+      description: "当 isError=true 时，常见写入拒绝、底层原子写入失败与 artifact schema 校验失败都会返回该 JSON"
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            message: { type: string }
+            violations:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  severity:
+                    type: string
+                    description: "当前固定为 error"
+                  path:
+                    type: string
+                    description: "定位 artifact 内失败层级，例如 artifact.sections.<section>.fields.<label>"
+                  artifact_type: { type: string }
+                  message: { type: string }
+                  expected:
+                    type: array
+                    items: { type: string }
+                  actual:
+                    type: array
+                    items: { type: string }
 
   - name: ritsu_list_artifacts
-    description: 列出 .ritsu/ 目录下的产物文件。当前支持按主链路产物（intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report/ctx）过滤
+    description: 列出 .ritsu/ 目录下的产物文件。当前支持按主产物（首选别名：think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可过滤）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report/ctx）过滤
     call_template:
       tool: ritsu_list_artifacts
       params:
         type: "{类型或all}"
       example:
-        type: "delivery-report"
+        type: "dev-report"
     input:
       type:
         type: string
         required: false
-        description: "产物类型过滤（all/intake-ticket/delivery-plan/delivery-report/assurance-report/release-advice/handoff/diagnosis/review-stamp/optimize-report/ctx），默认 all"
+        description: "产物类型过滤。可传 all；主产物优先使用别名 think-ticket/think-plan/dev-report/review-report/review-advice，兼容旧名同样可传；另支持 handoff/diagnosis/review-stamp/optimize-report/ctx。默认 all"
     output_schema:
       type: object
       required: [files, total_count]
@@ -903,7 +1262,15 @@ tools:
               path: { type: string }
               modified: { type: string }
               size_bytes: { type: integer }
-              artifact_type: { type: string }
+              artifact_type:
+                type: string
+                description: "对外返回的首选产物类型别名。"
+              canonical_type:
+                type: string
+                description: "对应的 canonical 产物类型。"
+              detected_type:
+                type: string
+                description: "实际从文件名前缀识别到的产物类型。"
               artifact_layer: { type: string }
         total_count:
           type: integer
@@ -975,7 +1342,7 @@ tools:
           type: string
 
   - name: ritsu_get_diff
-    description: 获取 Git diff 的结构化分析结果。包含文件级统计、新增标识符提取、完整 diff 文本。替代 ritsu_exec("git diff") 的裸命令调用，是 assure 阶段以及兼容 review skill 的核心数据源
+    description: 获取 Git diff 的结构化分析结果。包含文件级统计、新增标识符提取、完整 diff 文本。替代 ritsu_exec("git diff") 的裸命令调用，是 review 阶段以及兼容旧记录读取时的核心数据源
     call_template:
       tool: ritsu_get_diff
       params:

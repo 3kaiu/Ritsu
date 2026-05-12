@@ -23,6 +23,10 @@ export function errorResult(msg: string): CallToolResult {
   return { content: [{ type: "text", text: `❌ ${msg}` }], isError: true };
 }
 
+export function jsonErrorResult(data: Record<string, unknown>): CallToolResult {
+  return { content: [{ type: "text", text: JSON.stringify(data) }], isError: true };
+}
+
 /** 非致命警告 — 返回数据但附带警告信息，调用方可区分"真的没有数据"和"出错了" */
 export function warnResult(
   data: Record<string, unknown>,

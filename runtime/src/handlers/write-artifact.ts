@@ -15,12 +15,22 @@ import {
   ARTIFACT_LAYER_MAP,
   ARTIFACT_VALID_TYPES,
   ARTIFACT_PREFIX_MAP,
+  getCanonicalArtifactType,
   getSharedDir,
 } from "../shared.js";
-import { getProjectRoot, textResult, errorResult } from "./_utils.js";
+import {
+  getProjectRoot,
+  textResult,
+  jsonErrorResult,
+} from "./_utils.js";
 
 const RITSU_DIR = ".ritsu";
 const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
+  "think-ticket": "intake_ticket",
+  "think-plan": "delivery_plan",
+  "dev-report": "delivery_report",
+  "review-report": "assurance_report",
+  "review-advice": "release_advice",
   "intake-ticket": "intake_ticket",
   "delivery-plan": "delivery_plan",
   "delivery-report": "delivery_report",
@@ -36,6 +46,64 @@ type ArtifactSchemaSection = {
   title?: string;
   fields?: Array<{ label?: string }>;
   conditional_fields?: Array<{ fields?: Array<{ label?: string }> }>;
+};
+
+export type ArtifactContentValidationIssueCode =
+  | "artifact_schema_missing_section"
+  | "artifact_schema_missing_field_label";
+
+export type ArtifactContentValidationIssue = {
+  code: ArtifactContentValidationIssueCode;
+  message: string;
+  path: string;
+  artifact_type: string;
+  section_title?: string;
+  field_label?: string;
+  actual?: string[];
+};
+
+export type ArtifactValidationViolation = {
+  code: ArtifactContentValidationIssueCode;
+  severity: "error";
+  path: string;
+  artifact_type: string;
+  message: string;
+  expected?: string[];
+  actual?: string[];
+};
+
+export type ArtifactWriteViolationCode =
+  | "missing_required_fields"
+  | "placeholder_content"
+  | "invalid_artifact_type"
+  | "filename_prefix_mismatch"
+  | "path_traversal"
+  | "file_exists"
+  | "atomic_write_failed";
+
+export type ArtifactWriteViolation = {
+  code: ArtifactWriteViolationCode;
+  severity: "error";
+  path: string;
+  message: string;
+  artifact_type?: string;
+  expected?: string[];
+  actual?: string[];
+};
+
+export const ARTIFACT_WRITE_ERROR_TYPE = "ArtifactWriteError";
+export const ARTIFACT_VALIDATION_ERROR_TYPE = "ArtifactValidationError";
+
+export type ArtifactErrorViolation =
+  | ArtifactWriteViolation
+  | ArtifactValidationViolation;
+
+export type ArtifactErrorPayload = {
+  error: {
+    type: string;
+    message: string;
+    violations: ArtifactErrorViolation[];
+  };
 };
 
 let cachedArtifactSchemas: Record<string, { required_sections?: ArtifactSchemaSection[] }> | null =
@@ -79,15 +147,70 @@ function getSectionBody(content: string, title: string): string | null {
   return buf.join("\n");
 }
 
-function validateArtifactContent(type: string, content: string): string | null {
+function listSectionTitles(content: string): string[] {
+  return content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => /^##\s+/.test(line))
+    .map((line) => line.replace(/^##\s+/, "").trim())
+    .filter(Boolean);
+}
+
+function listFieldLabels(sectionBody: string): string[] {
+  const labels = sectionBody
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => {
+      const match = line.match(/^-+\s*([^:]+):/);
+      return match?.[1]?.trim() ?? "";
+    })
+    .filter(Boolean);
+  return Array.from(new Set(labels));
+}
+
+function extractMarkerLabel(marker: string): string {
+  const colonIdx = marker.indexOf(":");
+  if (colonIdx === -1) return marker.trim();
+  return marker.slice(0, colonIdx).trim();
+}
+
+export function collectArtifactMarkerActuals(
+  content: string,
+  marker: string,
+): string[] {
+  const label = extractMarkerLabel(marker);
+  if (!label) return [];
+
+  const matchedLines = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.includes(`${label}:`))
+    .filter(Boolean);
+
+  return Array.from(new Set(matchedLines));
+}
+
+export function validateArtifactContentDetailed(
+  type: string,
+  content: string,
+): ArtifactContentValidationIssue | null {
+  return collectArtifactContentIssuesDetailed(type, content)[0] ?? null;
+}
+
+export function collectArtifactContentIssuesDetailed(
+  type: string,
+  content: string,
+): ArtifactContentValidationIssue[] {
   const schemaKey = ARTIFACT_SCHEMA_KEY_MAP[type];
-  if (!schemaKey) return null;
+  if (!schemaKey) return [];
 
   const schema = getArtifactSchemas()[schemaKey];
   const requiredSections = schema?.required_sections;
   if (!Array.isArray(requiredSections) || requiredSections.length === 0) {
-    return null;
+    return [];
   }
+
+  const issues: ArtifactContentValidationIssue[] = [];
 
   for (const section of requiredSections) {
     const title = typeof section?.title === "string" ? section.title.trim() : "";
@@ -95,7 +218,15 @@ function validateArtifactContent(type: string, content: string): string | null {
 
     const body = getSectionBody(content, title);
     if (body === null) {
-      return `artifact schema validation failed: missing required section '## ${title}'`;
+      issues.push({
+        code: "artifact_schema_missing_section",
+        artifact_type: type,
+        section_title: title,
+        path: `artifact.sections.${title}`,
+        message: `artifact schema validation failed: missing required section '## ${title}'`,
+        actual: listSectionTitles(content),
+      });
+      continue;
     }
 
     const labels = [
@@ -113,12 +244,83 @@ function validateArtifactContent(type: string, content: string): string | null {
 
     for (const label of labels) {
       if (!body.includes(label)) {
-        return `artifact schema validation failed: section '${title}' missing field label '${label}'`;
+        issues.push({
+          code: "artifact_schema_missing_field_label",
+          artifact_type: type,
+          section_title: title,
+          field_label: label,
+          path: `artifact.sections.${title}.fields.${label}`,
+          message: `artifact schema validation failed: section '${title}' missing field label '${label}'`,
+          actual: listFieldLabels(body),
+        });
       }
     }
   }
 
-  return null;
+  return issues;
+}
+
+export function buildArtifactValidationViolation(
+  issue: ArtifactContentValidationIssue,
+): ArtifactValidationViolation {
+  return {
+    code: issue.code,
+    severity: "error",
+    path: issue.path,
+    artifact_type: issue.artifact_type,
+    message: issue.message,
+    expected:
+      issue.code === "artifact_schema_missing_section"
+        ? issue.section_title
+          ? [`## ${issue.section_title}`]
+          : undefined
+        : issue.field_label
+          ? [issue.field_label]
+          : undefined,
+    actual: issue.actual ?? [],
+  };
+}
+
+export function buildArtifactValidationViolations(
+  issues: ArtifactContentValidationIssue[],
+): ArtifactValidationViolation[] {
+  return issues.map(buildArtifactValidationViolation);
+}
+
+export function joinArtifactViolationMessages(
+  violations: Array<{ message: string }>,
+): string {
+  return violations
+    .map((violation) => violation.message)
+    .filter(Boolean)
+    .join("; ");
+}
+
+export function buildArtifactErrorPayload(
+  type: string,
+  violations: ArtifactErrorViolation[],
+  fallbackMessage: string,
+): ArtifactErrorPayload {
+  return {
+    error: {
+      type,
+      message: joinArtifactViolationMessages(violations) || fallbackMessage,
+      violations,
+    },
+  };
+}
+
+function artifactWriteErrorResult(
+  fallbackMessage: string,
+  violations: ArtifactWriteViolation[],
+): CallToolResult {
+  return jsonErrorResult(
+    buildArtifactErrorPayload(
+      ARTIFACT_WRITE_ERROR_TYPE,
+      violations,
+      fallbackMessage,
+    ),
+  );
 }
 
 export async function ritsu_write_artifact(
@@ -131,29 +333,77 @@ export async function ritsu_write_artifact(
     | Record<string, unknown>
     | undefined;
 
-  if (!type || !filename || !content)
-    return errorResult("type, filename, content are required");
+  if (!type || !filename || !content) {
+    return artifactWriteErrorResult("type, filename, content are required", [
+      {
+        code: "missing_required_fields",
+        severity: "error",
+        path: "params",
+        message: "type, filename, content are required",
+        expected: ["type", "filename", "content"],
+        actual: [
+          ...(!type ? [] : ["type"]),
+          ...(!filename ? [] : ["filename"]),
+          ...(!content ? [] : ["content"]),
+        ],
+      },
+    ]);
+  }
 
   // 占位符拦截 — runtime 当前只对 artifact 内容做最小约束
   const placeholderPattern = /TODO|待定|暂不处理|后续完善|TBD/;
   if (placeholderPattern.test(content)) {
-    return errorResult(
+    return artifactWriteErrorResult(
       "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",
+      [
+        {
+          code: "placeholder_content",
+          severity: "error",
+          path: "content",
+          message:
+            "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",
+          artifact_type: type,
+          expected: ["content without placeholder markers"],
+          actual: ["placeholder detected"],
+        },
+      ],
     );
   }
 
   // 产物类型校验
   if (!ARTIFACT_VALID_TYPES.includes(type as any)) {
-    return errorResult(
+    return artifactWriteErrorResult(
       `invalid artifact type: ${type}. Valid: ${ARTIFACT_VALID_TYPES.join(", ")}`,
+      [
+        {
+          code: "invalid_artifact_type",
+          severity: "error",
+          path: "type",
+          message: `invalid artifact type: ${type}. Valid: ${ARTIFACT_VALID_TYPES.join(", ")}`,
+          artifact_type: type,
+          expected: [...ARTIFACT_VALID_TYPES],
+          actual: [type],
+        },
+      ],
     );
   }
 
   // 文件名前缀校验（按 artifact-schema.yaml 命名契约）
   const expectedPrefix = ARTIFACT_PREFIX_MAP[type];
   if (expectedPrefix && !filename.startsWith(expectedPrefix)) {
-    return errorResult(
+    return artifactWriteErrorResult(
       `filename must start with '${expectedPrefix}' for type '${type}', got: ${filename}`,
+      [
+        {
+          code: "filename_prefix_mismatch",
+          severity: "error",
+          path: "filename",
+          message: `filename must start with '${expectedPrefix}' for type '${type}', got: ${filename}`,
+          artifact_type: type,
+          expected: [expectedPrefix],
+          actual: [filename],
+        },
+      ],
     );
   }
 
@@ -163,13 +413,34 @@ export async function ritsu_write_artifact(
     filename.includes("/") ||
     filename.includes("\\")
   ) {
-    return errorResult(
+    return artifactWriteErrorResult(
       "filename must not contain path traversal (..) or directory separators",
+      [
+        {
+          code: "path_traversal",
+          severity: "error",
+          path: "filename",
+          message:
+            "filename must not contain path traversal (..) or directory separators",
+          artifact_type: type,
+          expected: ["single basename without path separators"],
+          actual: [filename],
+        },
+      ],
     );
   }
 
-  const validationError = validateArtifactContent(type, content);
-  if (validationError) return errorResult(validationError);
+  const validationIssues = collectArtifactContentIssuesDetailed(type, content);
+  if (validationIssues.length > 0) {
+    const violations = buildArtifactValidationViolations(validationIssues);
+    return jsonErrorResult(
+      buildArtifactErrorPayload(
+        ARTIFACT_VALIDATION_ERROR_TYPE,
+        violations,
+        "artifact schema validation failed",
+      ),
+    );
+  }
 
   const root = getProjectRoot();
   const dir = resolve(root, RITSU_DIR);
@@ -181,8 +452,19 @@ export async function ritsu_write_artifact(
   if (existsSync(mdPath)) {
     const overwrite = params.overwrite === true || params.overwrite === "true";
     if (!overwrite) {
-      return errorResult(
+      return artifactWriteErrorResult(
         `file already exists: ${filename}. Set overwrite=true to replace.`,
+        [
+          {
+            code: "file_exists",
+            severity: "error",
+            path: "filename",
+            message: `file already exists: ${filename}. Set overwrite=true to replace.`,
+            artifact_type: type,
+            expected: ["overwrite=true", "new filename"],
+            actual: [filename],
+          },
+        ],
       );
     }
   }
@@ -196,12 +478,22 @@ export async function ritsu_write_artifact(
     try {
       rmSync(tmpPath, { force: true });
     } catch {}
-    return errorResult(`atomic write failed: ${e.message}`);
+    return artifactWriteErrorResult(`atomic write failed: ${e.message}`, [
+      {
+        code: "atomic_write_failed",
+        severity: "error",
+        path: "filesystem",
+        message: `atomic write failed: ${e.message}`,
+        artifact_type: type,
+        actual: [e?.message ?? "unknown error"],
+      },
+    ]);
   }
   const sizeBytes = statSync(mdPath).size;
   const normalizedArtifactMeta = {
     ...(artifactMeta ?? {}),
     type,
+    canonical_type: getCanonicalArtifactType(type),
     layer: ARTIFACT_LAYER_MAP[type] ?? "system",
     size_bytes: sizeBytes,
   };

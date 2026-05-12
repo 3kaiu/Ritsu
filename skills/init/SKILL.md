@@ -20,7 +20,8 @@ hard_constraints:
 
 **触发条件**：用户输入 `/r-init`，或仓库尚未建立 Ritsu 基线时调用。
 
-> 该模块属于 setup，不属于主交付链路。
+> 该模块属于 setup，不属于默认交付链路。
+> 它不直接绑定 `think/dev/test/hunt/review` 的 flow run，但会为后续 flow 提供 `AGENTS.md`、忽略规则和 `.ritsu/` 基础目录。
 
 ## 执行流水线
 

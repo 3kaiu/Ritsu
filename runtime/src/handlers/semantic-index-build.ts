@@ -10,23 +10,20 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { getEmbedder } from "./_semantic-embed.js";
-import { ARTIFACT_LAYER_MAP, getSharedDir } from "../shared.js";
+import {
+  ARTIFACT_LAYER_MAP,
+  type ArtifactType,
+  detectArtifactTypeFromFileName,
+  getCanonicalArtifactType,
+  getPreferredArtifactType,
+  getSharedDir,
+} from "../shared.js";
 import { load as loadYaml } from "js-yaml";
-
-type ArtifactType =
-  | "intake-ticket"
-  | "delivery-plan"
-  | "delivery-report"
-  | "assurance-report"
-  | "release-advice"
-  | "handoff"
-  | "diagnosis"
-  | "review-stamp"
-  | "optimize-report";
 
 type IndexEntry = {
   id: string;
   artifact_type: ArtifactType;
+  canonical_type?: string;
   artifact_layer: string;
   path: string;
   chunk_index: number;
@@ -55,16 +52,7 @@ function sha256(text: string): string {
 }
 
 function detectArtifactType(fileName: string): ArtifactType | null {
-  if (fileName.startsWith("intake-ticket-")) return "intake-ticket";
-  if (fileName.startsWith("delivery-plan-")) return "delivery-plan";
-  if (fileName.startsWith("delivery-report-")) return "delivery-report";
-  if (fileName.startsWith("assurance-report-")) return "assurance-report";
-  if (fileName.startsWith("release-advice-")) return "release-advice";
-  if (fileName.startsWith("handoff-")) return "handoff";
-  if (fileName.startsWith("diagnosis-")) return "diagnosis";
-  if (fileName.startsWith("review-stamp-")) return "review-stamp";
-  if (fileName.startsWith("optimize-report-")) return "optimize-report";
-  return null;
+  return detectArtifactTypeFromFileName(fileName) as ArtifactType | null;
 }
 
 function normalizeHeadingTitle(heading: string): string {
@@ -97,6 +85,11 @@ function getImportantSectionTitlesByType(): Partial<
     };
 
     return {
+      "think-ticket": pickTitles("intake_ticket"),
+      "think-plan": pickTitles("delivery_plan"),
+      "dev-report": pickTitles("delivery_report"),
+      "review-report": pickTitles("assurance_report"),
+      "review-advice": pickTitles("release_advice"),
       "intake-ticket": pickTitles("intake_ticket"),
       "delivery-plan": pickTitles("delivery_plan"),
       "delivery-report": pickTitles("delivery_report"),
@@ -215,6 +208,8 @@ export async function ritsu_semantic_index_build(
   const existingByKey = new Map<string, IndexEntry[]>();
   if (existing) {
     for (const e of existing.entries) {
+      e.artifact_type = getPreferredArtifactType(e.artifact_type) as ArtifactType;
+      e.canonical_type = getCanonicalArtifactType(e.artifact_type);
       const key = `${e.path}#${e.content_hash}`;
       const arr = existingByKey.get(key) ?? [];
       arr.push(e);
@@ -225,6 +220,8 @@ export async function ritsu_semantic_index_build(
   for (const f of files) {
     const t = detectArtifactType(f);
     if (!t) continue;
+    const preferredType = getPreferredArtifactType(t) as ArtifactType;
+    const canonicalType = getCanonicalArtifactType(t);
 
     const abs = resolve(ritsuDir, f);
     let content = "";
@@ -260,7 +257,8 @@ export async function ritsu_semantic_index_build(
           const absEnd = absStart + wholeText.length;
           newEntries.push({
             id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
-            artifact_type: t,
+            artifact_type: preferredType,
+            canonical_type: canonicalType,
             artifact_layer: ARTIFACT_LAYER_MAP[t] ?? "system",
             path: abs,
             chunk_index: chunkIndex,
@@ -280,7 +278,8 @@ export async function ritsu_semantic_index_build(
         const emb = await embedder.embed(c.text);
         newEntries.push({
           id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
-          artifact_type: t,
+          artifact_type: preferredType,
+          canonical_type: canonicalType,
           artifact_layer: ARTIFACT_LAYER_MAP[t] ?? "system",
           path: abs,
           chunk_index: chunkIndex,

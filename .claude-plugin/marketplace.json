@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "ritsu",
-  "description": "Ritsu Engineering Governance Skill Bundle: route, init, think, dev, optimize, review, hunt, triage.",
+  "description": "Ritsu AI delivery workflow bundle: init, think, dev, test, hunt, review, plus focused extension skills.",
   "owner": {
     "name": "3kaiu",
     "email": "3kaiu@example.com"
@@ -9,21 +9,11 @@
   "plugins": [
     {
       "name": "ritsu",
-      "description": "Installs the full Ritsu toolkit. Registers all 8 skills under the ritsu namespace, callable as /r-route, /r-init, /r-think, /r-dev, /r-opt, /r-review, /r-hunt, and /r-triage.",
+      "description": "Installs the full Ritsu toolkit. Registers the explicit delivery chain under the ritsu namespace: /r-init, /r-think, /r-dev, /r-test, /r-hunt, /r-review, plus extension skills.",
       "version": "3.3.0",
       "category": "development",
       "source": "./",
       "homepage": "https://github.com/3kaiu/Ritsu"
-    },
-    {
-      "name": "ritsu-route",
-      "description": "Global task dispatcher. Analyzes user intent, routes to the correct skill, and establishes global context.",
-      "version": "3.3.0",
-      "category": "development",
-      "source": "./skills/route",
-      "homepage": "https://github.com/3kaiu/Ritsu",
-      "skills": ["./"],
-      "strict": false
     },
     {
       "name": "ritsu-init",
@@ -51,6 +41,16 @@
       "version": "3.3.0",
       "category": "development",
       "source": "./skills/dev",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-test",
+      "description": "Verification and supplemental testing stage. Runs targeted checks, quality gates, and routes failures back to dev or hunt.",
+      "version": "3.3.0",
+      "category": "development",
+      "source": "./skills/test",
       "homepage": "https://github.com/3kaiu/Ritsu",
       "skills": ["./"],
       "strict": false

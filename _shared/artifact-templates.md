@@ -1,18 +1,18 @@
 # 主产物模板 v3.8.0
 
-> 这些模板是 `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice` 的单一参考源。
-> `route / pipe / review` 只能引用，不应各自维护一份近似版本。
+> 这些模板是 `think-ticket`、`think-plan`、`dev-report`、`review-report`、`review-advice` 的单一参考源；底层仍兼容 `intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice`。
+> 它们服务于新的显式工作流：`think / dev / test / hunt / review`。
 > 若 `_shared/artifact-schema.yaml` 调整了章节名或字段标签，必须先同步这里。
-> 默认消费顺序也是这一组主链路产物；`handoff / diagnosis / optimize-report / review-stamp` 仅用于补充说明，不替代这里的结论。
+> 默认消费顺序也是这一组主产物；`handoff / diagnosis / optimize-report / review-stamp` 仅用于补充说明，不替代这里的结论。
 
 ---
 
-## Intake Ticket
+## Think Ticket
 
-适用产物类型：`intake-ticket`
+适用产物类型：`think-ticket`（兼容旧名：`intake-ticket`）
 
 ```markdown
-# Intake Ticket
+# Think Ticket
 
 ## 任务识别
 - 任务类型: {新功能/Bug/补测试/重构/优化/纯阅读/扩展任务}
@@ -24,18 +24,18 @@
 - 缺失信息: {若无则写“无”}
 
 ## 执行路径
-- 推荐路径: {deliver.quick|deliver.standard|deliver.critical|assure|extension}
+- 推荐路径: {先进入 dev|先进入 hunt|直接进入 review|进入 extension}
 - 次要意图: {若无则写“无”}
 ```
 
 ---
 
-## Delivery Plan
+## Think Plan
 
-适用产物类型：`delivery-plan`
+适用产物类型：`think-plan`（兼容旧名：`delivery-plan`）
 
 ```markdown
-# Delivery Plan
+# Think Plan
 
 ## 目标与范围
 - 交付目标: {一句话描述}
@@ -53,12 +53,12 @@
 
 ---
 
-## Delivery Report
+## Dev Report
 
-适用产物类型：`delivery-report`
+适用产物类型：`dev-report`（兼容旧名：`delivery-report`）
 
 ```markdown
-# Delivery Report
+# Dev Report
 
 ## 交付摘要
 - 模式: {quick|standard|critical}
@@ -69,17 +69,17 @@
 ## 变更与风险
 - 主要产出: {代码/测试/文档/诊断}
 - 已知风险: {若无则写“无”}
-- 下一步: {进入 assure / 回到 deliver / 回到设计}
+- 下一步: {进入 test|进入 review|回到 think|进入 hunt}
 ```
 
 ---
 
-## Assurance Report
+## Review Report
 
-适用产物类型：`assurance-report`
+适用产物类型：`review-report`（兼容旧名：`assurance-report`）
 
 ```markdown
-# Assurance Report
+# Review Report
 
 ## 验收结论
 - 合并结论: {mergeable|not_mergeable}
@@ -90,17 +90,17 @@
 - 剩余风险: {若无则写“无”}
 
 ## 建议动作
-- 建议下一步: {进入 deploy / 回到 deliver / 回到 think}
+- 建议下一步: {进入 deploy|回到 dev|回到 test|回到 think|进入 hunt}
 ```
 
 ---
 
-## Release Advice
+## Review Advice
 
-适用产物类型：`release-advice`
+适用产物类型：`review-advice`（兼容旧名：`release-advice`）
 
 ```markdown
-# Release Advice
+# Review Advice
 
 ## 发布建议
 - 合并建议: {建议合并/建议暂缓合并}

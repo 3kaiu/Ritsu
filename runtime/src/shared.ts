@@ -17,10 +17,13 @@ export function getSharedDir(): string {
 // ─── Skill / Stage 语义映射 ────────────────────────────────
 
 export const SKILL_STAGE_MAP: Record<string, string> = {
-  route: "intake",
-  pipe: "deliver",
-  review: "assure",
-  think: "deliver",
+  route: "think",
+  pipe: "dev",
+  think: "think",
+  dev: "dev",
+  test: "test",
+  hunt: "hunt",
+  review: "review",
 };
 
 export function getStageForSkill(skill: string): string {
@@ -28,18 +31,22 @@ export function getStageForSkill(skill: string): string {
 }
 
 export function formatSkillWithStage(skill: string): string {
-  if (!["route", "pipe", "review"].includes(skill)) return skill;
-  const stage = SKILL_STAGE_MAP[skill];
-  if (!stage || stage === skill) return skill;
-  return `${skill}(${stage})`;
+  if (skill === "route") return "route(legacy->think)";
+  if (skill === "pipe") return "pipe(legacy->dev)";
+  return skill;
 }
 
 export const SKILL_MAPPING_DISPLAY =
-  "route(intake) / pipe(deliver) / review(assure)";
+  "legacy ctx aliases: route->think, pipe->dev";
 
 // ─── Artifact 常量 ──────────────────────────────────────────
 
 export const ARTIFACT_VALID_TYPES = [
+  "think-ticket",
+  "think-plan",
+  "dev-report",
+  "review-report",
+  "review-advice",
   "intake-ticket",
   "delivery-plan",
   "delivery-report",
@@ -58,8 +65,46 @@ export type ArtifactLayer =
   | "compatibility"
   | "system";
 
+/** 新旧产物名兼容映射：alias -> canonical */
+export const ARTIFACT_CANONICAL_TYPE_MAP: Record<string, string> = {
+  "think-ticket": "intake-ticket",
+  "think-plan": "delivery-plan",
+  "dev-report": "delivery-report",
+  "review-report": "assurance-report",
+  "review-advice": "release-advice",
+  "intake-ticket": "intake-ticket",
+  "delivery-plan": "delivery-plan",
+  "delivery-report": "delivery-report",
+  "assurance-report": "assurance-report",
+  "release-advice": "release-advice",
+  handoff: "handoff",
+  diagnosis: "diagnosis",
+  "review-stamp": "review-stamp",
+  "optimize-report": "optimize-report",
+  ctx: "ctx",
+};
+
+/** canonical -> preferred outward alias */
+export const ARTIFACT_PREFERRED_TYPE_MAP: Record<string, string> = {
+  "intake-ticket": "think-ticket",
+  "delivery-plan": "think-plan",
+  "delivery-report": "dev-report",
+  "assurance-report": "review-report",
+  "release-advice": "review-advice",
+  handoff: "handoff",
+  diagnosis: "diagnosis",
+  "review-stamp": "review-stamp",
+  "optimize-report": "optimize-report",
+  ctx: "ctx",
+};
+
 /** 产物类型 → 文件名前缀映射（含 ctx 用于 list 查询） */
 export const ARTIFACT_PREFIX_MAP: Record<string, string> = {
+  "think-ticket": "think-ticket-",
+  "think-plan": "think-plan-",
+  "dev-report": "dev-report-",
+  "review-report": "review-report-",
+  "review-advice": "review-advice-",
   "intake-ticket": "intake-ticket-",
   "delivery-plan": "delivery-plan-",
   "delivery-report": "delivery-report-",
@@ -74,6 +119,11 @@ export const ARTIFACT_PREFIX_MAP: Record<string, string> = {
 
 /** 产物类型 → 产品层级映射 */
 export const ARTIFACT_LAYER_MAP: Record<string, ArtifactLayer> = {
+  "think-ticket": "primary",
+  "think-plan": "primary",
+  "dev-report": "primary",
+  "review-report": "primary",
+  "review-advice": "primary",
   "intake-ticket": "primary",
   "delivery-plan": "primary",
   "delivery-report": "primary",
@@ -85,6 +135,34 @@ export const ARTIFACT_LAYER_MAP: Record<string, ArtifactLayer> = {
   "review-stamp": "compatibility",
   ctx: "system",
 };
+
+export function getCanonicalArtifactType(type: string): string {
+  return ARTIFACT_CANONICAL_TYPE_MAP[type] ?? type;
+}
+
+export function getPreferredArtifactType(type: string): string {
+  const canonical = getCanonicalArtifactType(type);
+  return ARTIFACT_PREFERRED_TYPE_MAP[canonical] ?? canonical;
+}
+
+export function isArtifactTypeInSameFamily(a: string, b: string): boolean {
+  return getCanonicalArtifactType(a) === getCanonicalArtifactType(b);
+}
+
+export function getArtifactPrefixesForType(type: string): string[] {
+  if (type === "all") return [];
+  const canonical = getCanonicalArtifactType(type);
+  return Object.entries(ARTIFACT_PREFIX_MAP)
+    .filter(([artifactType]) => getCanonicalArtifactType(artifactType) === canonical)
+    .map(([, prefix]) => prefix);
+}
+
+export function detectArtifactTypeFromFileName(fileName: string): string | null {
+  const match = Object.entries(ARTIFACT_PREFIX_MAP).find(([, prefix]) =>
+    fileName.startsWith(prefix),
+  );
+  return match?.[0] ?? null;
+}
 
 // ─── ritsu_exec 安全边界常量 ────────────────────────────────
 

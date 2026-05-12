@@ -15,6 +15,7 @@ interface CompiledTool {
   description: string;
   inputSchema: Record<string, unknown>;
   outputSchema?: Record<string, unknown>;
+  errorShape?: Record<string, unknown>;
   callTemplate?: Record<string, unknown>;
   validation?: string;
 }
@@ -91,6 +92,7 @@ export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
 
     // 保留非 MCP 协议字段供 handler 使用
     if (t.output_schema) tool.outputSchema = t.output_schema;
+    if (t.error_shape) tool.errorShape = t.error_shape;
     if (t.call_template) tool.callTemplate = t.call_template;
     if (t.validation) tool.validation = t.validation;
 

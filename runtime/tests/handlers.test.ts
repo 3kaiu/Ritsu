@@ -28,6 +28,10 @@ import {
   SKILL_MAPPING_DISPLAY,
   getStageForSkill,
 } from "../src/shared.js";
+import {
+  validateFlowManifest,
+  getFlowById,
+} from "../src/flow-runtime.js";
 import { formatEvent, formatSkill, usage as cliUsage } from "../src/cli.js";
 import {
   existsSync,
@@ -43,6 +47,50 @@ const TEST_ROOT = resolve("/tmp/ritsu-test-" + process.pid);
 const RITSU_DIR = ".ritsu";
 const RUNTIME_ROOT = resolve(process.cwd());
 const REPO_ROOT = resolve(RUNTIME_ROOT, "..");
+
+function expectValueToMatchDocumentedShape(
+  value: unknown,
+  schema: Record<string, any>,
+): void {
+  if (schema.type === "object") {
+    expect(value).not.toBeNull();
+    expect(typeof value).toBe("object");
+    const objectValue = value as Record<string, unknown>;
+    const properties = (schema.properties ?? {}) as Record<string, any>;
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    for (const key of required) {
+      expect(objectValue).toHaveProperty(key);
+    }
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (!(key in objectValue)) continue;
+      expectValueToMatchDocumentedShape(objectValue[key], propertySchema);
+    }
+    return;
+  }
+
+  if (schema.type === "array") {
+    expect(Array.isArray(value)).toBe(true);
+    const arrayValue = value as unknown[];
+    if (arrayValue.length > 0 && schema.items) {
+      expectValueToMatchDocumentedShape(arrayValue[0], schema.items);
+    }
+    return;
+  }
+
+  if (schema.type === "string") {
+    expect(typeof value).toBe("string");
+    return;
+  }
+
+  if (schema.type === "boolean") {
+    expect(typeof value).toBe("boolean");
+    return;
+  }
+
+  if (schema.type === "integer" || schema.type === "number") {
+    expect(typeof value).toBe("number");
+  }
+}
 
 beforeEach(() => {
   // 清理并创建测试目录
@@ -183,14 +231,14 @@ describe("validateEvent (JS ajv)", () => {
 
 describe("ritsu CLI display helpers", () => {
   it("should keep stage classification separate from CLI display mapping", () => {
-    expect(getStageForSkill("think")).toBe("deliver");
+    expect(getStageForSkill("think")).toBe("think");
     expect(formatSkill("think")).toBe("think");
   });
 
-  it("should render compatibility skill names with product-stage mapping", () => {
-    expect(formatSkill("route")).toBe("route(intake)");
-    expect(formatSkill("pipe")).toBe("pipe(deliver)");
-    expect(formatSkill("review")).toBe("review(assure)");
+  it("should render legacy skill aliases explicitly", () => {
+    expect(formatSkill("route")).toBe("route(legacy->think)");
+    expect(formatSkill("pipe")).toBe("pipe(legacy->dev)");
+    expect(formatSkill("review")).toBe("review");
   });
 
   it("should keep non-stage internal skills unchanged", () => {
@@ -209,7 +257,7 @@ describe("ritsu CLI display helpers", () => {
       status: "done",
       step: "3/3",
     });
-    expect(output).toContain("review(assure)");
+    expect(output).toContain("review");
   });
 });
 
@@ -272,10 +320,10 @@ describe("compiled tool schemas", () => {
     });
 
     expect(properties.last_incomplete.properties.stage.description).toContain(
-      "兼容 skill 名会映射为 intake / deliver / assure",
+      "legacy alias 会映射为接近的当前工作技能",
     );
     expect(properties.recovery_context.properties.stage.description).toContain(
-      "think 也会归入 deliver",
+      "显式技能保持原名",
     );
     expect(
       properties.circuit_breaker_status.properties.recommended_stage
@@ -363,6 +411,106 @@ describe("compiled tool schemas", () => {
       size_bytes: { type: "integer" },
       artifact_meta: { type: "object" },
     });
+    expect(writeArtifactTool?.errorShape).toBeTruthy();
+    const errorShape = writeArtifactTool?.errorShape as Record<string, any>;
+    expect(errorShape.properties.error.properties).toMatchObject({
+      type: { type: "string" },
+      message: { type: "string" },
+      violations: { type: "array" },
+    });
+    expect(
+      errorShape.properties.error.properties.violations.items.properties,
+    ).toMatchObject({
+      code: { type: "string" },
+      severity: { type: "string" },
+      path: { type: "string" },
+      artifact_type: { type: "string" },
+      message: { type: "string" },
+      expected: { type: "array" },
+      actual: { type: "array" },
+    });
+  });
+
+  it("should keep ritsu_apply_flow_decision error shape stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const applyFlowDecisionTool = tools.find(
+      (tool) => tool.name === "ritsu_apply_flow_decision",
+    );
+
+    expect(applyFlowDecisionTool?.errorShape).toBeTruthy();
+    const errorShape = applyFlowDecisionTool?.errorShape as Record<string, any>;
+    expect(errorShape.properties.error.properties).toMatchObject({
+      type: { type: "string" },
+      message: { type: "string" },
+      violations: { type: "array" },
+    });
+    expect(
+      errorShape.properties.error.properties.violations.items.properties,
+    ).toMatchObject({
+      code: { type: "string" },
+      severity: { type: "string" },
+      step_id: { type: "string" },
+      path: { type: "string" },
+      artifact_type: { type: "string" },
+      message: { type: "string" },
+      expected: { type: "array" },
+      actual: { type: "array" },
+    });
+  });
+
+  it("should document a write-artifact error shape that matches runtime payloads", async () => {
+    const tools = await compileToolsFromYaml();
+    const writeArtifactTool = tools.find(
+      (tool) => tool.name === "ritsu_write_artifact",
+    );
+
+    const mod = await import("../src/handlers/write-artifact.js");
+    const result = await mod.ritsu_write_artifact({
+      type: "invalid",
+      filename: "test.md",
+      content: "hello",
+    });
+
+    expect(result.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expectValueToMatchDocumentedShape(
+      data,
+      writeArtifactTool?.errorShape as Record<string, any>,
+    );
+  });
+
+  it("should document an apply-flow-decision error shape that matches runtime payloads", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const tools = await compileToolsFromYaml();
+    const applyFlowDecisionTool = tools.find(
+      (tool) => tool.name === "ritsu_apply_flow_decision",
+    );
+    const runFlow = (await import("../src/handlers/run-flow.js")).ritsu_run_flow;
+    const applyFlowDecision = (
+      await import("../src/handlers/apply-flow-decision.js")
+    ).ritsu_apply_flow_decision;
+
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "error shape contract", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const invalidDecision = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "missing contract fields",
+      decision_output: {
+        goal: "error shape contract",
+      },
+    });
+
+    expect(invalidDecision.isError).toBe(true);
+    const data = JSON.parse(invalidDecision.content[0].text);
+    expectValueToMatchDocumentedShape(
+      data,
+      applyFlowDecisionTool?.errorShape as Record<string, any>,
+    );
+    delete process.env.RITSU_PROJECT_ROOT;
   });
 
   it("should keep ritsu_list_artifacts output schema stable", async () => {
@@ -693,6 +841,116 @@ describe("compiled tool schemas", () => {
   });
 });
 
+describe("flow runtime", () => {
+  it("should validate built-in delivery flows", () => {
+    const thinkFlow = getFlowById("think-clarify");
+    const reviewFlow = getFlowById("review-acceptance");
+
+    expect(thinkFlow).toBeTruthy();
+    expect(reviewFlow).toBeTruthy();
+    expect(validateFlowManifest(thinkFlow!)).toMatchObject({ valid: true });
+    expect(validateFlowManifest(reviewFlow!)).toMatchObject({ valid: true });
+  });
+
+  it("should reject invalid manifest structure", () => {
+    const invalid = {
+      flow_id: "bad-flow",
+      phase: "dev",
+      intent: "broken",
+      required_inputs: [],
+      prechecks: [],
+      steps: [
+        {
+          step_id: "x",
+          executor_type: "tool",
+          success_condition: "",
+          on_failure: "",
+        },
+      ],
+      verifications: [],
+      artifacts: [],
+      failure_recovery: [],
+      next_phase_rules: [],
+    } as any;
+
+    const result = validateFlowManifest(invalid);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" | ")).toContain("missing action");
+    expect(result.errors.join(" | ")).toContain("failure_recovery must not be empty");
+    expect(result.errors.join(" | ")).toContain("phase 'dev' must declare at least one of: dev-report");
+  });
+
+  it("should reject invalid ai decision contract wiring", () => {
+    const invalid = {
+      flow_id: "bad-decision-contract",
+      phase: "think",
+      intent: "broken_contract",
+      required_inputs: ["user_goal"],
+      prechecks: [],
+      steps: [
+        {
+          step_id: "confirm",
+          executor_type: "ai_decision",
+          decision_contract: {
+            required_decision_keys: ["goal"],
+            required_artifacts: ["think-plan"],
+          },
+          writes_artifact: ["think-ticket"],
+          success_condition: "ok",
+          on_failure: "nope",
+        },
+      ],
+      verifications: [],
+      artifacts: ["think-ticket", "think-plan"],
+      failure_recovery: ["persist state"],
+      next_phase_rules: [{ when: "done", next_phase: "dev" }],
+    } as any;
+
+    const result = validateFlowManifest(invalid);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" | ")).toContain(
+      "decision_contract.required_artifacts must be declared in writes_artifact",
+    );
+  });
+
+  it("should reject invalid artifact expectations wiring", () => {
+    const invalid = {
+      flow_id: "bad-artifact-expectation",
+      phase: "think",
+      intent: "broken_contract",
+      required_inputs: ["user_goal"],
+      prechecks: [],
+      steps: [
+        {
+          step_id: "confirm",
+          executor_type: "ai_decision",
+          decision_contract: {
+            artifact_expectations: [
+              {
+                type: "think-plan",
+                required_contains: [],
+              },
+            ],
+          },
+          writes_artifact: ["think-ticket"],
+          success_condition: "ok",
+          on_failure: "nope",
+        },
+      ],
+      verifications: [],
+      artifacts: ["think-ticket", "think-plan"],
+      failure_recovery: ["persist state"],
+      next_phase_rules: [{ when: "done", next_phase: "dev" }],
+    } as any;
+
+    const result = validateFlowManifest(invalid);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" | ")).toContain(
+      "decision_contract.artifact_expectations must target writes_artifact entries and declare required_contains",
+    );
+  });
+});
+
 // ─── semantic index (vectorized memory) handler 集成测试 ─────
 
 describe("semantic index handlers integration", () => {
@@ -788,7 +1046,7 @@ describe("semantic index handlers integration", () => {
     delete process.env.RITSU_EMBEDDINGS_BACKEND;
   });
 
-  it("should find release-advice within primary-layer semantic search while excluding evidence", async () => {
+  it("should surface review-advice as the preferred outward alias within primary-layer semantic search while excluding evidence", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     process.env.RITSU_EMBEDDINGS_BACKEND = "hash";
 
@@ -818,7 +1076,10 @@ describe("semantic index handlers integration", () => {
       true,
     );
     expect(
-      sd.matches.some((m: any) => m.artifact_type === "release-advice"),
+      sd.matches.some((m: any) => m.artifact_type === "review-advice"),
+    ).toBe(true);
+    expect(
+      sd.matches.some((m: any) => m.canonical_type === "release-advice"),
     ).toBe(true);
     expect(sd.matches.some((m: any) => m.artifact_type === "diagnosis")).toBe(
       false,
@@ -1038,22 +1299,22 @@ describe("ritsu_read_ctx handler integration", () => {
     const data = JSON.parse(result.content[0].text);
 
     expect(data.last_incomplete.skill).toBe("route");
-    expect(data.last_incomplete.stage).toBe("intake");
+    expect(data.last_incomplete.stage).toBe("think");
     expect(data.last_completed.skill).toBe("review");
-    expect(data.last_completed.stage).toBe("assure");
+    expect(data.last_completed.stage).toBe("review");
     expect(data.recovery_context.skill).toBe("route");
-    expect(data.recovery_context.stage).toBe("intake");
-    expect(data.recent_entries[0].stage).toBe("intake");
-    expect(data.recent_entries[1].stage).toBe("assure");
-    expect(data.recent_entries_pruned[0].stage).toBe("intake");
-    expect(data.recent_entries_pruned[1].stage).toBe("assure");
+    expect(data.recovery_context.stage).toBe("think");
+    expect(data.recent_entries[0].stage).toBe("think");
+    expect(data.recent_entries[1].stage).toBe("review");
+    expect(data.recent_entries_pruned[0].stage).toBe("think");
+    expect(data.recent_entries_pruned[1].stage).toBe("review");
     expect(data.recovery_context.resume_hint).toContain(
-      "会话恢复: intake (route)",
+      "会话恢复: think (route)",
     );
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
-  it("should keep legacy redirect skill and add recommended product stage", async () => {
+  it("should keep legacy redirect skill and add recommended explicit workflow stage", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
 
     await appendEvent(TEST_ROOT, {
@@ -1086,7 +1347,7 @@ describe("ritsu_read_ctx handler integration", () => {
     const data = JSON.parse(result.content[0].text);
 
     expect(data.circuit_breaker_status.should_redirect).toBe("think");
-    expect(data.circuit_breaker_status.recommended_stage).toBe("deliver");
+    expect(data.circuit_breaker_status.recommended_stage).toBe("think");
     expect(data.circuit_breaker_status.last_failed_skill).toBe("dev");
     delete process.env.RITSU_PROJECT_ROOT;
   });
@@ -1222,6 +1483,11 @@ describe("artifact validation rules", () => {
   it("should include product-level artifact types", () => {
     expect(ARTIFACT_VALID_TYPES).toEqual(
       expect.arrayContaining([
+        "think-ticket",
+        "think-plan",
+        "dev-report",
+        "review-report",
+        "review-advice",
         "intake-ticket",
         "delivery-plan",
         "delivery-report",
@@ -1231,13 +1497,13 @@ describe("artifact validation rules", () => {
     );
   });
 
-  it("should keep the five primary artifacts in canonical order", () => {
+  it("should keep the five preferred workflow artifact aliases first", () => {
     expect(ARTIFACT_VALID_TYPES.slice(0, 5)).toEqual([
-      "intake-ticket",
-      "delivery-plan",
-      "delivery-report",
-      "assurance-report",
-      "release-advice",
+      "think-ticket",
+      "think-plan",
+      "dev-report",
+      "review-report",
+      "review-advice",
     ]);
     expect(
       ARTIFACT_VALID_TYPES.slice(0, 5).every(
@@ -1255,6 +1521,11 @@ describe("artifact validation rules", () => {
     for (const [type, prefix] of Object.entries(ARTIFACT_PREFIX_MAP)) {
       if (type === "ctx") continue;
       const sampleByType: Record<string, string> = {
+        "think-ticket": "think-ticket-auth.md",
+        "think-plan": "think-plan-auth.md",
+        "dev-report": "dev-report-auth.md",
+        "review-report": "review-report-auth.md",
+        "review-advice": "review-advice-auth.md",
         "intake-ticket": "intake-ticket-auth.md",
         "delivery-plan": "delivery-plan-auth.md",
         "delivery-report": "delivery-report-auth.md",
@@ -1412,7 +1683,7 @@ describe("ritsu_emit_event handler integration", () => {
     const result = await emitEvent({
       event_type: "artifact_written",
       step: "3/3",
-      // ctx skill 仍记录兼容文件名；产品语义上这里对应 assure
+      // ctx skill 仍记录原始技能名；这里使用 review
       skill: "review",
       domain: "backend",
       artifact: resolve(TEST_ROOT, RITSU_DIR, "assurance-report-auth.md"),
@@ -1427,9 +1698,61 @@ describe("ritsu_emit_event handler integration", () => {
     const ctxPath = getCtxFilePath(TEST_ROOT);
     const lines = readFileSync(ctxPath, "utf-8").trim().split("\n");
     const lastEvent = JSON.parse(lines[lines.length - 1]);
-    expect(lastEvent.artifact_meta.type).toBe("assurance-report");
+    expect(lastEvent.artifact_meta.type).toBe("review-report");
+    expect(lastEvent.artifact_meta.canonical_type).toBe("assurance-report");
     expect(lastEvent.artifact_meta.layer).toBe("primary");
     expect(lastEvent.artifact_meta.summary).toBe("final assurance result");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should accept artifact_meta.canonical_type for artifact_written events", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await emitEvent({
+      event_type: "artifact_written",
+      step: "3/3",
+      skill: "think",
+      domain: "backend",
+      artifact: resolve(TEST_ROOT, RITSU_DIR, "think-ticket-auth.md"),
+      artifact_meta: {
+        type: "think-ticket",
+        canonical_type: "intake-ticket",
+        size_bytes: 123,
+        summary: "normalized think ticket",
+      },
+    });
+    expect(result.isError).toBeFalsy();
+
+    const ctxPath = getCtxFilePath(TEST_ROOT);
+    const lines = readFileSync(ctxPath, "utf-8").trim().split("\n");
+    const lastEvent = JSON.parse(lines[lines.length - 1]);
+    expect(lastEvent.artifact_meta.type).toBe("think-ticket");
+    expect(lastEvent.artifact_meta.canonical_type).toBe("intake-ticket");
+    expect(lastEvent.artifact_meta.layer).toBe("primary");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should normalize legacy primary artifact types to preferred aliases when emitting events", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await emitEvent({
+      event_type: "artifact_written",
+      step: "2/2",
+      skill: "dev",
+      domain: "backend",
+      artifact: resolve(TEST_ROOT, RITSU_DIR, "delivery-report-auth.md"),
+      artifact_meta: {
+        type: "delivery-report",
+        size_bytes: 456,
+        summary: "legacy report event",
+      },
+    });
+    expect(result.isError).toBeFalsy();
+
+    const ctxPath = getCtxFilePath(TEST_ROOT);
+    const lines = readFileSync(ctxPath, "utf-8").trim().split("\n");
+    const lastEvent = JSON.parse(lines[lines.length - 1]);
+    expect(lastEvent.artifact_meta.type).toBe("dev-report");
+    expect(lastEvent.artifact_meta.canonical_type).toBe("delivery-report");
+    expect(lastEvent.artifact_meta.layer).toBe("primary");
     delete process.env.RITSU_PROJECT_ROOT;
   });
 });
@@ -1438,6 +1761,8 @@ describe("ritsu_emit_event handler integration", () => {
 
 describe("ritsu_write_artifact handler integration", () => {
   let writeArtifact: (params: Record<string, unknown>) => Promise<any>;
+  let artifactWriteErrorType: string;
+  let artifactValidationErrorType: string;
 
   const validHandoffContent = `# Auth Delivery
 
@@ -1466,7 +1791,7 @@ describe("ritsu_write_artifact handler integration", () => {
 - [ ] \`src/auth/session.ts\`: 增加续期和持久化逻辑
 `;
 
-  const validIntakeTicketContent = `# Intake Ticket
+  const validIntakeTicketContent = `# Think Ticket
 
 ## 任务识别
 - 任务类型: Bug 修复
@@ -1478,11 +1803,11 @@ describe("ritsu_write_artifact handler integration", () => {
 - 缺失信息: 无
 
 ## 执行路径
-- 推荐路径: deliver.quick
+- 推荐路径: 先进入 dev
 - 次要意图: 无
 `;
 
-  const validDeliveryReportContent = `# Delivery Report
+  const validDeliveryReportContent = `# Dev Report
 
 ## 交付摘要
 - 模式: standard
@@ -1493,10 +1818,10 @@ describe("ritsu_write_artifact handler integration", () => {
 ## 变更与风险
 - 主要产出: auth session 持久化代码与测试
 - 已知风险: 旧 token 清理仍依赖定时任务
-- 下一步: 进入 assure 验收
+- 下一步: 进入 review
 `;
 
-  const validDeliveryPlanContent = `# Delivery Plan
+  const validDeliveryPlanContent = `# Think Plan
 
 ## 目标与范围
 - 交付目标: 完成登录态持久化与自动续期
@@ -1512,7 +1837,7 @@ describe("ritsu_write_artifact handler integration", () => {
 - 回滚说明: 回退 session refresh 逻辑并清理新增状态
 `;
 
-  const validAssuranceReportContent = `# Assurance Report
+  const validAssuranceReportContent = `# Review Report
 
 ## 验收结论
 - 合并结论: mergeable
@@ -1526,7 +1851,7 @@ describe("ritsu_write_artifact handler integration", () => {
 - 建议下一步: 进入 deploy
 `;
 
-  const validReleaseAdviceContent = `# Release Advice
+  const validReleaseAdviceContent = `# Review Advice
 
 ## 发布建议
 - 合并建议: 建议合并
@@ -1545,11 +1870,24 @@ describe("ritsu_write_artifact handler integration", () => {
   beforeAll(async () => {
     const mod = await import("../src/handlers/write-artifact.js");
     writeArtifact = mod.ritsu_write_artifact;
+    artifactWriteErrorType = mod.ARTIFACT_WRITE_ERROR_TYPE;
+    artifactValidationErrorType = mod.ARTIFACT_VALIDATION_ERROR_TYPE;
   });
 
   it("should reject missing required fields", async () => {
     const result = await writeArtifact({ type: "handoff" });
     expect(result.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "missing_required_fields",
+        severity: "error",
+        path: "params",
+        expected: ["type", "filename", "content"],
+        actual: ["type"],
+      }),
+    ]);
   });
 
   it("should reject invalid artifact type", async () => {
@@ -1559,7 +1897,16 @@ describe("ritsu_write_artifact handler integration", () => {
       content: "hello",
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("invalid artifact type");
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "invalid_artifact_type",
+        severity: "error",
+        path: "type",
+        actual: ["invalid"],
+      }),
+    ]);
   });
 
   it("should reject wrong filename prefix", async () => {
@@ -1569,7 +1916,16 @@ describe("ritsu_write_artifact handler integration", () => {
       content: "hello",
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("must start with");
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "filename_prefix_mismatch",
+        severity: "error",
+        path: "filename",
+        actual: ["wrong-name.md"],
+      }),
+    ]);
   });
 
   it("should reject path traversal", async () => {
@@ -1579,7 +1935,16 @@ describe("ritsu_write_artifact handler integration", () => {
       content: "hello",
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("path traversal");
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "path_traversal",
+        severity: "error",
+        path: "filename",
+        actual: ["handoff-../../etc/passwd"],
+      }),
+    ]);
   });
 
   it("should reject placeholder content", async () => {
@@ -1589,7 +1954,68 @@ describe("ritsu_write_artifact handler integration", () => {
       content: "# TODO: implement later",
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("placeholder");
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "placeholder_content",
+        severity: "error",
+        path: "content",
+        actual: ["placeholder detected"],
+      }),
+    ]);
+  });
+
+  it("should return structured schema violations for malformed artifact content", async () => {
+    const result = await writeArtifact({
+      type: "think-ticket",
+      filename: "think-ticket-invalid-schema.md",
+      content: `# Think Ticket
+
+## 任务识别
+- 当前目标: malformed artifact
+
+## 风险与信息
+- 风险等级: standard
+`,
+    });
+    expect(result.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactValidationErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifact.sections.任务识别.fields.任务类型",
+        expected: ["任务类型"],
+        actual: ["当前目标"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifact.sections.风险与信息.fields.信息完备度",
+        expected: ["信息完备度"],
+        actual: ["风险等级"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifact.sections.风险与信息.fields.缺失信息",
+        expected: ["缺失信息"],
+        actual: ["风险等级"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_section",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifact.sections.执行路径",
+        expected: ["## 执行路径"],
+        actual: ["任务识别", "风险与信息"],
+      }),
+    ]);
   });
 
   it("should write a valid artifact atomically", async () => {
@@ -1602,6 +2028,62 @@ describe("ritsu_write_artifact handler integration", () => {
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
     expect(data.size_bytes).toBeGreaterThan(0);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should return structured overwrite conflict errors", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const firstResult = await writeArtifact({
+      type: "handoff",
+      filename: "handoff-overwrite-test.md",
+      content: validHandoffContent,
+    });
+    expect(firstResult.isError).toBeFalsy();
+
+    const conflictResult = await writeArtifact({
+      type: "handoff",
+      filename: "handoff-overwrite-test.md",
+      content: validHandoffContent,
+    });
+    expect(conflictResult.isError).toBe(true);
+    const data = JSON.parse(conflictResult.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "file_exists",
+        severity: "error",
+        path: "filename",
+        actual: ["handoff-overwrite-test.md"],
+        expected: ["overwrite=true", "new filename"],
+      }),
+    ]);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should return structured atomic write failures", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    mkdirSync(resolve(TEST_ROOT, RITSU_DIR, "handoff-atomic-failure.md"), {
+      recursive: true,
+    });
+
+    const result = await writeArtifact({
+      type: "handoff",
+      filename: "handoff-atomic-failure.md",
+      content: validHandoffContent,
+      overwrite: true,
+    });
+
+    expect(result.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expect(data.error.type).toBe(artifactWriteErrorType);
+    expect(data.error.violations).toEqual([
+      expect.objectContaining({
+        code: "atomic_write_failed",
+        severity: "error",
+        path: "filesystem",
+        actual: expect.arrayContaining([expect.stringMatching(/directory/i)]),
+      }),
+    ]);
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
@@ -1635,6 +2117,22 @@ describe("ritsu_write_artifact handler integration", () => {
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
+  it("should write a valid think-ticket artifact alias", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "think-ticket",
+      filename: "think-ticket-test.md",
+      content: validIntakeTicketContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("think-ticket-test.md");
+    expect(data.artifact_meta.type).toBe("think-ticket");
+    expect(data.artifact_meta.canonical_type).toBe("intake-ticket");
+    expect(data.artifact_meta.layer).toBe("primary");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
   it("should write a valid delivery-plan artifact", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     const result = await writeArtifact({
@@ -1649,6 +2147,21 @@ describe("ritsu_write_artifact handler integration", () => {
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
+  it("should write a valid dev-report artifact alias", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "dev-report",
+      filename: "dev-report-test.md",
+      content: validDeliveryReportContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("dev-report-test.md");
+    expect(data.artifact_meta.type).toBe("dev-report");
+    expect(data.artifact_meta.canonical_type).toBe("delivery-report");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
   it("should write a valid assurance-report artifact", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     const result = await writeArtifact({
@@ -1659,6 +2172,20 @@ describe("ritsu_write_artifact handler integration", () => {
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
     expect(data.path).toContain("assurance-report-test.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should write a valid review-report artifact alias", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await writeArtifact({
+      type: "review-report",
+      filename: "review-report-test.md",
+      content: validAssuranceReportContent,
+    });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.path).toContain("review-report-test.md");
+    expect(data.artifact_meta.canonical_type).toBe("assurance-report");
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
@@ -1753,22 +2280,50 @@ describe("ritsu_list_artifacts handler integration", () => {
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
     expect(data.total_count).toBe(1);
-    expect(data.files[0].artifact_type).toBe("delivery-report");
+    expect(data.files[0].artifact_type).toBe("dev-report");
+    expect(data.files[0].canonical_type).toBe("delivery-report");
+    expect(data.files[0].detected_type).toBe("delivery-report");
     expect(data.files[0].artifact_layer).toBe("primary");
     expect(data.files[0].path).toContain("delivery-report-auth.md");
     delete process.env.RITSU_PROJECT_ROOT;
   });
 
-  it("should recognize delivery-plan and release-advice as primary artifact types", async () => {
+  it("should treat dev-report and delivery-report as the same filter family", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "dev-report-auth.md"),
+      "# Dev Report",
+      "utf-8",
+    );
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "delivery-report-auth.md"),
+      "# Dev Report",
+      "utf-8",
+    );
+
+    const result = await listArtifacts({ type: "dev-report" });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.total_count).toBe(2);
+    expect(
+      data.files.some((file: any) => file.artifact_type === "dev-report"),
+    ).toBe(true);
+    expect(
+      data.files.every((file: any) => file.canonical_type === "delivery-report"),
+    ).toBe(true);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should expose preferred aliases for legacy delivery-plan and release-advice files", async () => {
     process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
     writeFileSync(
       resolve(TEST_ROOT, RITSU_DIR, "delivery-plan-auth.md"),
-      "# delivery plan",
+      "# Think Plan",
       "utf-8",
     );
     writeFileSync(
       resolve(TEST_ROOT, RITSU_DIR, "release-advice-auth.md"),
-      "# release advice",
+      "# Review Advice",
       "utf-8",
     );
 
@@ -1776,14 +2331,16 @@ describe("ritsu_list_artifacts handler integration", () => {
     expect(planResult.isError).toBeFalsy();
     const planData = JSON.parse(planResult.content[0].text);
     expect(planData.total_count).toBe(1);
-    expect(planData.files[0].artifact_type).toBe("delivery-plan");
+    expect(planData.files[0].artifact_type).toBe("think-plan");
+    expect(planData.files[0].canonical_type).toBe("delivery-plan");
     expect(planData.files[0].artifact_layer).toBe("primary");
 
     const releaseResult = await listArtifacts({ type: "release-advice" });
     expect(releaseResult.isError).toBeFalsy();
     const releaseData = JSON.parse(releaseResult.content[0].text);
     expect(releaseData.total_count).toBe(1);
-    expect(releaseData.files[0].artifact_type).toBe("release-advice");
+    expect(releaseData.files[0].artifact_type).toBe("review-advice");
+    expect(releaseData.files[0].canonical_type).toBe("release-advice");
     expect(releaseData.files[0].artifact_layer).toBe("primary");
 
     delete process.env.RITSU_PROJECT_ROOT;
@@ -1838,9 +2395,616 @@ describe("ritsu_contract_validate handler integration", () => {
     const result = await contractValidate({ min_coverage: 0 });
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
-    expect(data.artifact_type).toBe("intake-ticket");
+    expect(data.artifact_type).toBe("think-ticket");
+    expect(data.canonical_type).toBe("intake-ticket");
+    expect(data.detected_type).toBe("intake-ticket");
     expect(data.artifact_path).toContain("intake-ticket-auth.md");
     expect(data.handoff_path).toContain("intake-ticket-auth.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should fall back to think-ticket when no handoff implementation contract exists", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    execSync("git init", { cwd: TEST_ROOT, stdio: "ignore" });
+    writeFileSync(
+      resolve(TEST_ROOT, RITSU_DIR, "think-ticket-auth.md"),
+      "# Think\n\n## 任务识别\n- 当前目标: auth flow\n- 推荐路径: update AuthService\n",
+      "utf-8",
+    );
+
+    const result = await contractValidate({ min_coverage: 0 });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.artifact_type).toBe("think-ticket");
+    expect(data.canonical_type).toBe("intake-ticket");
+    expect(data.detected_type).toBe("think-ticket");
+    expect(data.artifact_path).toContain("think-ticket-auth.md");
+    expect(data.handoff_path).toContain("think-ticket-auth.md");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+});
+
+// ─── Flow runtime handlers 集成测试 ───────────────────────────
+
+describe("flow runtime handlers integration", () => {
+  let listFlows: (params: Record<string, unknown>) => Promise<any>;
+  let validateFlow: (params: Record<string, unknown>) => Promise<any>;
+  let runFlow: (params: Record<string, unknown>) => Promise<any>;
+  let resumeFlow: (params: Record<string, unknown>) => Promise<any>;
+  let getFlowState: (params: Record<string, unknown>) => Promise<any>;
+  let applyFlowDecision: (params: Record<string, unknown>) => Promise<any>;
+  let flowDecisionContractErrorType: string;
+
+  beforeAll(async () => {
+    listFlows = (await import("../src/handlers/list-flows.js")).ritsu_list_flows;
+    validateFlow = (await import("../src/handlers/validate-flow.js")).ritsu_validate_flow;
+    runFlow = (await import("../src/handlers/run-flow.js")).ritsu_run_flow;
+    resumeFlow = (await import("../src/handlers/resume-flow.js")).ritsu_resume_flow;
+    getFlowState = (await import("../src/handlers/get-flow-state.js")).ritsu_get_flow_state;
+    applyFlowDecision = (
+      await import("../src/handlers/apply-flow-decision.js")
+    ).ritsu_apply_flow_decision;
+    flowDecisionContractErrorType = (
+      await import("../src/flow-runtime.js")
+    ).FLOW_DECISION_CONTRACT_ERROR_TYPE;
+  });
+
+  it("should list built-in delivery flows", async () => {
+    const result = await listFlows({});
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.total_count).toBeGreaterThanOrEqual(5);
+    expect(
+      data.flows.some((flow: any) => flow.flow_id === "review-acceptance"),
+    ).toBe(true);
+  });
+
+  it("should validate a built-in flow by id", async () => {
+    const result = await validateFlow({ flow_id: "dev-delivery" });
+    expect(result.isError).toBeFalsy();
+    const data = JSON.parse(result.content[0].text);
+    expect(data.flow_id).toBe("dev-delivery");
+    expect(data.valid).toBe(true);
+    expect(data.errors).toEqual([]);
+  });
+
+  it("should create flow state and stop at the first ai_decision step", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const result = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "smoke check" },
+    });
+    expect(result.isError).toBeFalsy();
+
+    const data = JSON.parse(result.content[0].text);
+    expect(data.flow_id).toBe("think-clarify");
+    expect(data.status).toBe("awaiting_ai");
+    expect(data.current_step).toBe("confirm_goal");
+    expect(data.recovery_point).toBe("confirm_goal");
+    expect(data.completed_steps).toContain("load_ctx");
+    expect(data.step_results.some((step: any) => step.status === "awaiting_ai")).toBe(
+      true,
+    );
+
+    const statePath = resolve(TEST_ROOT, RITSU_DIR, "flows", `${data.run_id}.json`);
+    expect(existsSync(statePath)).toBe(true);
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should read the latest flow state from disk", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "read latest state" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const stateResult = await getFlowState({});
+    expect(stateResult.isError).toBeFalsy();
+    const stateData = JSON.parse(stateResult.content[0].text);
+    expect(stateData.run_id).toBe(runData.run_id);
+    expect(stateData.flow_id).toBe("think-clarify");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should resume a paused flow without losing the recovery point", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "resume smoke" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const resumeResult = await resumeFlow({ run_id: runData.run_id });
+    expect(resumeResult.isError).toBeFalsy();
+    const resumeData = JSON.parse(resumeResult.content[0].text);
+    expect(resumeData.run_id).toBe(runData.run_id);
+    expect(resumeData.status).toBe("awaiting_ai");
+    expect(resumeData.current_step).toBe("confirm_goal");
+    expect(resumeData.recovery_point).toBe("confirm_goal");
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should apply ai decisions, emit ctx events, and complete a flow", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "complete think flow", domain: "backend" },
+    });
+    expect(runResult.isError).toBeFalsy();
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const confirmResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "goal clarified",
+      decision_output: {
+        goal: "complete think flow",
+        scope: ["session persistence"],
+        risk: "standard",
+      },
+    });
+    expect(confirmResult.isError).toBeFalsy();
+    const confirmData = JSON.parse(confirmResult.content[0].text);
+    expect(confirmData.status).toBe("awaiting_ai");
+    expect(confirmData.current_step).toBe("draft_think_artifacts");
+
+    const thinkTicketContent = `# Think Ticket
+
+## 任务识别
+- 任务类型: 功能开发
+- 当前目标: 完成交付流程闭环
+
+## 风险与信息
+- 风险等级: standard
+- 信息完备度: 充分
+- 缺失信息: 无
+
+## 执行路径
+- 推荐路径: 先进入 dev
+- 次要意图: 无
+`;
+
+    const thinkPlanContent = `# Think Plan
+
+## 目标与范围
+- 交付目标: 完成 flow runtime 的 think 阶段闭环
+- 纳入范围: think-ticket、think-plan、flow state
+- 不纳入范围: 新增部署逻辑
+
+## 实施计划
+- 实施步骤: 1. 澄清目标 2. 写入主产物 3. 验证产物可读
+- 依赖与前置条件: runtime handlers 已可用
+
+## 验证与回滚
+- 验证计划: list_artifacts 校验主产物存在
+- 回滚说明: 删除本轮新增 think 产物并重跑 flow
+`;
+
+    const artifactResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      step_id: "draft_think_artifacts",
+      summary: "planning artifacts written",
+      decision_output: {
+        contract_ready: true,
+      },
+      artifacts: [
+        {
+          type: "think-ticket",
+          filename: "think-ticket-flow-test.md",
+          content: thinkTicketContent,
+        },
+        {
+          type: "think-plan",
+          filename: "think-plan-flow-test.md",
+          content: thinkPlanContent,
+        },
+      ],
+    });
+    expect(artifactResult.isError).toBeFalsy();
+    const artifactData = JSON.parse(artifactResult.content[0].text);
+    expect(artifactData.status).toBe("completed");
+    expect(artifactData.current_step).toBeNull();
+    expect(artifactData.verification_status).toBe("passed");
+    expect(
+      artifactData.artifact_outputs.some((path: string) =>
+        path.includes("think-ticket-flow-test.md"),
+      ),
+    ).toBe(true);
+
+    const ctxPath = getCtxFilePath(TEST_ROOT);
+    const lines = readFileSync(ctxPath, "utf-8").trim().split("\n");
+    const events = lines.map((line) => JSON.parse(line));
+    expect(
+      events.some((event: any) => event.status === "started" && event.skill === "think"),
+    ).toBe(true);
+    expect(
+      events.some(
+        (event: any) =>
+          event.status === "artifact_written" &&
+          event.artifact_meta?.type === "think-ticket",
+      ),
+    ).toBe(true);
+    expect(
+      events.some((event: any) => event.status === "done" && event.skill === "think"),
+    ).toBe(true);
+
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should reject ai decisions that violate the step contract", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "invalid decision payload", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const invalidDecision = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "missing contract fields",
+      decision_output: {
+        goal: "invalid decision payload",
+      },
+    });
+    expect(invalidDecision.isError).toBe(true);
+    const invalidData = JSON.parse(invalidDecision.content[0].text);
+    expect(invalidData.error.type).toBe(flowDecisionContractErrorType);
+    expect(invalidData.error.message).toContain("missing required keys: scope, risk");
+    expect(invalidData.error.violations).toContainEqual(
+      expect.objectContaining({
+        code: "missing_decision_keys",
+        severity: "error",
+        step_id: "confirm_goal",
+        path: "decision_output",
+        expected: ["goal", "scope", "risk"],
+        actual: ["goal"],
+      }),
+    );
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should reject artifacts that violate content expectations", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "artifact expectation mismatch", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const confirmResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "goal clarified",
+      decision_output: {
+        goal: "artifact expectation mismatch",
+        scope: ["flow contracts"],
+        risk: "standard",
+      },
+    });
+    expect(confirmResult.isError).toBeFalsy();
+
+    const invalidArtifactResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      step_id: "draft_think_artifacts",
+      summary: "bad artifact content",
+      decision_output: {
+        contract_ready: true,
+      },
+      artifacts: [
+        {
+          type: "think-ticket",
+          filename: "think-ticket-flow-bad-content.md",
+          content: `# Think Ticket
+
+## 任务识别
+- 任务类型: 功能开发
+- 当前目标: artifact expectation mismatch
+
+## 风险与信息
+- 风险等级: standard
+- 信息完备度: 充分
+- 缺失信息: 无
+
+## 执行路径
+- 推荐路径: 进入实现
+- 次要意图: 无
+`,
+        },
+      ],
+    });
+    expect(invalidArtifactResult.isError).toBe(true);
+    const invalidArtifactData = JSON.parse(invalidArtifactResult.content[0].text);
+    expect(invalidArtifactData.error.type).toBe(flowDecisionContractErrorType);
+    expect(invalidArtifactData.error.message).toContain(
+      "missing required marker: 推荐路径: 先进入 dev",
+    );
+    expect(invalidArtifactData.error.violations).toContainEqual(
+      expect.objectContaining({
+        code: "artifact_content_missing_markers",
+        severity: "error",
+        step_id: "draft_think_artifacts",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.content.markers.推荐路径: 先进入 dev",
+        expected: ["推荐路径: 先进入 dev"],
+        actual: ["- 推荐路径: 进入实现"],
+      }),
+    );
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should return schema-level violations for malformed artifacts", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "schema violation payload", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const confirmResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "goal clarified",
+      decision_output: {
+        goal: "schema violation payload",
+        scope: ["artifact schemas"],
+        risk: "standard",
+      },
+    });
+    expect(confirmResult.isError).toBeFalsy();
+
+    const invalidSchemaResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      step_id: "draft_think_artifacts",
+      summary: "schema-invalid artifact",
+      decision_output: {
+        contract_ready: true,
+      },
+      artifacts: [
+        {
+          type: "think-ticket",
+          filename: "think-ticket-schema-invalid.md",
+          content: `# Think Ticket
+
+## 任务识别
+- 任务类型: 功能开发
+- 当前目标: schema violation payload
+
+## 风险与信息
+- 风险等级: standard
+- 信息完备度: 充分
+- 缺失信息: 无
+
+## 执行路径
+- 推荐路径: 先进入 dev
+`,
+        },
+      ],
+    });
+    expect(invalidSchemaResult.isError).toBe(true);
+    const invalidSchemaData = JSON.parse(invalidSchemaResult.content[0].text);
+    expect(invalidSchemaData.error.type).toBe(flowDecisionContractErrorType);
+    expect(invalidSchemaData.error.violations).toContainEqual(
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        step_id: "draft_think_artifacts",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.artifact.sections.执行路径.fields.次要意图",
+        expected: ["次要意图"],
+        actual: ["推荐路径"],
+      }),
+    );
+
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should aggregate multiple schema violations within one artifact", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "multi schema violation payload", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const confirmResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "goal clarified",
+      decision_output: {
+        goal: "multi schema violation payload",
+        scope: ["artifact schemas"],
+        risk: "standard",
+      },
+    });
+    expect(confirmResult.isError).toBeFalsy();
+
+    const invalidSchemaResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      step_id: "draft_think_artifacts",
+      summary: "multiple schema-invalid artifact fields",
+      decision_output: {
+        contract_ready: true,
+      },
+      artifacts: [
+        {
+          type: "think-ticket",
+          filename: "think-ticket-multi-schema-invalid.md",
+          content: `# Think Ticket
+
+## 任务识别
+- 当前目标: multi schema violation payload
+
+## 风险与信息
+- 风险等级: standard
+`,
+        },
+      ],
+    });
+    expect(invalidSchemaResult.isError).toBe(true);
+    const invalidSchemaData = JSON.parse(invalidSchemaResult.content[0].text);
+    expect(invalidSchemaData.error.type).toBe(flowDecisionContractErrorType);
+    expect(invalidSchemaData.error.violations).toEqual([
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.artifact.sections.任务识别.fields.任务类型",
+        expected: ["任务类型"],
+        actual: ["当前目标"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_section",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.artifact.sections.执行路径",
+        expected: ["## 执行路径"],
+        actual: ["任务识别", "风险与信息"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.artifact.sections.风险与信息.fields.信息完备度",
+        expected: ["信息完备度"],
+        actual: ["风险等级"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_field_label",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.artifact.sections.风险与信息.fields.缺失信息",
+        expected: ["缺失信息"],
+        actual: ["风险等级"],
+      }),
+      expect.objectContaining({
+        code: "artifact_content_missing_markers",
+        severity: "error",
+        artifact_type: "think-ticket",
+        path: "artifacts.think-ticket.content.markers.推荐路径: 先进入 dev",
+        expected: ["推荐路径: 先进入 dev"],
+        actual: [],
+      }),
+    ]);
+
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should return structured violations for missing required artifacts", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "missing artifacts", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const confirmResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "goal clarified",
+      decision_output: {
+        goal: "missing artifacts",
+        scope: ["flow contracts"],
+        risk: "standard",
+      },
+    });
+    expect(confirmResult.isError).toBeFalsy();
+
+    const missingArtifactResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      step_id: "draft_think_artifacts",
+      summary: "missing required artifact",
+      decision_output: {
+        contract_ready: true,
+      },
+      artifacts: [],
+    });
+    expect(missingArtifactResult.isError).toBe(true);
+    const missingArtifactData = JSON.parse(missingArtifactResult.content[0].text);
+    expect(missingArtifactData.error.type).toBe(flowDecisionContractErrorType);
+    expect(missingArtifactData.error.violations).toContainEqual(
+      expect.objectContaining({
+        code: "missing_required_artifacts",
+        severity: "error",
+        step_id: "draft_think_artifacts",
+        path: "artifacts",
+        expected: ["think-ticket"],
+        actual: [],
+      }),
+    );
+
+    delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should aggregate multiple decision contract violations in one response", async () => {
+    process.env.RITSU_PROJECT_ROOT = TEST_ROOT;
+    const runResult = await runFlow({
+      flow_id: "think-clarify",
+      input_context: { user_goal: "aggregate violations", domain: "backend" },
+    });
+    const runData = JSON.parse(runResult.content[0].text);
+
+    const confirmResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      summary: "goal clarified",
+      decision_output: {
+        goal: "aggregate violations",
+        scope: ["flow contracts"],
+        risk: "standard",
+      },
+    });
+    expect(confirmResult.isError).toBeFalsy();
+
+    const aggregatedResult = await applyFlowDecision({
+      run_id: runData.run_id,
+      step_id: "draft_think_artifacts",
+      summary: "aggregate errors",
+      decision_output: {
+        contract_ready: true,
+      },
+      artifacts: [
+        {
+          type: "think-plan",
+          filename: "think-plan-aggregate-errors.md",
+          content: `# Think Plan
+
+## 目标与范围
+- 交付目标: aggregate violations
+- 纳入范围: flow contracts
+- 不纳入范围: 无
+`,
+        },
+      ],
+    });
+    expect(aggregatedResult.isError).toBe(true);
+    const aggregatedData = JSON.parse(aggregatedResult.content[0].text);
+    expect(aggregatedData.error.type).toBe(flowDecisionContractErrorType);
+    expect(aggregatedData.error.violations).toEqual([
+      expect.objectContaining({
+        code: "missing_required_artifacts",
+        severity: "error",
+        path: "artifacts",
+        expected: ["think-ticket"],
+        actual: ["think-plan"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_section",
+        severity: "error",
+        artifact_type: "think-plan",
+        path: "artifacts.think-plan.artifact.sections.实施计划",
+        expected: ["## 实施计划"],
+      }),
+      expect.objectContaining({
+        code: "artifact_schema_missing_section",
+        severity: "error",
+        artifact_type: "think-plan",
+        path: "artifacts.think-plan.artifact.sections.验证与回滚",
+        expected: ["## 验证与回滚"],
+      }),
+      expect.objectContaining({
+        code: "artifact_content_missing_markers",
+        severity: "error",
+        artifact_type: "think-plan",
+        path: "artifacts.think-plan.content.markers.验证计划: list_artifacts 校验主产物存在",
+        expected: ["验证计划: list_artifacts 校验主产物存在"],
+      }),
+    ]);
+
     delete process.env.RITSU_PROJECT_ROOT;
   });
 });

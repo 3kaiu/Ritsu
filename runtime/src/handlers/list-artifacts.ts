@@ -1,7 +1,13 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { ARTIFACT_LAYER_MAP, ARTIFACT_PREFIX_MAP } from "../shared.js";
+import {
+  ARTIFACT_LAYER_MAP,
+  detectArtifactTypeFromFileName,
+  getCanonicalArtifactType,
+  getArtifactPrefixesForType,
+  getPreferredArtifactType,
+} from "../shared.js";
 import { getProjectRoot, textResult, warnResult } from "./_utils.js";
 
 const RITSU_DIR = ".ritsu";
@@ -19,22 +25,27 @@ export async function ritsu_list_artifacts(
       ".ritsu directory does not exist yet",
     );
 
-  const prefix = type === "all" ? "" : (ARTIFACT_PREFIX_MAP[type] ?? "");
+  const prefixes = getArtifactPrefixesForType(type);
   const entries = readdirSync(dir)
     .map((f: string) => ({ name: f, stat: statSync(resolve(dir, f)) }))
     .filter(({ stat }) => stat.isFile())
-    .filter(({ name }) => (prefix ? name.startsWith(prefix) : true))
+    .filter(({ name }) =>
+      prefixes.length > 0
+        ? prefixes.some((prefix) => name.startsWith(prefix))
+        : true,
+    )
     .map(({ name, stat }) => {
-      const artifactType =
-        Object.entries(ARTIFACT_PREFIX_MAP).find(([, p]: [string, string]) =>
-          name.startsWith(p),
-        )?.[0] ?? "unknown";
+      const artifactType = detectArtifactTypeFromFileName(name) ?? "unknown";
+      const canonicalType = getCanonicalArtifactType(artifactType);
+      const preferredType = getPreferredArtifactType(artifactType);
 
       return {
         path: resolve(dir, name),
         modified: stat.mtime.toISOString().replace(/[-:T]/g, "").slice(0, 15),
         size_bytes: stat.size,
-        artifact_type: artifactType,
+        artifact_type: preferredType,
+        canonical_type: canonicalType,
+        detected_type: artifactType,
         artifact_layer: ARTIFACT_LAYER_MAP[artifactType] ?? "system",
       };
     })

@@ -3,10 +3,16 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { cosineSimilarity, getEmbedder } from "./_semantic-embed.js";
+import {
+  getCanonicalArtifactType,
+  getPreferredArtifactType,
+  isArtifactTypeInSameFamily,
+} from "../shared.js";
 
 type IndexEntry = {
   id: string;
   artifact_type: string;
+  canonical_type?: string;
   artifact_layer?: string;
   path: string;
   chunk_index: number;
@@ -29,6 +35,7 @@ type Match = {
   score: number;
   path: string;
   artifact_type: string;
+  canonical_type: string;
   artifact_layer: string;
   chunk_index: number;
   heading?: string;
@@ -112,14 +119,23 @@ export async function ritsu_semantic_search(
   const matches: Match[] = [];
 
   for (const e of index.entries) {
-    if (types.length > 0 && !types.includes(e.artifact_type)) continue;
+    if (
+      types.length > 0 &&
+      !types.some((type) => isArtifactTypeInSameFamily(type, e.artifact_type))
+    ) {
+      continue;
+    }
     const artifactLayer = e.artifact_layer ?? "system";
     if (layers.length > 0 && !layers.includes(artifactLayer)) continue;
+    const artifactType = getPreferredArtifactType(e.artifact_type);
+    const canonicalType =
+      e.canonical_type ?? getCanonicalArtifactType(e.artifact_type);
     const score = cosineSimilarity(q, e.embedding);
     matches.push({
       score,
       path: e.path,
-      artifact_type: e.artifact_type,
+      artifact_type: artifactType,
+      canonical_type: canonicalType,
       artifact_layer: artifactLayer,
       chunk_index: e.chunk_index,
       heading: e.heading,
