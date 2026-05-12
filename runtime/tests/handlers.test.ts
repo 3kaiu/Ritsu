@@ -41,6 +41,8 @@ import { resolve } from "node:path";
 
 const TEST_ROOT = resolve("/tmp/ritsu-test-" + process.pid);
 const RITSU_DIR = ".ritsu";
+const RUNTIME_ROOT = resolve(process.cwd());
+const REPO_ROOT = resolve(RUNTIME_ROOT, "..");
 
 beforeEach(() => {
   // 清理并创建测试目录
@@ -879,7 +881,7 @@ describe("ritsu_ts_check handler integration", () => {
   });
 
   it("should typecheck runtime tsconfig", async () => {
-    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu/runtime";
+    process.env.RITSU_PROJECT_ROOT = RUNTIME_ROOT;
     const result = await tsCheck({
       tsconfig_path: "tsconfig.json",
       max_diagnostics: 20,
@@ -905,7 +907,7 @@ describe("ritsu_ts_symbol_query handler integration", () => {
   });
 
   it("should query symbol definitions and references", async () => {
-    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu/runtime";
+    process.env.RITSU_PROJECT_ROOT = RUNTIME_ROOT;
     const result = await symbolQuery({
       symbol: "ritsu_exec",
       tsconfig_path: "tsconfig.json",
@@ -1855,7 +1857,7 @@ describe("ritsu_get_changed_files handler integration", () => {
 
   it("should return files and domain_hint in a git repo", async () => {
     // Use the actual project root (a git repo) since TEST_ROOT is not a git repo
-    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu";
+    process.env.RITSU_PROJECT_ROOT = REPO_ROOT;
     const result = await getChangedFiles({ staged: true, unstaged: true });
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
@@ -1884,7 +1886,7 @@ describe("ritsu_get_diff handler integration", () => {
   });
 
   it("should return diff structure in a git repo", async () => {
-    process.env.RITSU_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu";
+    process.env.RITSU_PROJECT_ROOT = REPO_ROOT;
     const result = await getDiff({ cached: false });
     expect(result.isError).toBeFalsy();
     const data = JSON.parse(result.content[0].text);
@@ -1928,7 +1930,7 @@ describe("ritsu_run_quality_gates handler integration", () => {
 // ─── sandbox (git worktree) handler 集成测试 ────────────────────────
 
 describe("sandbox handlers integration", () => {
-  const REAL_PROJECT_ROOT = "/Users/edy/CascadeProjects/Ritsu";
+  const REAL_PROJECT_ROOT = REPO_ROOT;
 
   let sandboxPrepare: (params: Record<string, unknown>) => Promise<any>;
   let sandboxExec: (params: Record<string, unknown>) => Promise<any>;

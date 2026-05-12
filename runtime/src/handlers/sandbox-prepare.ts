@@ -14,13 +14,20 @@ export async function ritsu_sandbox_prepare(
 
   const baseRef = String(params.base_ref ?? "HEAD").trim() || "HEAD";
 
-  const tempRoot = resolve(root, ".ritsu", "temp");
-  mkdirSync(tempRoot, { recursive: true });
-
-  const sandboxPath = resolve(tempRoot, cid);
   const fallbackRoot = resolve(tmpdir(), "ritsu-sandboxes");
   mkdirSync(fallbackRoot, { recursive: true });
   const fallbackClonePath = resolve(fallbackRoot, cid);
+
+  let tempRoot = resolve(root, ".ritsu", "temp");
+  let sandboxPath = resolve(tempRoot, cid);
+  let warning: string | null = null;
+  try {
+    mkdirSync(tempRoot, { recursive: true });
+  } catch (e: any) {
+    tempRoot = fallbackRoot;
+    sandboxPath = resolve(tempRoot, cid);
+    warning = `repo temp dir unavailable: ${e?.message ?? String(e)}`;
+  }
 
   // clean if exists
   if (existsSync(sandboxPath)) {
@@ -43,6 +50,7 @@ export async function ritsu_sandbox_prepare(
         sandbox_path: sandboxPath,
         base_ref: baseRef,
         mode: "worktree",
+        warning,
       }),
     );
   }
@@ -50,6 +58,9 @@ export async function ritsu_sandbox_prepare(
   // Fallback: some environments cannot mutate source .git/worktrees or create
   // nested sandboxes inside the main repo. In that case, use an isolated clone
   // in the system temp directory.
+  if (existsSync(fallbackClonePath)) {
+    rmSync(fallbackClonePath, { recursive: true, force: true });
+  }
   const cloneR = await runGit(
     ["clone", "--no-local", root, fallbackClonePath],
     root,
@@ -77,7 +88,7 @@ export async function ritsu_sandbox_prepare(
       sandbox_path: fallbackClonePath,
       base_ref: baseRef,
       mode: "clone-fallback",
-      warning: addR.output || null,
+      warning: [warning, addR.output].filter(Boolean).join("; ") || null,
     }),
   );
 }
