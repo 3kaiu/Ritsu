@@ -26,16 +26,9 @@ import {
 
 const RITSU_DIR = ".ritsu";
 const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
-  "think-ticket": "intake_ticket",
-  "think-plan": "delivery_plan",
+  "design-sheet": "design_sheet",
   "dev-report": "delivery_report",
-  "review-report": "assurance_report",
-  "review-advice": "release_advice",
-  "intake-ticket": "intake_ticket",
-  "delivery-plan": "delivery_plan",
-  "delivery-report": "delivery_report",
-  "assurance-report": "assurance_report",
-  "release-advice": "release_advice",
+  "assurance-sheet": "assurance_sheet",
   handoff: "handoff",
   diagnosis: "diagnosis",
   "review-stamp": "review_stamp",

@@ -175,6 +175,7 @@ type ApplyFlowDecisionOptions = {
 };
 
 export type FlowDecisionViolationCode =
+  | "missing_run_id"
   | "decision_output_not_object"
   | "missing_decision_keys"
   | "missing_required_artifacts"
@@ -285,11 +286,11 @@ function throwIfDecisionViolations(
 }
 
 const PHASE_ARTIFACT_EXPECTATIONS: Record<string, string[]> = {
-  think: ["think-ticket", "think-plan"],
+  think: ["design-sheet"],
   dev: ["dev-report"],
   test: [],
   hunt: ["diagnosis"],
-  review: ["review-report", "review-advice"],
+  review: ["assurance-sheet"],
   extensions: [],
 };
 

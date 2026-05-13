@@ -1,12 +1,32 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { resumeFlowRun } from "../flow-runtime.js";
-import { errorResult, textResult } from "./_utils.js";
+import {
+  buildFlowDecisionErrorPayload,
+  resumeFlowRun,
+} from "../flow-runtime.js";
+import { errorResult, jsonErrorResult, textResult } from "./_utils.js";
 
 export async function ritsu_resume_flow(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
   const runId = String(params.run_id ?? "");
-  if (!runId) return errorResult("run_id is required");
+  if (!runId) {
+    return jsonErrorResult(
+      buildFlowDecisionErrorPayload(
+        [
+          {
+            code: "missing_run_id",
+            severity: "error",
+            step_id: "input",
+            path: "run_id",
+            message: "run_id is required",
+            expected: ["non-empty run_id"],
+            actual: [],
+          },
+        ],
+        "run_id is required",
+      ),
+    );
+  }
 
   try {
     const state = await resumeFlowRun(runId, {

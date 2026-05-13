@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ritsu-ctx-event",
   "title": "Ritsu Context Event",
-  "description": "v3.8.0 — Ritsu ctx JSONL 事件 Schema（精简版）。每行一条记录，追加不覆盖。仅保留有实际消费者的 4 种核心事件类型。",
+  "description": "v4.0.0 — Ritsu ctx JSONL 事件 Schema。显式阶段交付流，去中心化产物追踪。",
   "type": "object",
   "required": ["ts", "correlation_id", "skill", "domain", "status"],
   "properties": {
@@ -14,104 +14,67 @@
     "correlation_id": {
       "type": "string",
       "pattern": "^cid-\\d{8}-\\d+$",
-      "description": "任务链路关联 ID，由 ritsu_emit_event 自动生成，同链路自动继承"
+      "description": "任务链路关联 ID"
     },
     "skill": {
       "type": "string",
       "enum": [
-        "route",
-        "pipe",
         "init",
         "think",
         "dev",
-        "optimize",
-        "review",
-        "hunt",
-        "triage",
         "test",
+        "hunt",
+        "review",
         "deploy",
-        "document",
+        "triage",
         "read",
-        "refactor"
-      ],
-      "description": "技能名。默认记录实际工作技能；读取旧历史时仍可能遇到 legacy alias，如 route=旧版 think、pipe=旧版编排入口"
+        "optimize",
+        "refactor",
+        "document"
+      ]
     },
     "domain": {
       "type": "string",
-      "enum": ["frontend", "backend", "fullstack", "infra", "data"],
-      "description": "领域值。基础设施领域统一使用 infra；devops 仅作为口语描述，不再作为独立枚举"
+      "enum": ["frontend", "backend", "fullstack", "infra", "data"]
     },
     "status": {
       "type": "string",
-      "enum": ["started", "done", "failed", "artifact_written"],
-      "description": "事件类型（精简为 4 种核心类型：started=会话恢复, done/failed=状态判定, artifact_written=产物追踪）"
+      "enum": ["started", "done", "failed", "artifact_written"]
     },
     "step": {
       "type": "string",
-      "pattern": "^\\d+/\\d+$",
-      "description": "格式 {current}/{total}，如 2/5"
+      "pattern": "^\\d+/\\d+$"
     },
     "artifact": {
-      "type": "string",
-      "description": "产物文件路径（artifact_written 时必填）"
+      "type": "string"
     },
     "error": {
-      "type": "string",
-      "description": "failed 时必填，一句话错误描述"
+      "type": "string"
     },
     "artifact_meta": {
       "type": "object",
-      "description": "artifact_written 时必填",
       "properties": {
         "type": {
           "type": "string",
           "enum": [
-            "think-ticket",
-            "think-plan",
+            "design-sheet",
             "dev-report",
-            "review-report",
-            "review-advice",
-            "intake-ticket",
-            "delivery-plan",
-            "delivery-report",
-            "assurance-report",
-            "release-advice",
+            "assurance-sheet",
             "handoff",
             "diagnosis",
-            "review-stamp",
             "optimize-report",
             "ctx"
-          ],
-          "description": "对外首选产物类型别名；非主产物保持原名。取值和层级划分应与 _shared/artifact-layers.md 保持一致"
-        },
-        "canonical_type": {
-          "type": "string",
-          "enum": [
-            "intake-ticket",
-            "delivery-plan",
-            "delivery-report",
-            "assurance-report",
-            "release-advice",
-            "handoff",
-            "diagnosis",
-            "review-stamp",
-            "optimize-report",
-            "ctx"
-          ],
-          "description": "兼容旧名或底层 schema key 的 canonical 产物类型。主产物推荐在已知时显式填写"
+          ]
         },
         "layer": {
           "type": "string",
-          "enum": ["primary", "evidence", "compatibility", "system"],
-          "description": "产物层级。建议显式写入，便于下游按主产物/过程证据/兼容镜像分层消费"
+          "enum": ["primary", "evidence", "system"]
         },
         "size_bytes": {
-          "type": "integer",
-          "description": "文件大小"
+          "type": "integer"
         },
         "summary": {
-          "type": "string",
-          "description": "一句话摘要"
+          "type": "string"
         }
       },
       "required": ["type", "size_bytes", "summary"]
@@ -124,7 +87,7 @@
     },
     {
       "if": { "properties": { "status": { "const": "artifact_written" } } },
-      "then": { "required": ["step", "artifact", "artifact_meta"] }
+      "then": { "required": ["artifact", "artifact_meta"] }
     },
     {
       "if": { "properties": { "status": { "const": "done" } } },

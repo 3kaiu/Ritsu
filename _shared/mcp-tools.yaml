@@ -4,7 +4,7 @@
 # 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
 #
 # 当前产品语义已经收敛为 think / dev / test / hunt / review。
-# runtime 已打通主产物（首选别名：think-ticket / think-plan / dev-report / review-report / review-advice；兼容旧名：intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice）的核心读写、列表与检索路径；
+# runtime 已打通主产物（design-sheet / dev-report / assurance-sheet）的核心读写、列表与检索路径；
 # legacy 产物（handoff / diagnosis / review-stamp / optimize-report）仍保留为过程证据或兼容镜像。
 # 因此本文件描述的是“当前运行时真实支持的工具”，并以主产物优先、显式工作流优先的消费语义为准。
 #
@@ -427,6 +427,34 @@ tools:
         status: { type: string }
         current_step: { type: string }
         recovery_point: { type: string }
+    error_shape:
+      type: object
+      description: "当 isError=true 且命中前置参数校验失败时，content[0].text 为该 JSON"
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            message: { type: string }
+            violations:
+              type: array
+              items:
+                type: object
+                properties:
+                  code: { type: string }
+                  severity:
+                    type: string
+                    description: "当前固定为 error，预留给上层做稳定优先级展示"
+                  step_id: { type: string }
+                  path: { type: string }
+                  artifact_type: { type: string }
+                  message: { type: string }
+                  expected:
+                    type: array
+                    items: { type: string }
+                  actual:
+                    type: array
+                    items: { type: string }
 
   - name: ritsu_get_flow_state
     description: 读取 flow state。传 run_id 时读取指定记录；不传时返回最近一次 flow run，用于上下文恢复、查看断点和验证进度
@@ -530,7 +558,7 @@ tools:
               summary: { type: string }
     error_shape:
       type: object
-      description: "当 isError=true 且命中 decision contract 校验失败时，content[0].text 为该 JSON"
+      description: "当 isError=true 且命中前置参数校验或 decision contract 校验失败时，content[0].text 为该 JSON"
       properties:
         error:
           type: object
@@ -560,7 +588,7 @@ tools:
                     items: { type: string }
 
   - name: ritsu_contract_validate
-    description: 契约测试（Contract Validation）。这是显式工作流下的一个特例：它校验的是“实施契约”，因此自动选择时优先读取最近的 handoff；若不存在再回退到 think-ticket / intake-ticket（或使用显式指定路径）。随后抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
+    description: 契约测试（Contract Validation）。这是显式工作流下的一个特例：它校验的是“实施契约”，因此自动选择时优先读取最近的 handoff；若不存在再回退到 design-sheet（或使用显式指定路径）。随后抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
     call_template:
       tool: ritsu_contract_validate
       params:
@@ -581,7 +609,7 @@ tools:
       artifact_path:
         type: string
         required: false
-        description: "显式指定契约产物路径（推荐）。为空则自动选择实施契约来源：最新 handoff；若无则回退到 think-ticket / intake-ticket"
+        description: "显式指定契约产物路径（推荐）。为空则自动选择实施契约来源：最新 handoff；若无则回退到 design-sheet"
       handoff_path:
         type: string
         required: false
@@ -601,10 +629,10 @@ tools:
           description: "当前主字段。实际参与本次契约校验的产物路径。"
         artifact_type:
           type: string
-          description: "当前主字段。对外返回的首选产物类型别名（如 think-ticket / think-plan / dev-report / review-report / review-advice；非主产物如 handoff 保持原名）。"
+          description: "产物类型（如 design-sheet / dev-report / assurance-sheet；非主产物如 handoff 保持原名）。"
         canonical_type:
           type: string
-          description: "兼容字段。对应的 canonical 产物类型（如 intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice）。"
+          description: "兼容字段。对应的 canonical 产物类型（如 intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice 已废弃，仅用于读取旧记录）。"
         detected_type:
           type: string
           description: "兼容调试字段。实际从文件名前缀识别到的产物类型；旧文件可能与 artifact_type 不同。"
@@ -947,7 +975,7 @@ tools:
                   col: { type: integer }
 
   - name: ritsu_semantic_index_build
-    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描主产物（首选别名：think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样会被纳入）与 legacy 产物（handoff/diagnosis/review-stamp/optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
+    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描主产物（design-sheet / dev-report / assurance-sheet）与过程证据（handoff / diagnosis / optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
     call_template:
       tool: ritsu_semantic_index_build
       params:
@@ -992,7 +1020,7 @@ tools:
       params:
         query: "{natural_language_query}"
         top_k: 5
-        types: [think-ticket, intake-ticket, diagnosis, review-report, assurance-report]
+        types: [design-sheet, dev-report, assurance-sheet, handoff, diagnosis]
       example:
         query: "CI 里 vitest 报错但本地不报"
         top_k: 5
@@ -1009,7 +1037,7 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤。主产物优先使用别名 think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可传；另支持 handoff/diagnosis/review-stamp/optimize-report。为空表示全部"
+        description: "产物类型过滤。主产物 design-sheet/dev-report/assurance-sheet；另支持 handoff/diagnosis/optimize-report。为空表示全部"
       layers:
         type: list
         required: false
@@ -1057,7 +1085,7 @@ tools:
       params:
         query: "{natural_language_query}"
         top_k: 5
-        types: [dev-report, delivery-report, review-report, assurance-report]
+        types: [dev-report, assurance-sheet]
         focus_paths: ["{可选: 当前错误涉及的文件路径}"]
         semantic_weight: 0.7
         kg_weight: 0.3
@@ -1082,7 +1110,7 @@ tools:
       types:
         type: list
         required: false
-        description: "产物类型过滤。主产物优先使用别名 think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可传；另支持 handoff/diagnosis/review-stamp/optimize-report。为空表示全部"
+        description: "产物类型过滤。主产物 design-sheet/dev-report/assurance-sheet；另支持 handoff/diagnosis/optimize-report。为空表示全部"
       layers:
         type: list
         required: false
@@ -1152,11 +1180,11 @@ tools:
                 items: { type: string }
 
   - name: ritsu_write_artifact
-    description: 写入产物文件到 .ritsu/ 目录。当前运行时支持主产物（首选别名：think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可写）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
+    description: 写入产物文件到 .ritsu/ 目录。当前运行时支持主产物（design-sheet / dev-report / assurance-sheet）与过程证据（handoff / diagnosis / optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
     call_template:
       tool: ritsu_write_artifact
       params:
-        type: "{think-ticket|think-plan|dev-report|review-report|review-advice|intake-ticket|delivery-plan|delivery-report|assurance-report|release-advice|handoff|diagnosis|review-stamp|optimize-report}"
+        type: "{design-sheet|dev-report|assurance-sheet|handoff|diagnosis|optimize-report}"
         filename: "{文件名}"
         content: "{内容}"
       example:
@@ -1178,7 +1206,7 @@ tools:
     input:
       type:
         type: enum
-        values: [think-ticket, think-plan, dev-report, review-report, review-advice, intake-ticket, delivery-plan, delivery-report, assurance-report, release-advice, handoff, diagnosis, review-stamp, optimize-report]
+        values: [design-sheet, dev-report, assurance-sheet, handoff, diagnosis, optimize-report]
         required: true
         description: "当前运行时支持的产物类型"
       filename:
@@ -1238,7 +1266,7 @@ tools:
                     items: { type: string }
 
   - name: ritsu_list_artifacts
-    description: 列出 .ritsu/ 目录下的产物文件。当前支持按主产物（首选别名：think-ticket/think-plan/dev-report/review-report/review-advice；兼容旧名同样可过滤）与 legacy 产物类型（handoff/diagnosis/review-stamp/optimize-report/ctx）过滤
+    description: 列出 .ritsu/ 目录下的产物文件。当前支持按主产物（design-sheet / dev-report / assurance-sheet）与过程证据（handoff / diagnosis / optimize-report / ctx）过滤
     call_template:
       tool: ritsu_list_artifacts
       params:
@@ -1249,7 +1277,7 @@ tools:
       type:
         type: string
         required: false
-        description: "产物类型过滤。可传 all；主产物优先使用别名 think-ticket/think-plan/dev-report/review-report/review-advice，兼容旧名同样可传；另支持 handoff/diagnosis/review-stamp/optimize-report/ctx。默认 all"
+        description: "产物类型过滤。可传 all；主产物 design-sheet/dev-report/assurance-sheet；另支持 handoff/diagnosis/optimize-report/ctx。默认 all"
     output_schema:
       type: object
       required: [files, total_count]

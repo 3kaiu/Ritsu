@@ -37,7 +37,7 @@
 - 优先使用 `recent_entries_pruned`
 - failed 事件优先看 `failed_summary`
 
-若需要额外检索 `.ritsu/` 历史产物，默认先查主产物（`layers=["primary"]`）；仅当主产物信息不足时，再扩展到过程证据（`layers=["evidence"]`）或兼容镜像。
+若需要额外检索 `.ritsu/` 历史产物，默认先查主产物（`design-sheet` / `dev-report` / `assurance-sheet`）。
 
 ### 0.3 环境确认
 
@@ -161,22 +161,12 @@ ritsu_emit_event({
 
 ---
 
-## Step 3: 关联流转 + 状态机引导
-
 完成后按 `_shared/state-machine.yaml` 输出下一步建议。
 
-状态机现在优先表达显式 skill 流转，而不是抽象阶段：
-
-- `think`
-- `dev`
-- `test`
-- `hunt`
-- `review`
-- `extensions.*`
-
-若某个专项 skill 仍需细粒度跳转，应服从主工作流边界。
-
-若当前任务已绑定 flow run，下一步建议还应和 flow state 的 `next_phase_recommendations` 对账。
+**强制流转引导**：
+所有技能在完成时，必须基于当前产物结论，给出一个明确的、可执行的自然语言建议。
+- 示例：`设计单已就绪。如果你满意，请运行 /r-dev 开始实现。`
+- 示例：`开发已完成。建议运行 /r-review 进行最终验收。`
 
 ---
 
@@ -187,10 +177,11 @@ ritsu_emit_event({
 ### 通用模板
 
 ```markdown
-## 律 (Ritsu) {skill_name} 落盘清单
+## 律 (Ritsu) {skill_name} 交付摘要
 - 涉及文件: {路径 + 改动概述}
-- 溯源: {think-ticket/think-plan/handoff/diagnosis/dev-report/review-report/review-advice 路径，或对应兼容旧名路径，或 无}
-- Lint: ✅/❌/跳过 | Test: ✅/❌/跳过
+- 溯源: {design-sheet / dev-report / assurance-sheet 路径，或 无}
+- 结论: {一句话描述核心产出}
+- 下一步: {明确的指令建议}
 ```
 
 ### Quick / Hotfix 精简版

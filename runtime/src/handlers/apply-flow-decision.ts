@@ -10,7 +10,24 @@ export async function ritsu_apply_flow_decision(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
   const runId = String(params.run_id ?? "");
-  if (!runId) return errorResult("run_id is required");
+  if (!runId) {
+    return jsonErrorResult(
+      buildFlowDecisionErrorPayload(
+        [
+          {
+            code: "missing_run_id",
+            severity: "error",
+            step_id: "input",
+            path: "run_id",
+            message: "run_id is required",
+            expected: ["non-empty run_id"],
+            actual: [],
+          },
+        ],
+        "run_id is required",
+      ),
+    );
+  }
 
   const artifacts = Array.isArray(params.artifacts)
     ? params.artifacts

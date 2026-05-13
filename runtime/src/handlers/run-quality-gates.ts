@@ -132,50 +132,50 @@ export async function ritsu_run_quality_gates(
   const root = getProjectRoot();
   const skipLint = params.skip_lint === true;
   const skipTest = params.skip_test === true;
+  const strict = params.strict === true;
   const timeoutMs = Math.min(Number(params.timeout_ms ?? 60_000), 120_000);
 
   const { lint_cmd, test_cmd } = parseAgentsMd(root);
 
   const result: QualityGateResult = {
-    lint: { passed: true, output: "" },
-    test: { passed: true, total: 0, failures: [], output: "" },
+    lint: { status: "skipped", output: "" },
+    test: { status: "skipped", failures: [], output: "" },
   };
 
   // Lint
   if (!skipLint && lint_cmd) {
     const parts = lint_cmd.split(/\s+/);
-    const binary = parts[0];
-    const args = parts.slice(1);
-    const r = await runCommand(binary, args, root, timeoutMs);
-    result.lint = { passed: r.ok, output: r.output.slice(0, 2000) };
+    const r = await runCommand(parts[0], parts.slice(1), root, timeoutMs);
+    result.lint = { status: r.ok ? "passed" : "failed", output: r.output.slice(0, 2000) };
   } else if (!skipLint && !lint_cmd) {
-    result.lint = { passed: true, output: "no lint command found — skipped" };
+    result.lint = { status: strict ? "failed" : "skipped", output: "no lint command found" };
   }
 
   // Test
   if (!skipTest && test_cmd) {
     const parts = test_cmd.split(/\s+/);
-    const binary = parts[0];
-    const args = parts.slice(1);
-    const r = await runCommand(binary, args, root, timeoutMs);
+    const r = await runCommand(parts[0], parts.slice(1), root, timeoutMs);
     const failures = parseTestFailures(r.output);
+    const passed = r.ok && failures.length === 0;
     result.test = {
-      passed: r.ok && failures.length === 0,
-      total: 0,
+      status: passed ? "passed" : "failed",
       failures,
       output: r.output.slice(0, 3000),
     };
   } else if (!skipTest && !test_cmd) {
-    result.test = { passed: true, total: 0, failures: [], output: "no test command found — skipped" };
+    result.test = { status: strict ? "failed" : "skipped", failures: [], output: "no test command found" };
   }
 
-  const allPassed = result.lint.passed && result.test.passed;
+  const allPassed = result.lint.status === "passed" && result.test.status === "passed";
+  const anyFailed = result.lint.status === "failed" || result.test.status === "failed";
 
   return textResult(
     JSON.stringify({
-      passed: allPassed,
+      passed: allPassed && !anyFailed,
+      status: anyFailed ? "failed" : (allPassed ? "passed" : "partially_skipped"),
       lint: result.lint,
       test: result.test,
+      strict,
     }),
   );
 }

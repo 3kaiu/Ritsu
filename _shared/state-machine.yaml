@@ -38,7 +38,7 @@ states:
     owned_by: review
     next: [dev, test, hunt, think, extensions]
     rules:
-      - "review 至少负责形成 review-report（兼容旧名 assurance-report）；涉及发布姿态时再补 review-advice（兼容旧名 release-advice）"
+      - "review 负责通过 assurance-sheet 输出最终验收结论与发布建议"
       - "命中阻断项后必须显式退回 dev / test / think，不得模糊宣称完成"
       - "PASS 不等于必须部署；是否进入 deploy 取决于上下文"
 
@@ -62,8 +62,6 @@ skill_mapping:
   deploy: extensions
   document: extensions
   triage: extensions
-  route: think
-  pipe: dev
 
 mode_hints:
   quick:

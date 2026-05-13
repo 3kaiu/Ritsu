@@ -458,6 +458,33 @@ describe("compiled tool schemas", () => {
     });
   });
 
+  it("should keep ritsu_resume_flow error shape stable", async () => {
+    const tools = await compileToolsFromYaml();
+    const resumeFlowTool = tools.find(
+      (tool) => tool.name === "ritsu_resume_flow",
+    );
+
+    expect(resumeFlowTool?.errorShape).toBeTruthy();
+    const errorShape = resumeFlowTool?.errorShape as Record<string, any>;
+    expect(errorShape.properties.error.properties).toMatchObject({
+      type: { type: "string" },
+      message: { type: "string" },
+      violations: { type: "array" },
+    });
+    expect(
+      errorShape.properties.error.properties.violations.items.properties,
+    ).toMatchObject({
+      code: { type: "string" },
+      severity: { type: "string" },
+      step_id: { type: "string" },
+      path: { type: "string" },
+      artifact_type: { type: "string" },
+      message: { type: "string" },
+      expected: { type: "array" },
+      actual: { type: "array" },
+    });
+  });
+
   it("should document a write-artifact error shape that matches runtime payloads", async () => {
     const tools = await compileToolsFromYaml();
     const writeArtifactTool = tools.find(
@@ -511,6 +538,63 @@ describe("compiled tool schemas", () => {
       applyFlowDecisionTool?.errorShape as Record<string, any>,
     );
     delete process.env.RITSU_PROJECT_ROOT;
+  });
+
+  it("should document apply-flow-decision missing-run-id errors with the same shape", async () => {
+    const tools = await compileToolsFromYaml();
+    const applyFlowDecisionTool = tools.find(
+      (tool) => tool.name === "ritsu_apply_flow_decision",
+    );
+    const applyFlowDecision = (
+      await import("../src/handlers/apply-flow-decision.js")
+    ).ritsu_apply_flow_decision;
+
+    const result = await applyFlowDecision({});
+
+    expect(result.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expectValueToMatchDocumentedShape(
+      data,
+      applyFlowDecisionTool?.errorShape as Record<string, any>,
+    );
+    expect(data.error.violations).toContainEqual(
+      expect.objectContaining({
+        code: "missing_run_id",
+        severity: "error",
+        step_id: "input",
+        path: "run_id",
+        expected: ["non-empty run_id"],
+        actual: [],
+      }),
+    );
+  });
+
+  it("should document resume-flow missing-run-id errors with the same shape", async () => {
+    const tools = await compileToolsFromYaml();
+    const resumeFlowTool = tools.find(
+      (tool) => tool.name === "ritsu_resume_flow",
+    );
+    const resumeFlow = (await import("../src/handlers/resume-flow.js"))
+      .ritsu_resume_flow;
+
+    const result = await resumeFlow({});
+
+    expect(result.isError).toBe(true);
+    const data = JSON.parse(result.content[0].text);
+    expectValueToMatchDocumentedShape(
+      data,
+      resumeFlowTool?.errorShape as Record<string, any>,
+    );
+    expect(data.error.violations).toContainEqual(
+      expect.objectContaining({
+        code: "missing_run_id",
+        severity: "error",
+        step_id: "input",
+        path: "run_id",
+        expected: ["non-empty run_id"],
+        actual: [],
+      }),
+    );
   });
 
   it("should keep ritsu_list_artifacts output schema stable", async () => {
