@@ -12,11 +12,11 @@ import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { load as loadYaml } from "js-yaml";
 import {
-  ARTIFACT_LAYER_MAP,
   ARTIFACT_VALID_TYPES,
-  ARTIFACT_PREFIX_MAP,
   getCanonicalArtifactType,
   getSharedDir,
+  getArtifactLayer,
+  ARTIFACT_REGISTRY,
 } from "../shared.js";
 import {
   getProjectRoot,
@@ -382,7 +382,7 @@ export async function ritsu_write_artifact(
   }
 
   // 文件名前缀校验（按 artifact-schema.yaml 命名契约）
-  const expectedPrefix = ARTIFACT_PREFIX_MAP[type];
+  const expectedPrefix = ARTIFACT_REGISTRY.find(a => a.type === getCanonicalArtifactType(type))?.prefix;
   if (expectedPrefix && !filename.startsWith(expectedPrefix)) {
     return artifactWriteErrorResult(
       `filename must start with '${expectedPrefix}' for type '${type}', got: ${filename}`,
@@ -487,7 +487,7 @@ export async function ritsu_write_artifact(
     ...(artifactMeta ?? {}),
     type,
     canonical_type: getCanonicalArtifactType(type),
-    layer: ARTIFACT_LAYER_MAP[type] ?? "system",
+    layer: getArtifactLayer(type),
     size_bytes: sizeBytes,
   };
 

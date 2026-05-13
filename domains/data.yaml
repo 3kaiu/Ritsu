@@ -1,54 +1,50 @@
-# Domain: Data / ML (数据与机器学习) v3.8.0
-# 继承 _base.yaml 全部内容。以下仅声明数据领域增量。
+# Domain: Data / ML (数据与机器学习) v4.1.0
+# 继承 _base.yaml 全部内容。支持多技术栈倾向性（Big Data/Machine Learning）。
 
 extends: _base
 
-hypothesis_directions:
-  - id: DA-H1
-    name: 数据倾斜 / 分布漂移 (Data Drift)
-  - id: DA-H2
-    name: 特征工程管线断裂 / Schema 不兼容
-  - id: DA-H3
-    name: 训练-推理不一致 (Training-Serving Skew)
-  - id: DA-H4
-    name: 资源竞争 (GPU 显存 / 磁盘 IO)
+# ─── 倾向性感知配置 ──────────────────────────────────────────
+stack_tendency:
+  - id: DA-ST1
+    name: Big Data
+    indicators: [".sql", "spark", "dbt", "airflow"]
+    persona: "Senior Data Architect (Big Data Engineering)"
+  - id: DA-ST2
+    name: Machine Learning
+    indicators: ["pytorch", "tensorflow", "sklearn", ".ipynb", "cuda"]
+    persona: "Senior AI Architect (Machine Learning Engineering)"
 
-coding_disciplines:
-  - id: DA-D1
-    name: 数据管线幂等性
-    rule: "ETL 步骤必须可重入，重复执行不产生脏数据"
-  - id: DA-D2
-    name: 实验可复现
-    rule: "随机种子、超参数、数据版本必须锁定并记录"
-
-attack_vectors:
-  - id: DA-A1
-    name: 数据泄露
-    check: "训练集是否包含了测试集信息 (Label Leakage)？"
-  - id: DA-A2
-    name: 偏见与公平性
-    check: "模型输出是否存在系统性偏见？"
-  - id: DA-A3
-    name: 隐私合规
-    check: "数据集是否包含 PII？是否满足 GDPR/数据脱敏要求？"
-
-pr_requirements:
-  - id: DA-PR1
-    rule: "必须提供数据管线端到端验证报告或模型指标对比表"
-  - id: DA-PR2
-    rule: "检查是否引入了新的数据依赖或变更了特征 Schema"
-
+# ─── 数据与 AI 通用优化准则 ──────────────────────────────────
 optimize_disciplines:
   - id: DA-O1
-    name: 数据管线优化
-    rule: "ETL 串行步骤可并行的必须并行化；大表全量扫描必须改为增量抽取；中间结果必须缓存避免重复计算"
+    name: 幂等性与血缘
+    rule: "数据管线步骤必须可重入。核心表变更必须通过数据血缘分析其下游影响"
   - id: DA-O2
-    name: 训练推理优化
-    rule: "模型推理热点必须量化（INT8/FP16）；批处理必须替代单条推理；ONNX/TensorRT 加速可评估时必须采用"
+    name: 质量校验与监控
+    rule: "ETL 任务必须在入口处进行 Schema 校验。关键指标（如空值率、分位数）必须配置自动告警"
   - id: DA-O3
-    name: 特征工程精简
-    rule: "低重要性特征必须剔除（基于 feature importance / correlation）；特征计算重复逻辑必须合并为共享 UDF"
+    name: 隐私与脱敏
+    rule: "严禁在日志或训练集中存储未脱敏的 PII 数据。必须实现符合 GDPR/数据安全法的脱敏策略"
 
-optimize_tool_preferences: []
+# ─── 技术栈专项优化 (倾向性驱动) ─────────────────────────────
 
-platform_optimizations: []
+# [大数据/SQL 专项]
+bigdata_optimizations:
+  - rule: "SQL 性能：识别并消除笛卡尔积。大表关联必须使用分区裁剪和谓词下推"
+  - rule: "存储优化：优先使用 Parquet/ORC 等列式存储。根据查询模式选择合理的分区键"
+  - rule: "资源效率：识别数据倾斜 (Data Skew)，通过加盐 (Salting) 或分阶段聚合解决长尾任务"
+
+# [机器学习/AI 专项]
+ml_optimizations:
+  - rule: "可复现性：严禁使用非固定的随机种子。所有的超参数和数据版本必须通过 MLflow/WandB 记录"
+  - rule: "推理加速：评估模型量化 (Quantization) 或蒸馏 (Distillation) 机会。利用 TensorRT/ONNX 进行部署加速"
+  - rule: "管线对齐：确保训练特征工程代码与推理时的预处理代码 100% 对齐（防止 Training-Serving Skew）"
+
+# ─── 诊断与攻击向量 ──────────────────────────────────────────
+attack_vectors:
+  - id: DA-A1
+    name: 标签泄露 (Label Leakage)
+    check: "训练特征中是否无意中包含了测试时不可知的未来信息？"
+  - id: DA-A2
+    name: 样本偏见与不公平
+    check: "数据采样是否代表了真实分布？模型在不同亚组上的表现是否均衡？"

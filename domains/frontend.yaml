@@ -1,89 +1,71 @@
-# Domain: Frontend (前端) v3.8.0
-# 继承 _base.yaml 全部内容。以下仅声明前端领域增量。
+# Domain: Frontend (前端) v4.1.0
+# 继承 _base.yaml 全部内容。支持多平台倾向性（React/Flutter/Mobile）。
 
 extends: _base
 
-hypothesis_directions:
-  - id: FE-H1
-    name: 缓存过期 / Service Worker 拦截
-  - id: FE-H2
-    name: 闭包引起的旧值 (Stale Closure)
-  - id: FE-H3
-    name: 竞态条件 (Race Condition in State)
-  - id: FE-H4
-    name: 三方库版本冲突 / Peer Dependency 缺失
-  - id: FE-H5
-    name: Hydration 冲突 (SSR 场景)
-  - id: FE-H6
-    name: CORS 拦截 / 资源加载 404
+# ─── 倾向性感知配置 ──────────────────────────────────────────
+stack_tendency:
+  - id: FE-ST1
+    name: Web-React
+    indicators: ["package.json", "react", "react-dom"]
+    persona: "Senior React Architect"
+  - id: FE-ST2
+    name: Mobile-Flutter
+    indicators: ["pubspec.yaml", "flutter"]
+    persona: "Senior Flutter Architect"
 
-coding_disciplines:
-  - id: FE-D1
-    name: Re-render 检查
-    rule: "状态变更粒度是否最小化？严禁滥用全局状态。必须将可共享状态隔离至最近公共祖先组件"
-  - id: FE-D2
-    name: 竞态条件
-    rule: "异步网络请求必须做取消 (AbortController) 或防抖处理"
-  - id: FE-D3
-    name: 内存泄漏
-    rule: "绑定的全局事件或定时器必须在组件销毁时解绑"
-
-attack_vectors:
-  - id: FE-A1
-    name: XSS 与数据注入
-    check: "用户输入是否直接渲染在 DOM 中？"
-  - id: FE-A2
-    name: 状态篡改
-    check: "前端状态管理是否容易被直接从 Console 或插件中篡改并绕过业务校验？"
-  - id: FE-A3
-    name: 性能与渲染
-    check: "是否存在不必要的大面积重渲染？大列表是否做了虚拟化？"
-  - id: FE-A4
-    name: 跨域信任
-    check: "后端 API 返回值是否被前端无条件信任并渲染？"
-
-pr_requirements:
-  - id: FE-PR1
-    rule: "必须提供 UI 变更截图或录屏"
-  - id: FE-PR2
-    rule: "检查是否增加了不必要的大体积三方包（>50KB 需说明）"
-
+# ─── 平台通用优化准则 ────────────────────────────────────────
 optimize_disciplines:
   - id: FE-O1
-    name: 工具库优先替换
-    rule: "手写的 useState+useEffect 组合必须优先替换为项目已有的工具库对应函数。若项目未引入工具库，保持现有实现不变"
+    name: 语义化与结构化
+    rule: "Web 必须使用 HTML5 语义标签；Flutter 必须使用语义化的 Widget 结构 (Semantics)。优先保证可访问性"
   - id: FE-O2
-    name: 请求层精简
-    rule: "手写的 fetch/axios + useState + useEffect + loading/error 状态管理必须优先替换为项目已有的数据请求层。若项目未引入，保持现有模式"
+    name: 渲染性能基准
+    rule: "识别并消除冗余构建/重渲染。Web 使用 React.memo/useMemo；Flutter 使用 const constructors/RepaintBoundary"
   - id: FE-O3
-    name: 样式迁移 TailwindCSS
-    rule: "内联 style 对象和独立 CSS 文件中的规则必须迁移为 TailwindCSS 等价类。重复样式块合并为 @apply 抽象。CSS Modules 保留仅在需要动态类名时"
+    name: 异步竞态管理
+    rule: "所有异步操作（API/IO）必须具备取消机制或竞态消除。Web 使用 TanStack Query；Flutter 使用 Bloc/Riverpod 状态隔离或 CancelableOperation"
   - id: FE-O4
-    name: 语义化标签
-    rule: "div/span 必须替换为语义标签：header/main/section/nav/article/aside/footer/time/mark。仅当语义标签不适用时保留 div"
-  - id: FE-O5
-    name: 渲染性能
-    rule: "大列表必须虚拟化（react-window/react-virtuoso）；重渲染热点必须 React.memo/useMemo/useCallback 包裹；context 值必须 memo 化避免全树重渲染"
+    name: 代码清理与 TSDoc
+    rule: "移除 Dead Code 与冗余注释。必须保留核心 TSDoc/DartDoc。保持项目原有布局，严禁过度重构"
 
-optimize_tool_preferences:
-  - category: 状态/副作用
-    rule: "优先使用项目已有的工具库替代手写状态/副作用管理。若项目未引入相关库，保持现有实现不变"
-  - category: 请求层
-    rule: "优先使用项目已有的数据请求层（缓存/重试/去重/失效刷新）。若项目未引入，保持现有 fetch/axios 模式"
+# ─── 平台专项优化 (倾向性驱动) ─────────────────────────────
+
+# [React 专项]
+react_optimizations:
+  - rule: "优先混合使用 react-use (传感器/浏览器) 与 ahooks (逻辑/控制流)"
+  - rule: "强制迁移至 TailwindCSS 样式系统，移除内联 style"
+  - rule: "所有 API 交互必须收拢至 TanStack Query"
+
+# [Flutter 专项]
+flutter_optimizations:
+  - rule: "优先使用 const 构造函数减少 Widget 树重建开销"
+  - rule: "大列表必须使用 ListView.builder 或 CustomScrollView 虚拟化"
+  - rule: "状态管理必须遵循项目既有方案（Provider/Riverpod/Bloc），严禁引入冲突的第三方状态库"
+  - rule: "资源路径 (assets) 必须在 pubspec.yaml 中对齐，移除未使用的资源文件"
+
+# ─── 诊断与攻击向量 ──────────────────────────────────────────
+attack_vectors:
+  - id: FE-A1
+    name: 状态篡改与跨域攻击
+    check: "前端状态是否可被非预期篡改？Web 环境下是否存在 XSS 或 CSRF 风险？"
+  - id: FE-A2
+    name: 性能退化
+    check: "是否存在内存泄漏（如未释放的 Timer/Controller/EventStream）？"
 
 platform_optimizations:
   - id: FE-P1
-    name: WebView 预加载
-    rule: "H5 内嵌原生 App 时，利用 WebView 预加载（prefetch DNS/预连接）：<link rel='dns-prefetch' href='//api.example.com'> <link rel='preconnect' href='//api.example.com'>"
+    name: WebView 加速与缓存
+    rule: "启用 DNS 预解析与预连接：<link rel='dns-prefetch' href='//api.com'> <link rel='preconnect' href='//api.com'>。静态资源设置长期强缓存 (1年)，HTML 使用协商缓存"
   - id: FE-P2
-    name: WebView 缓存策略
-    rule: "静态资源设置强缓存（Cache-Control: max-age=31536000），HTML 入口设置协商缓存，利用 WebView 的缓存机制减少重复请求"
+    name: GPU 与滚动性能
+    rule: "长列表滚动区域必须添加 -webkit-overflow-scrolling: touch；关键区域使用 will-change: transform 开启 GPU 加速"
   - id: FE-P3
-    name: WebView 滚动优化
-    rule: "长列表滚动区域添加 -webkit-overflow-scrolling: touch 和 overflow-scroll-behavior: contain，启用 GPU 加速滚动"
+    name: JSBridge 安全与健壮性
+    rule: "所有的原生 Bridge 调用必须封装超时处理 (默认 3s)；针对传感器、滚动等高频调用必须在前端进行节流 (Throttle)"
   - id: FE-P4
-    name: WebView 首屏加速
-    rule: "首屏关键 CSS 内联，非关键资源 defer/async 加载，图片使用 loading='lazy' + 考虑 WebP 格式，骨架屏替代 loading 动画"
+    name: 首屏体验优化
+    rule: "首屏关键 CSS 内联，非关键 JS 使用 defer 加载。必须配置骨架屏 (Skeleton Screen) 以替代传统的 Loading 动画"
   - id: FE-P5
-    name: JSBridge 调用优化
-    rule: "原生 JSBridge 调用必须做超时兜底（3s），避免 WebView 卡死；频繁调用的 Bridge 必须做节流"
+    name: 移动端资源策略
+    rule: "图片优先使用 WebP 格式并提供加载失败的回退方案。非首屏图片必须配置 loading='lazy'"

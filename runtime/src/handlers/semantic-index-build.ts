@@ -11,7 +11,7 @@ import { createHash } from "node:crypto";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { getEmbedder } from "./_semantic-embed.js";
 import {
-  ARTIFACT_LAYER_MAP,
+  getArtifactLayer,
   type ArtifactType,
   detectArtifactTypeFromFileName,
   getCanonicalArtifactType,
@@ -194,6 +194,7 @@ export async function ritsu_semantic_index_build(
     .filter((f) => f.endsWith(".md"))
     .slice(0, maxFiles);
 
+  const BATCH_SIZE = 16;
   const newEntries: IndexEntry[] = [];
   const reused: IndexEntry[] = [];
 
@@ -208,6 +209,20 @@ export async function ritsu_semantic_index_build(
       existingByKey.set(key, arr);
     }
   }
+
+  type PendingChunk = {
+    text: string;
+    artifact_type: ArtifactType;
+    canonical_type: string;
+    path: string;
+    chunk_index: number;
+    heading?: string;
+    chunk_start: number;
+    chunk_end: number;
+    content_hash: string;
+  };
+
+  const pendingChunks: PendingChunk[] = [];
 
   for (const f of files) {
     const t = detectArtifactType(f);
@@ -243,23 +258,20 @@ export async function ritsu_semantic_index_build(
         const whole = content.slice(s.start, s.end).trim();
         if (whole) {
           const wholeText = whole.length > 4000 ? whole.slice(0, 4000) : whole;
-          const embWhole = await embedder.embed(wholeText);
           const leadingWs = content.slice(s.start, s.end).indexOf(whole[0]);
           const absStart = s.start + Math.max(0, leadingWs);
           const absEnd = absStart + wholeText.length;
-          newEntries.push({
-            id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
+          
+          pendingChunks.push({
+            text: wholeText,
             artifact_type: preferredType,
             canonical_type: canonicalType,
-            artifact_layer: ARTIFACT_LAYER_MAP[t] ?? "system",
             path: abs,
             chunk_index: chunkIndex,
             heading: s.heading,
             chunk_start: absStart,
             chunk_end: Math.min(absEnd, content.length),
             content_hash: contentHash,
-            embedding: embWhole,
-            created_at: nowIso(),
           });
           chunkIndex++;
         }
@@ -267,23 +279,45 @@ export async function ritsu_semantic_index_build(
 
       const chunks = chunkRange(content, s.start, s.end, chunkSize, overlap);
       for (const c of chunks) {
-        const emb = await embedder.embed(c.text);
-        newEntries.push({
-          id: `se-${sha256(`${abs}:${contentHash}:${chunkIndex}`).slice(0, 16)}`,
+        pendingChunks.push({
+          text: c.text,
           artifact_type: preferredType,
           canonical_type: canonicalType,
-          artifact_layer: ARTIFACT_LAYER_MAP[t] ?? "system",
           path: abs,
           chunk_index: chunkIndex,
           heading: s.heading,
           chunk_start: c.start,
           chunk_end: c.end,
           content_hash: contentHash,
-          embedding: emb,
-          created_at: nowIso(),
         });
         chunkIndex++;
       }
+    }
+  }
+
+  // Process pending chunks in batches
+  for (let i = 0; i < pendingChunks.length; i += BATCH_SIZE) {
+    const batch = pendingChunks.slice(i, i + BATCH_SIZE);
+    const texts = batch.map((c) => c.text);
+    const embeddings = await embedder.embedBatch(texts);
+
+    for (let j = 0; j < batch.length; j++) {
+      const c = batch[j];
+      const emb = embeddings[j];
+      newEntries.push({
+        id: `se-${sha256(`${c.path}:${c.content_hash}:${c.chunk_index}`).slice(0, 16)}`,
+        artifact_type: c.artifact_type,
+        canonical_type: c.canonical_type,
+        artifact_layer: getArtifactLayer(c.artifact_type),
+        path: c.path,
+        chunk_index: c.chunk_index,
+        heading: c.heading,
+        chunk_start: c.chunk_start,
+        chunk_end: c.chunk_end,
+        content_hash: c.content_hash,
+        embedding: emb,
+        created_at: nowIso(),
+      });
     }
   }
 

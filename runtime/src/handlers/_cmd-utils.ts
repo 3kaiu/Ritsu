@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import {
-  ALLOWED_BINARIES,
   DANGEROUS_ARGS,
   RESIDUAL_BLACKLIST,
   SHELL_META_REJECT,
   MAX_BUFFER_MB_HARD_LIMIT,
   MAX_TIMEOUT_MS_HARD_LIMIT,
 } from "../shared.js";
+import { getAllowedBinariesForProject } from "../shared.js";
 
 type ParsedCommand = {
   binary: string;
@@ -73,7 +73,7 @@ export function validateCommandSafety(command: string): { ok: boolean; error?: s
   const parsed = parseCommand(trimmedCmd);
   if (!parsed) return { ok: false, error: "empty command after parsing" };
 
-  if (!ALLOWED_BINARIES.has(parsed.binary)) {
+  if (!getAllowedBinariesForProject([]).has(parsed.binary)) {
     return {
       ok: false,
       error: `command blocked: '${parsed.binary}' is not in the allowed binaries list`,

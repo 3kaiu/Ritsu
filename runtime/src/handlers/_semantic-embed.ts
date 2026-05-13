@@ -4,27 +4,35 @@ import { createRequire } from "node:module";
 type Embedder = {
   model_id: string;
   embed: (text: string) => Promise<number[]>;
+  embedBatch: (texts: string[]) => Promise<number[][]>;
 };
 
 const DEFAULT_DIM = 384;
 
-function normalize(vec: number[]): number[] {
+/**
+ * Normalizes a vector to unit length.
+ */
+function normalize(vec: number[] | Float32Array): Float32Array {
+  const arr = vec instanceof Float32Array ? vec : new Float32Array(vec);
   let sumSq = 0;
-  for (const v of vec) sumSq += v * v;
+  for (let i = 0; i < arr.length; i++) sumSq += arr[i] * arr[i];
   const norm = Math.sqrt(sumSq) || 1;
-  return vec.map((v) => v / norm);
+  for (let i = 0; i < arr.length; i++) arr[i] /= norm;
+  return arr;
 }
 
+/**
+ * Deterministic, local-only fallback embedder (NOT semantic).
+ */
 function hashEmbed(text: string, dim = DEFAULT_DIM): number[] {
-  // Deterministic, local-only fallback embedder (NOT semantic).
-  // Useful for offline/CI tests and as a last-resort backend.
   const h = createHash("sha256").update(text, "utf-8").digest();
   const out = new Array(dim).fill(0);
   for (let i = 0; i < dim; i++) {
     const b = h[i % h.length];
     out[i] = (b - 128) / 128;
   }
-  return normalize(out);
+  const norm = normalize(out);
+  return Array.from(norm);
 }
 
 let xenovaSingleton: Promise<Embedder> | null = null;
@@ -32,8 +40,6 @@ let xenovaSingleton: Promise<Embedder> | null = null;
 async function getXenovaEmbedder(): Promise<Embedder> {
   if (!xenovaSingleton) {
     xenovaSingleton = (async () => {
-      // Optional dependency load.
-      // Use createRequire to avoid TS module resolution/type errors when the package isn't installed yet.
       const require = createRequire(import.meta.url);
       let mod: any;
       try {
@@ -53,21 +59,47 @@ async function getXenovaEmbedder(): Promise<Embedder> {
         process.env.RITSU_EMBEDDINGS_MODEL ?? "Xenova/all-MiniLM-L6-v2";
       const extractor = await pipeline("feature-extraction", modelId);
 
+      const embedFunc = async (text: string) => {
+        const t = text.length > 4000 ? text.slice(0, 4000) : text;
+        const result = await extractor(t, {
+          pooling: "mean",
+          normalize: true,
+        });
+        const arr = Array.isArray(result) ? result : (result?.data ?? result);
+        if (Array.isArray(arr) && Array.isArray(arr[0]))
+          return arr[0] as number[];
+        if (Array.isArray(arr)) return arr as number[];
+        if (arr instanceof Float32Array) return Array.from(arr);
+        throw new Error("unexpected embeddings output shape");
+      };
+
       return {
         model_id: modelId,
-        embed: async (text: string) => {
-          const t = text.length > 4000 ? text.slice(0, 4000) : text;
-          const result = await extractor(t, {
+        embed: embedFunc,
+        embedBatch: async (texts: string[]) => {
+          if (texts.length === 0) return [];
+          const processed = texts.map((t) => (t.length > 4000 ? t.slice(0, 4000) : t));
+          const results = await extractor(processed, {
             pooling: "mean",
             normalize: true,
           });
-          // extractor returns a Tensor-like nested array; normalize:true should already normalize.
-          const arr = Array.isArray(result) ? result : (result?.data ?? result);
-          if (Array.isArray(arr) && Array.isArray(arr[0]))
-            return arr[0] as number[];
-          if (Array.isArray(arr)) return arr as number[];
-          throw new Error("unexpected embeddings output shape");
-        },
+          
+          // transformers.js batch output can be a single Tensor or array of Tensors
+          if (results.dims && results.data) {
+             const dim = results.dims[1];
+             const out: number[][] = [];
+             for (let i = 0; i < results.dims[0]; i++) {
+               out.push(Array.from(results.data.slice(i * dim, (i + 1) * dim)));
+             }
+             return out;
+          }
+          
+          if (Array.isArray(results)) {
+            return results.map(r => Array.from(Array.isArray(r) ? r : (r?.data ?? r)));
+          }
+          
+          throw new Error("unexpected batch embeddings output shape");
+        }
       };
     })();
   }
@@ -83,22 +115,28 @@ export async function getEmbedder(): Promise<Embedder> {
     return {
       model_id: "hash-embed-v1",
       embed: async (text: string) => hashEmbed(text),
+      embedBatch: async (texts: string[]) => texts.map(t => hashEmbed(t)),
     };
   }
 
   return getXenovaEmbedder();
 }
 
-export function cosineSimilarity(a: number[], b: number[]): number {
-  const n = Math.min(a.length, b.length);
+/**
+ * Calculates cosine similarity between two vectors.
+ * Uses Float32Array for performance.
+ */
+export function cosineSimilarity(a: number[] | Float32Array, b: number[] | Float32Array): number {
+  const arrA = a instanceof Float32Array ? a : new Float32Array(a);
+  const arrB = b instanceof Float32Array ? b : new Float32Array(b);
+  const n = Math.min(arrA.length, arrB.length);
+  
   let dot = 0;
-  let a2 = 0;
-  let b2 = 0;
   for (let i = 0; i < n; i++) {
-    dot += a[i] * b[i];
-    a2 += a[i] * a[i];
-    b2 += b[i] * b[i];
+    dot += arrA[i] * arrB[i];
   }
-  const denom = Math.sqrt(a2) * Math.sqrt(b2);
-  return denom ? dot / denom : 0;
+  
+  // Assuming vectors are already normalized (standard for most embedders)
+  // If not normalized, this would need to divide by (normA * normB)
+  return dot;
 }

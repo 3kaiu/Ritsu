@@ -2,11 +2,11 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import {
-  ARTIFACT_LAYER_MAP,
+  getArtifactLayer,
   detectArtifactTypeFromFileName,
   getCanonicalArtifactType,
-  getArtifactPrefixesForType,
   getPreferredArtifactType,
+  getArtifactPrefixesForType,
 } from "../shared.js";
 import { getProjectRoot, textResult, warnResult } from "./_utils.js";
 
@@ -46,7 +46,7 @@ export async function ritsu_list_artifacts(
         artifact_type: preferredType,
         canonical_type: canonicalType,
         detected_type: artifactType,
-        artifact_layer: ARTIFACT_LAYER_MAP[artifactType] ?? "system",
+        artifact_layer: getArtifactLayer(artifactType),
       };
     })
     .sort((a: Record<string, unknown>, b: Record<string, unknown>) =>

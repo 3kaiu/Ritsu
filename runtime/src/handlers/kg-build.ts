@@ -178,6 +178,10 @@ function extractSymbolRefsTsAst(
   return Array.from(tokens);
 }
 
+/**
+ * Core Knowledge Graph build logic.
+ * Performs a single-pass scan of the project files to extract definitions and references.
+ */
 export async function ritsu_build_kg(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
@@ -191,6 +195,7 @@ export async function ritsu_build_kg(
   const ts = await tryLoadTypeScript();
   const engine: Kg["engine"] = ts ? "ts-ast" : "regex";
 
+  // Use ripgrep to find all relevant files quickly
   const rgR = await runRg("(export\\s+|import\\s+|require\\()", root, [
     "*.ts",
     "*.tsx",
@@ -210,44 +215,53 @@ export async function ritsu_build_kg(
   const symbolToFile = new Map<string, string>();
   const edges: KgEdge[] = [];
 
+  // Temporary storage for second-stage reference resolution
+  const fileToRefs = new Map<string, string[]>();
+
+  // Single pass: Extract definitions, imports, and collect potential references
   for (let i = 0; i < fileAbsPaths.length; i++) {
     const abs = fileAbsPaths[i];
     if (!existsSync(abs)) continue;
     const rel = relative(root, abs);
     const content = readFileSync(abs, "utf-8");
 
+    // 1. Extract definitions
     const defs = ts
       ? extractSymbolDefsTsAst(content, rel, ts)
       : extractSymbolDefs(content, rel);
     for (const d of defs) {
       symbols.push(d);
-      if (!symbolToFile.has(d.name)) symbolToFile.set(d.name, d.file);
+      // Map symbol name to its defining file (first definition wins)
+      if (!symbolToFile.has(d.name)) {
+        symbolToFile.set(d.name, d.file);
+      }
     }
 
+    // 2. Extract imports (and resolve edges)
     const imports = extractImports(content);
+    const fromDir = dirname(abs);
     for (const spec of imports) {
-      const resolved = resolveImport(dirname(abs), spec, tsResolver);
-      if (!resolved) continue;
-      const toRel = relative(root, resolved);
-      edges.push({ from: rel, to: toRel, type: "imports" });
+      const resolved = resolveImport(fromDir, spec, tsResolver);
+      if (resolved) {
+        const toRel = relative(root, resolved);
+        edges.push({ from: rel, to: toRel, type: "imports" });
+      }
     }
-  }
 
-  // Second pass: references edges by symbol name
-  for (let i = 0; i < fileAbsPaths.length; i++) {
-    const abs = fileAbsPaths[i];
-    if (!existsSync(abs)) continue;
-    const rel = relative(root, abs);
-    const content = readFileSync(abs, "utf-8");
-
+    // 3. Collect potential symbol references (delay edge creation until all defs are known)
     const refs = ts
       ? extractSymbolRefsTsAst(content, rel, ts)
       : extractSymbolRefs(content);
+    fileToRefs.set(rel, refs);
+  }
+
+  // Final stage: Resolve reference edges using the complete symbol map
+  for (const [fromRel, refs] of fileToRefs.entries()) {
     for (const r of refs) {
-      const defFile = symbolToFile.get(r);
-      if (!defFile) continue;
-      if (defFile === rel) continue;
-      edges.push({ from: rel, to: defFile, type: "references" });
+      const targetFile = symbolToFile.get(r);
+      if (targetFile && targetFile !== fromRel) {
+        edges.push({ from: fromRel, to: targetFile, type: "references" });
+      }
     }
   }
 
@@ -261,8 +275,10 @@ export async function ritsu_build_kg(
     symbols,
   };
 
-  const outPath = resolve(root, ".ritsu", "kg.json");
-  mkdirSync(resolve(root, ".ritsu"), { recursive: true });
+  const ritsuDir = resolve(root, ".ritsu");
+  if (!existsSync(ritsuDir)) mkdirSync(ritsuDir, { recursive: true });
+  
+  const outPath = resolve(ritsuDir, "kg.json");
   writeFileSync(outPath, JSON.stringify(kg), "utf-8");
 
   return textResult(

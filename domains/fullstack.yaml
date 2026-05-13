@@ -1,197 +1,55 @@
-# Domain: Fullstack (全栈) v3.8.0
-# 扁平化配置：显式合并 _base.yaml + frontend.yaml + backend.yaml + fullstack 增量。
-# 目的：避免 LLM 进行“脑内继承合并”，提升一致性与可执行性。
+# Domain: Fullstack (全栈) v4.1.0
+# 继承基准配置。通过多态倾向性实现前后端技术栈的深度协同。
 
-hypothesis_directions:
-  - id: B-H1
-    name: 时区/编码/Locale/序列化差异
-  - id: B-H2
-    name: 第三方 SDK 静默升级或 API 变更
-  - id: B-H3
-    name: 环境变量缺失或配置漂移
-  - id: B-H4
-    name: 资源竞争（文件锁、端口占用、连接池耗尽）
-  - id: B-H5
-    name: 数据边界（空值、超长文本、特殊字符、Unicode 异常）
-  - id: FE-H1
-    name: 缓存过期 / Service Worker 拦截
-  - id: FE-H2
-    name: 闭包引起的旧值 (Stale Closure)
-  - id: FE-H3
-    name: 竞态条件 (Race Condition in State)
-  - id: FE-H4
-    name: 三方库版本冲突 / Peer Dependency 缺失
-  - id: FE-H5
-    name: Hydration 冲突 (SSR 场景)
-  - id: FE-H6
-    name: CORS 拦截 / 资源加载 404
-  - id: BE-H1
-    name: 死锁 / 连接池耗尽 / OOM
-  - id: BE-H2
-    name: 事务隔离级别导致的不可重复读 / 幻读
-  - id: BE-H3
-    name: 非幂等写入导致的重复数据
-  - id: BE-H4
-    name: 上游微服务响应延迟 / 熔断触发
+extends: _base
 
-coding_disciplines:
-  - id: B-D1
-    name: 资源释放
-    rule: "所有外部资源（连接、句柄、流、会话）必须在 finally / defer / 组件卸毁中释放"
-  - id: B-D2
-    name: 错误传播
-    rule: "严禁吞异常。捕获后必须：重新抛出、记录日志、或转换为领域错误。空 catch 块视为严重违规"
-  - id: B-D3
-    name: 幂等性
-    rule: "写入操作应尽量设计为幂等。非幂等操作必须显式标注并说明原因"
-  - id: FE-D1
-    name: Re-render 检查
-    rule: "状态变更粒度是否最小化？严禁滥用全局状态。必须将可共享状态隔离至最近公共祖先组件"
-  - id: FE-D2
-    name: 竞态条件
-    rule: "异步网络请求必须做取消 (AbortController) 或防抖处理"
-  - id: FE-D3
-    name: 内存泄漏
-    rule: "绑定的全局事件或定时器必须在组件销毁时解绑"
-  - id: BE-D1
-    name: 事务边界
-    rule: "所有的多表/多写操作必须包裹在事务中"
-  - id: BE-D2
-    name: 日志规范
-    rule: "重要链路必须有 Trace/Info 日志，严禁吞异常不打日志。必须在 catch 块中先打日志再决定是否重抛"
-  - id: FS-D1
-    name: 前后端数据状态流转闭环
-    rule: "前端提交 → 后端持久化 → 前端刷新，整条链路是否原子闭环？"
-  - id: FS-D2
-    name: 接口契约一致性
-    rule: "前端 TypeScript 类型定义与后端 API Response Schema 是否同步？"
+# ─── 组合倾向性感知 ──────────────────────────────────────────
+stack_tendency:
+  - id: FS-ST1
+    name: React + Node.js (TS Fullstack)
+    indicators: ["package.json", "src/backend", "src/frontend"]
+    persona: "Senior Fullstack (React + Node.js) Architect"
+  - id: FS-ST2
+    name: React + Go (Modern Fullstack)
+    indicators: ["package.json", "go.mod"]
+    persona: "Senior Fullstack (React + Go) Architect"
+  - id: FS-ST3
+    name: Flutter + Node.js/Go (Mobile Fullstack)
+    indicators: ["pubspec.yaml", "package.json", "go.mod"]
+    persona: "Senior Fullstack (Flutter + Backend) Architect"
 
-attack_vectors:
-  - id: B-A1
-    name: 输入校验断裂
-    check: "任何外部输入（用户输入、API 响应、文件内容）是否在入口处做了类型/长度/格式校验？"
-  - id: B-A2
-    name: 权限越界
-    check: "是否只需知道 ID 就能操作非归属资源？（IDOR 检查）"
-  - id: B-A3
-    name: 回滚能力
-    check: "变更是否可逆？回滚步骤是否文档化且测试过？"
-  - id: FE-A1
-    name: XSS 与数据注入
-    check: "用户输入是否直接渲染在 DOM 中？"
-  - id: FE-A2
-    name: 状态篡改
-    check: "前端状态管理是否容易被直接从 Console 或插件中篡改并绕过业务校验？"
-  - id: FE-A3
-    name: 性能与渲染
-    check: "是否存在不必要的大面积重渲染？大列表是否做了虚拟化？"
-  - id: FE-A4
-    name: 跨域信任
-    check: "后端 API 返回值是否被前端无条件信任并渲染？"
-  - id: BE-A1
-    name: SQL 注入与越权
-    check: "查询语句是否安全？接口是否只需知道 ID 就能绕过鉴权横向越权？"
-  - id: BE-A2
-    name: 竞态与死锁
-    check: "高并发下这段事务是否会导致死锁？是否存在非原子的'先查后改'逻辑漏洞？"
-  - id: BE-A3
-    name: 数据迁移安全
-    check: "破坏性 Schema 变更的迁移脚本是否可逆？是否有回滚测试？"
-  - id: FS-A1
-    name: 契约漂移
-    check: "前端调用的 API 字段与后端实际返回是否一致？是否存在前端依赖了后端未承诺的字段？"
-  - id: FS-A2
-    name: 端到端安全
-    check: "前端输入校验是否与后端校验对齐？是否存在前端校验通过但后端绕过的路径？"
-
-pr_requirements:
-  - id: B-PR1
-    rule: "CI 必须全绿（或手动执行 AGENTS.md 质量门禁命令）"
-  - id: B-PR2
-    rule: "PR 描述必须包含变更动机和影响范围"
-  - id: B-PR3
-    rule: "无 Hard Stop 命中（参照 /r-review 红线列表）"
-  - id: B-PR4
-    rule: "若变更涉及明确发布风险、灰度放量、复杂回滚窗口或跨角色协作，assure 阶段必须补齐 release-advice"
-  - id: FE-PR1
-    rule: "必须提供 UI 变更截图或录屏"
-  - id: FE-PR2
-    rule: "检查是否增加了不必要的大体积三方包（>50KB 需说明）"
-  - id: BE-PR1
-    rule: "必须提供单测覆盖率报告或关键路径的 Benchmark 性能报告"
-  - id: BE-PR2
-    rule: "检查是否涉及破坏性 Schema 变更"
-
+# ─── 全栈协同优化准则 ────────────────────────────────────────
 optimize_disciplines:
-  - id: B-O1
-    name: 死代码清除
-    rule: "删除未使用的变量、函数、导入、类型定义。通过 grep 验证无引用后才可删除"
-  - id: B-O2
-    name: 冗余逻辑合并
-    rule: "可合并的条件分支必须合并；重复计算必须提取为变量；单次调用的包装函数必须内联"
-  - id: B-O3
-    name: 注释清理
-    rule: "删除无用的注释（如被注释掉的旧代码、显而易见的注释），保留核心 TSDoc/JSDoc"
-  - id: B-O4
-    name: 算法性能
-    rule: "识别 O(n²)→O(n) 机会、不必要的全量遍历、可 memo 化的重复计算"
-  - id: FE-O1
-    name: 工具库优先替换
-    rule: "手写的 useState+useEffect 组合必须优先替换为项目已有的工具库对应函数。若项目未引入工具库，保持现有实现不变"
-  - id: FE-O2
-    name: 请求层精简
-    rule: "手写的 fetch/axios + useState + useEffect + loading/error 状态管理必须优先替换为项目已有的数据请求层。若项目未引入，保持现有模式"
-  - id: FE-O3
-    name: 样式迁移 TailwindCSS
-    rule: "内联 style 对象和独立 CSS 文件中的规则必须迁移为 TailwindCSS 等价类。重复样式块合并为 @apply 抽象。CSS Modules 保留仅在需要动态类名时"
-  - id: FE-O4
-    name: 语义化标签
-    rule: "div/span 必须替换为语义标签：header/main/section/nav/article/aside/footer/time/mark。仅当语义标签不适用时保留 div"
-  - id: FE-O5
-    name: 渲染性能
-    rule: "大列表必须虚拟化（react-window/react-virtuoso）；重渲染热点必须 React.memo/useMemo/useCallback 包裹；context 值必须 memo 化避免全树重渲染"
-  - id: BE-O1
-    name: 查询优化
-    rule: "识别 N+1 查询、缺失索引、全表扫描。EXPLAIN 验证优化前后执行计划差异"
-  - id: BE-O2
-    name: 连接池与缓存
-    rule: "频繁创建的连接必须池化；重复计算的热数据必须缓存（Redis/内存），设置合理 TTL"
-  - id: BE-O3
-    name: 序列化优化
-    rule: "JSON 序列化热点必须换用高性能库（如 sonic/fjson）；大对象必须做字段裁剪避免过度序列化"
-  - id: BE-O4
-    name: 并发模型优化
-    rule: "串行可并行的 IO 必须改为并发（goroutine/asyncio/Promise.all）；锁粒度必须最小化"
   - id: FS-O1
-    name: 前后端契约精简
-    rule: "前端 TypeScript 类型与后端 API Schema 必须同步精简——删除未使用字段、合并重复接口"
+    name: 契约驱动开发 (Contract-First)
+    rule: "前后端边界必须通过 OpenAPI/TypeSafe-Schema 强制对齐。禁止手写重复的 DTO 定义，优先生成或共享类型"
   - id: FS-O2
-    name: 传输层优化
-    rule: "接口响应必须做字段裁剪（GraphQL 选字段 / REST 只返回必要字段）；启用 gzip/brotli 压缩；大列表接口必须分页"
+    name: 端到端一致性
+    rule: "关键业务流必须实现‘前端提交 -> 后端事务 -> 前端状态同步’的完整闭环。识别并消除状态不一致的中间态"
+  - id: FS-O3
+    name: 全链路可观测性
+    rule: "必须实现从前端 Request Header 到后端日志的全链路 Trace-ID 透传，确保端到端请求可追踪"
+  - id: FS-O4
+    name: 端到端安全防御
+    rule: "输入校验必须在端、网关、服务层三处对齐。敏感操作必须具备 CSRF 防护与 JWT 状态校验"
 
-optimize_tool_preferences:
-  - category: 状态/副作用
-    rule: "优先使用项目已有的工具库替代手写状态/副作用管理。若项目未引入相关库，保持现有实现不变"
-  - category: 请求层
-    rule: "优先使用项目已有的数据请求层（缓存/重试/去重/失效刷新）。若项目未引入，保持现有 fetch/axios 模式"
-  - category: 连接池
-    rule: "数据库连接必须使用连接池，禁止每次请求新建连接。优先使用项目已有的连接池方案"
-  - category: 缓存
-    rule: "读多写少的热点查询必须加缓存层。优先使用项目已有的缓存方案"
+# ─── 跨层级专项优化 ──────────────────────────────────────────
 
-platform_optimizations:
-  - id: FE-P1
-    name: WebView 预加载
-    rule: "H5 内嵌原生 App 时，利用 WebView 预加载（prefetch DNS/预连接）：<link rel='dns-prefetch' href='//api.example.com'> <link rel='preconnect' href='//api.example.com'>"
-  - id: FE-P2
-    name: WebView 缓存策略
-    rule: "静态资源设置强缓存（Cache-Control: max-age=31536000），HTML 入口设置协商缓存，利用 WebView 的缓存机制减少重复请求"
-  - id: FE-P3
-    name: WebView 滚动优化
-    rule: "长列表滚动区域添加 -webkit-overflow-scrolling: touch 和 overflow-scroll-behavior: contain，启用 GPU 加速滚动"
-  - id: FE-P4
-    name: WebView 首屏加速
-    rule: "首屏关键 CSS 内联，非关键资源 defer/async 加载，图片使用 loading='lazy' + 考虑 WebP 格式，骨架屏替代 loading 动画"
-  - id: FE-P5
-    name: JSBridge 调用优化
-    rule: "原生 JSBridge 调用必须做超时兜底（3s），避免 WebView 卡死；频繁调用的 Bridge 必须做节流"
+# [数据交互层]
+data_sync_optimizations:
+  - rule: "响应报文精简：后端必须仅返回前端所需的字段。大列表接口强制要求分页与 gzip 压缩"
+  - rule: "错误处理对齐：后端异常码必须映射为前端可理解的 UI 状态或全局错误提示"
+
+# [认证与会话]
+auth_optimizations:
+  - rule: "身份令牌生命周期管理：实现无感刷新 (Silent Refresh) 机制，避免用户操作中断"
+  - rule: "跨域与安全：生产环境严禁配置 Access-Control-Allow-Origin: *，必须指定明确域名"
+
+# ─── 诊断与攻击向量 ──────────────────────────────────────────
+attack_vectors:
+  - id: FS-A1
+    name: 契约漂移 (Contract Drift)
+    check: "后端 API 变更是否会导致前端运行时崩溃？是否有自动化契约测试覆盖？"
+  - id: FS-A2
+    name: 状态机不一致
+    check: "前端乐观更新失败时，是否有完善的 Rollback 逻辑确保 UI 回滚到后端真实状态？"

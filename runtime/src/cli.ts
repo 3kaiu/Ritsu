@@ -3,7 +3,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { formatSkillWithStage, SKILL_MAPPING_DISPLAY } from "./shared.js";
+import { getStageForSkill } from "./shared.js";
 
 type CtxEvent = {
   ts: string;
@@ -38,8 +38,7 @@ export function usage(): string {
     "ritsu cat --recent <N>     # 展示最近 N 条 ctx 事件",
     "ritsu cat --file <path>    # 直接指定 ctx jsonl 文件路径",
     "",
-    "legacy ctx alias display:",
-    `  ${SKILL_MAPPING_DISPLAY}`,
+    "  think -> dev -> test/hunt -> review",
     "\nENV:",
     "  RITSU_PROJECT_ROOT       # 项目根目录（默认当前目录）",
   ].join("\n");
@@ -92,91 +91,93 @@ function statusColor(status: CtxEvent["status"]): keyof typeof COLORS {
 }
 
 export function formatSkill(skill: string): string {
-  return formatSkillWithStage(skill);
+  return skill;
 }
 
+/**
+ * Formats a context event into a colorized string for terminal display.
+ */
 export function formatEvent(e: CtxEvent): string {
-  const left = `${color(e.ts, "gray")} ${color(e.correlation_id, "blue")}`;
-  const mid = `${color(formatSkill(e.skill), "yellow")} ${color(e.domain, "gray")}`;
-  const st = color(e.status, statusColor(e.status));
+  const ts = color(e.ts, "gray");
+  const cid = color(e.correlation_id, "blue");
+  const skill = color(e.skill, "yellow");
+  const domain = color(e.domain, "gray");
+  const status = color(e.status, statusColor(e.status));
 
-  const extras: string[] = [];
-  if (e.step) extras.push(`${color("step", "dim")}:${e.step}`);
-  if (e.artifact && e.artifact !== "null") extras.push(`${color("artifact", "dim")}:${e.artifact}`);
-  if (e.error) extras.push(`${color("error", "dim")}:${e.error}`);
+  const details = [
+    e.step && `${color("step", "dim")}:${e.step}`,
+    e.artifact && e.artifact !== "null" && `${color("artifact", "dim")}:${e.artifact}`,
+    e.error && `${color("error", "dim")}:${e.error}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  const extra = extras.length ? ` ${extras.join(" ")}` : "";
-  return `${left}  ${mid}  ${st}${extra}`;
+  return `${ts} ${cid}  ${skill} ${domain}  ${status}${details ? ` ${details}` : ""}`;
 }
 
+/**
+ * Main entry point for Ritsu CLI.
+ * Handles command routing and argument parsing.
+ */
 function main() {
   const args = process.argv.slice(2);
-  if (args.length === 0 || args.includes("-h") || args.includes("--help")) {
+  const helpRequested = args.length === 0 || args.includes("-h") || args.includes("--help");
+
+  if (helpRequested) {
     console.log(usage());
-    process.exit(0);
+    return;
   }
 
-  const cmd = args[0];
+  const [cmd, ...cmdArgs] = args;
   if (cmd !== "cat") {
     console.error(color(`Unknown command: ${cmd}`, "red"));
     console.log(usage());
     process.exit(1);
   }
 
+  // Parse command arguments
+  const options = {
+    filePath: "",
+    cid: "",
+    recentN: null as number | null,
+  };
+
+  for (let i = 0; i < cmdArgs.length; i++) {
+    const arg = cmdArgs[i];
+    if (arg === "--file") {
+      options.filePath = cmdArgs[++i] ?? "";
+    } else if (arg === "--recent") {
+      options.recentN = parseInt(cmdArgs[++i] ?? "0", 10);
+    } else if (!arg.startsWith("-")) {
+      options.cid = arg;
+    }
+  }
+
   const root = getProjectRoot();
+  let finalPath = options.filePath ? resolve(root, options.filePath) : findLatestCtxFile(root);
 
-  let filePath = "";
-  let cid = "";
-  let recentN: number | null = null;
-
-  for (let i = 1; i < args.length; i++) {
-    const a = args[i];
-    if (a === "--file") {
-      filePath = String(args[i + 1] ?? "");
-      i++;
-      continue;
-    }
-    if (a === "--recent") {
-      recentN = Number(args[i + 1] ?? "0");
-      i++;
-      continue;
-    }
-    if (!a.startsWith("-")) {
-      cid = a;
-      continue;
-    }
+  if (!finalPath || !existsSync(finalPath)) {
+    console.error(color(`Context file not found: ${finalPath ?? ".ritsu/ctx-*.jsonl"}`, "red"));
+    process.exit(1);
   }
 
-  if (!filePath) {
-    const latest = findLatestCtxFile(root);
-    if (!latest) {
-      console.error(color("No ctx-*.jsonl found under .ritsu/", "red"));
-      process.exit(1);
-    }
-    filePath = latest;
-  } else {
-    filePath = resolve(root, filePath);
+  const events = parseJsonl(finalPath);
+  let outputEvents = events;
+
+  if (options.recentN !== null && options.recentN > 0) {
+    outputEvents = events.slice(-options.recentN);
+  } else if (options.cid) {
+    outputEvents = events.filter((e) => e.correlation_id === options.cid);
   }
 
-  const events = parseJsonl(filePath);
-
-  let out = events;
-  if (typeof recentN === "number" && Number.isFinite(recentN) && recentN > 0) {
-    out = events.slice(-recentN);
-  } else if (cid) {
-    out = events.filter((e) => e.correlation_id === cid);
-  }
-
-  if (out.length === 0) {
-    console.error(color("No matching events", "yellow"));
+  if (outputEvents.length === 0) {
+    console.error(color("No matching events found", "yellow"));
     process.exit(2);
   }
 
-  console.log(color(`ctx: ${filePath}`, "dim"));
-  console.log(color(`skill mapping: ${SKILL_MAPPING_DISPLAY}`, "dim"));
-  for (const e of out) {
-    console.log(formatEvent(e));
-  }
+  console.log(color(`ctx: ${finalPath}`, "dim"));
+  console.log(color("skill mapping: standard delivery flow: think -> dev -> test/hunt -> review", "dim"));
+  outputEvents.forEach((e) => console.log(formatEvent(e)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

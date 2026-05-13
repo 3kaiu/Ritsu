@@ -23,42 +23,72 @@ interface YamlInputField {
   properties?: Record<string, unknown>;
 }
 
+/**
+ * Converts a YAML input field definition to a Zod schema type.
+ * Supports recursive resolution for objects and lists.
+ */
+function convertFieldToZod(field: YamlInputField): z.ZodTypeAny {
+  let type: z.ZodTypeAny;
+
+  switch (field.type) {
+    case "enum":
+      if (field.values && field.values.length > 0) {
+        type = z.enum(field.values as [string, ...string[]]);
+      } else {
+        type = z.string();
+      }
+      break;
+    case "list":
+    case "array":
+      const itemType = field.items
+        ? convertFieldToZod(field.items as YamlInputField)
+        : z.string();
+      type = z.array(itemType);
+      break;
+    case "object":
+      if (field.properties) {
+        type = convertInputToZod(field.properties as Record<string, YamlInputField>);
+      } else {
+        type = z.record(z.string(), z.any());
+      }
+      break;
+    case "number":
+    case "integer":
+      type = z.number();
+      break;
+    case "boolean":
+      type = z.boolean();
+      break;
+    default:
+      type = z.string();
+  }
+
+  if (field.description) {
+    type = type.describe(field.description);
+  }
+
+  return field.required ? type : type.optional();
+}
+
+/**
+ * Compiles a set of YAML input fields into a Zod object schema.
+ */
 function convertInputToZod(
   input: Record<string, YamlInputField>,
 ): z.ZodObject<any> {
   const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const [key, field] of Object.entries(input)) {
-    let type: z.ZodTypeAny;
-
-    if (field.type === "enum" && field.values && field.values.length > 0) {
-      type = z.enum(field.values as [string, ...string[]]);
-    } else if (field.type === "list" || field.type === "array") {
-      type = z.array(z.string());
-    } else if (field.type === "object") {
-      type = z.any(); // Simplified for now
-    } else if (field.type === "number" || field.type === "integer") {
-      type = z.number();
-    } else if (field.type === "boolean") {
-      type = z.boolean();
-    } else {
-      type = z.string();
-    }
-
-    if (field.description) {
-      type = type.describe(field.description);
-    }
-
-    if (!field.required) {
-      type = type.optional();
-    }
-
-    shape[key] = type;
+    shape[key] = convertFieldToZod(field);
   }
 
   return z.object(shape);
 }
 
+/**
+ * Compiles MCP tool definitions from a YAML declaration file.
+ * Automatically resolves paths and validates schema integrity.
+ */
 export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
   const yamlPath = resolve(getSharedDir(), "mcp-tools.yaml");
   const raw = readFileSync(yamlPath, "utf-8");
@@ -77,6 +107,7 @@ export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
         : z.object({}),
     };
 
+    // Optional fields with fallback safety
     if (t.output_schema) tool.outputSchema = t.output_schema;
     if (t.error_shape) tool.error_shape = t.error_shape;
     if (t.call_template) tool.call_template = t.call_template;

@@ -1,61 +1,63 @@
-# Domain: Backend (后端) v3.8.0
-# 继承 _base.yaml 全部内容。以下仅声明后端领域增量。
+# Domain: Backend (后端) v4.1.0
+# 继承 _base.yaml 全部内容。支持多技术栈倾向性（Node.js/Go/Python）。
 
 extends: _base
 
-hypothesis_directions:
-  - id: BE-H1
-    name: 死锁 / 连接池耗尽 / OOM
-  - id: BE-H2
-    name: 事务隔离级别导致的不可重复读 / 幻读
-  - id: BE-H3
-    name: 非幂等写入导致的重复数据
-  - id: BE-H4
-    name: 上游微服务响应延迟 / 熔断触发
+# ─── 倾向性感知配置 ──────────────────────────────────────────
+stack_tendency:
+  - id: BE-ST1
+    name: Node.js
+    indicators: ["package.json"]
+    persona: "Senior Node.js Backend Architect"
+  - id: BE-ST2
+    name: Go
+    indicators: ["go.mod"]
+    persona: "Senior Go Backend Architect"
+  - id: BE-ST3
+    name: Python
+    indicators: ["requirements.txt", "pyproject.toml"]
+    persona: "Senior Python Backend Architect"
 
-coding_disciplines:
-  - id: BE-D1
-    name: 事务边界
-    rule: "所有的多表/多写操作必须包裹在事务中"
-  - id: BE-D2
-    name: 日志规范
-    rule: "重要链路必须有 Trace/Info 日志，严禁吞异常不打日志。必须在 catch 块中先打日志再决定是否重抛"
-
-attack_vectors:
-  - id: BE-A1
-    name: SQL 注入与越权
-    check: "查询语句是否安全？接口是否只需知道 ID 就能绕过鉴权横向越权？"
-  - id: BE-A2
-    name: 竞态与死锁
-    check: "高并发下这段事务是否会导致死锁？是否存在非原子的'先查后改'逻辑漏洞？"
-  - id: BE-A3
-    name: 数据迁移安全
-    check: "破坏性 Schema 变更的迁移脚本是否可逆？是否有回滚测试？"
-
-pr_requirements:
-  - id: BE-PR1
-    rule: "必须提供单测覆盖率报告或关键路径的 Benchmark 性能报告"
-  - id: BE-PR2
-    rule: "检查是否涉及破坏性 Schema 变更"
-
+# ─── 平台通用优化准则 ────────────────────────────────────────
 optimize_disciplines:
   - id: BE-O1
-    name: 查询优化
-    rule: "识别 N+1 查询、缺失索引、全表扫描。EXPLAIN 验证优化前后执行计划差异"
+    name: 事务与一致性
+    rule: "多表写操作必须显式包裹在事务中。识别并消除非原子的'先查后改'逻辑漏洞"
   - id: BE-O2
-    name: 连接池与缓存
-    rule: "频繁创建的连接必须池化；重复计算的热数据必须缓存（Redis/内存），设置合理 TTL"
+    name: 查询性能与 N+1
+    rule: "识别 N+1 查询、全表扫描。必须通过 EXPLAIN 验证 SQL 索引命中情况。优先使用 Join 或 In 批量查询"
   - id: BE-O3
-    name: 序列化优化
-    rule: "JSON 序列化热点必须换用高性能库（如 sonic/fjson）；大对象必须做字段裁剪避免过度序列化"
+    name: 资源管理与池化
+    rule: "数据库连接、Redis 连接、HTTP 客户端必须池化。严禁在热点循环中新建连接"
   - id: BE-O4
-    name: 并发模型优化
-    rule: "串行可并行的 IO 必须改为并发（goroutine/asyncio/Promise.all）；锁粒度必须最小化"
+    name: 可观测性基准
+    rule: "重要业务链路必须具备 Trace-ID 传递。错误日志必须包含上下文堆栈，严禁空 catch"
 
-optimize_tool_preferences:
-  - category: 连接池
-    rule: "数据库连接必须使用连接池，禁止每次请求新建连接。优先使用项目已有的连接池方案"
-  - category: 缓存
-    rule: "读多写少的热点查询必须加缓存层。优先使用项目已有的缓存方案"
+# ─── 技术栈专项优化 (倾向性驱动) ─────────────────────────────
 
-platform_optimizations: []
+# [Node.js 专项]
+nodejs_optimizations:
+  - rule: "严禁在事件循环中执行 CPU 密集型同步操作（如大 JSON 解析）。优先使用 Worker Threads"
+  - rule: "Promise 必须有错误捕获，避免 unhandledRejection。并行 IO 必须使用 Promise.all"
+  - rule: "大型流操作必须处理背压 (Backpressure)，防止内存溢出"
+
+# [Go 专项]
+go_optimizations:
+  - rule: "Goroutine 必须具备生命周期管理，必须通过 context 或 channel 确保可退出。严禁 Goroutine 泄漏"
+  - rule: "高频对象必须使用 sync.Pool 减少 GC 压力"
+  - rule: "Channel 操作必须防止死锁和向已关闭的 channel 写入。优先使用 sync.Once 或 atomic 进行状态同步"
+
+# [Python 专项]
+python_optimizations:
+  - rule: "FastAPI 环境下，阻塞式 IO 必须在 ThreadPool 中执行，严禁阻塞 async 事件循环"
+  - rule: "强制使用 Pydantic 进行类型校验，确保数据在入口处 schema 对齐"
+  - rule: "SQLAlchemy 必须开启 `selectinload` 或 `joinedload` 解决 N+1 问题"
+
+# ─── 诊断与攻击向量 ──────────────────────────────────────────
+attack_vectors:
+  - id: BE-A1
+    name: 越权与鉴权失效
+    check: "接口是否只需知道 ID 就能操作非归属资源？是否存在 IDOR 风险？"
+  - id: BE-A2
+    name: 破坏性变更风险
+    check: "Schema 变更是否会导致线上服务中断？是否有平滑迁移方案？"

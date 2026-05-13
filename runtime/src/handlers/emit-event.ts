@@ -2,7 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
 import { validateEvent } from "../event-validator.js";
 import {
-  ARTIFACT_LAYER_MAP,
+  getArtifactLayer,
   getCanonicalArtifactType,
   getPreferredArtifactType,
 } from "../shared.js";
@@ -55,7 +55,7 @@ export async function ritsu_emit_event(
         ? { canonical_type: canonicalType }
         : {}),
       ...(artifactType && !rawArtifactMeta.layer
-        ? { layer: ARTIFACT_LAYER_MAP[artifactType] ?? "system" }
+        ? { layer: getArtifactLayer(artifactType) }
         : {}),
     };
   }

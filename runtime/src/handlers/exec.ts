@@ -1,14 +1,20 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { spawn } from "node:child_process";
 import {
-  ALLOWED_BINARIES,
+  getAllowedBinariesForProject,
   DANGEROUS_ARGS,
   RESIDUAL_BLACKLIST,
   SHELL_META_REJECT,
   MAX_BUFFER_MB_HARD_LIMIT,
   MAX_TIMEOUT_MS_HARD_LIMIT,
 } from "../shared.js";
-import { getProjectRoot, textResult, errorResult } from "./_utils.js";
+import {
+  getProjectRoot,
+  textResult,
+  errorResult,
+} from "./_utils.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 // ─── 命令解析器 ──────────────────────────────────────────────
 // 将命令字符串解析为 binary + args，支持引号和转义。
@@ -111,6 +117,17 @@ async function runCmd(
   });
 }
 
+function detectStackFingerprints(root: string): string[] {
+  const fingerprints: string[] = [];
+  if (existsSync(join(root, "package.json"))) fingerprints.push("nodejs");
+  if (existsSync(join(root, "go.mod"))) fingerprints.push("go");
+  if (existsSync(join(root, "requirements.txt")) || existsSync(join(root, "pyproject.toml"))) fingerprints.push("python");
+  if (existsSync(join(root, "pubspec.yaml"))) fingerprints.push("flutter");
+  if (existsSync(join(root, "pom.xml")) || existsSync(join(root, "build.gradle"))) fingerprints.push("java");
+  if (existsSync(join(root, "Cargo.toml"))) fingerprints.push("rust");
+  return fingerprints;
+}
+
 export async function ritsu_exec(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
@@ -144,10 +161,14 @@ export async function ritsu_exec(
   const parsed = parseCommand(trimmedCmd);
   if (!parsed) return errorResult("empty command after parsing");
 
-  // 第一层：白名单校验 — 只允许安全二进制
-  if (!ALLOWED_BINARIES.has(parsed.binary)) {
+  // 第一层：动态白名单校验 — 只允许安全二进制与当前技术栈相关的工具
+  const root = getProjectRoot();
+  const fingerprints = detectStackFingerprints(root);
+  const allowedBinaries = getAllowedBinariesForProject(fingerprints);
+
+  if (!allowedBinaries.has(parsed.binary)) {
     return errorResult(
-      `command blocked: '${parsed.binary}' is not in the allowed binaries list`,
+      `command blocked: '${parsed.binary}' is not in the allowed binaries list for this project context (fingerprints: ${fingerprints.join(", ") || "none"}).`,
     );
   }
 

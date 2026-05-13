@@ -109,7 +109,8 @@ export async function ritsu_semantic_search(
   }
 
   const embedder = await getEmbedder();
-  const q = await embedder.embed(query);
+  const qRaw = await embedder.embed(query);
+  const q = new Float32Array(qRaw);
 
   const entryMap = new Map<string, IndexEntry>();
   for (const e of index.entries) {
@@ -127,10 +128,14 @@ export async function ritsu_semantic_search(
     }
     const artifactLayer = e.artifact_layer ?? "system";
     if (layers.length > 0 && !layers.includes(artifactLayer)) continue;
+    
     const artifactType = getPreferredArtifactType(e.artifact_type);
     const canonicalType =
       e.canonical_type ?? getCanonicalArtifactType(e.artifact_type);
+    
+    // Use Float32Array optimized cosine similarity
     const score = cosineSimilarity(q, e.embedding);
+    
     matches.push({
       score,
       path: e.path,

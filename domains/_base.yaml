@@ -58,6 +58,9 @@ optimize_disciplines:
   - id: B-O4
     name: 算法性能
     rule: "识别 O(n²)→O(n) 机会、不必要的全量遍历、可 memo 化的重复计算"
+  - id: B-O5
+    name: 技术栈感知优化 (Stack-Aware)
+    rule: "优化必须基于项目的技术倾向性（Tech Tendency）。优先使用平台原生工具或已引入的成熟库（如 React 的 ahooks, Flutter 的 const 构造）。严禁引入与现有架构冲突的第三方库"
 
 optimize_tool_preferences: []
 
