@@ -15,13 +15,16 @@
 - **产物关联**：自动加载最近的 `design-sheet` (设计源) 或 `dev-report` (实现源)。
 - **一致性校验**：通过 `reality_check` 确认磁盘产物是否与记录一致。
 
-### 0.2 执行模式选择
-根据任务规模选择：
-- `quick`：单点修复、文档更新、简单查询。
-- `standard`：常规需求开发、重构、深度调研。
-- `critical`：核心架构变更、高风险迁移、多模块影响。
+### 0.2 执行模式与分级选择
+根据任务规模和风险自动对齐：
 
----
+| 级别 | 适用场景 | 产物要求 | 流程建议 |
+| --- | --- | --- | --- |
+| **Micro (P0)** | 变更行数 < 10, 无逻辑变动 | 无 Sheet, 仅 ctx | `/r-dev --quick` 跳过设计单 |
+| **Standard (P1)** | 常规需求、功能增改 | `design-sheet` + `dev-report` | 走标准闭环 |
+| **Critical (P2)** | 架构变更、基础组件修改 | 全套文档 + 强制 `contract-validate` | 深度链路 + 多轮 Review |
+
+- **断点识别**：查看 `breakpoint_summary` 和 `recommended_next_step`。
 
 ## Step 1: 领域解析与 Started 标记
 

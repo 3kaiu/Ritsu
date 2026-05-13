@@ -1,4 +1,4 @@
-# Ritsu 产物契约 v4.0.0
+# Ritsu 产物契约 v4.1.0
 # 定义所有跨技能中间产物的强制格式。
 # 下游技能读取上游产物时，必须按此 Schema 解析，禁止自由解读。
 # ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
@@ -25,10 +25,34 @@ schemas:
           - name: out_of_scope
             label: "不纳入范围"
       - title: "3. 技术契约 (Contract)"
-      - title: "4. 实施与验证 (Execution)"
+        description: "核心改动文件、API 定义、组件 Props 变动等硬契约"
+        conditional_fields:
+          - domains: [backend, fullstack]
+            fields:
+              - name: api_contract
+                label: "API / 接口契约"
+                sub_fields: [method_path, request_schema, response_schema]
+              - name: data_model
+                label: "数据模型"
+                sub_fields: [table_name, key_fields]
+          - domains: [frontend, fullstack]
+            fields:
+              - name: component_contract
+                label: "组件契约"
+                sub_fields: [component_name, props_type, emits_callbacks]
+      - title: "4. 代价与风险 (Metrics & Risks)"
         fields:
-          - name: implementation_steps
-            label: "实施清单"
+          - name: complexity_score
+            label: "复杂度评分 (1-10)"
+          - name: intrusion
+            label: "架构侵入度 (1-10)"
+          - name: rollback_steps
+            label: "回滚步骤"
+            rule: "上线发现致命 Bug 的确切回滚指令"
+      - title: "5. 实施清单 (Execution)"
+        type: checklist
+        item_format: "- [ ] `{文件路径}`: {主干逻辑描述}"
+        fields:
           - name: verification_plan
             label: "验证计划"
 
@@ -49,6 +73,13 @@ schemas:
             label: "上线建议"
           - name: business_impact
             label: "业务影响"
+      - title: "4. 失败回流 (Rejection Feedback)"
+        fields:
+          - name: rejection_summary
+            label: "拒绝原因摘要"
+          - name: required_fixes
+            label: "强制修复项"
+            type: list
 
   delivery_report:
     id: 11
@@ -66,226 +97,45 @@ schemas:
     id: 0
     path: "{项目根}/AGENTS.md"
     placeholder_allowed: true
-    placeholder_note: "AGENTS.md 为 init 阶段半成品，'待补充' 占位符在此 Schema 中豁免 AP-6。后续技能执行时若发现'待补充'字段，应提示用户补充而非拒绝"
     required_fields:
       - field: ritsu-version
         type: string
-        pattern: "4.0.x"
+        pattern: "4.1.x"
       - field: domain
         type: enum
         values: [frontend, backend, fullstack, infra, data]
-        description: "基础设施领域统一使用 infra；devops 作为口语别名，不单列为 schema 枚举值"
-      - field: 技术栈底座.语言/运行时
-        type: string
-        placeholder: "待补充"
-      - field: 质量门禁.Lint
-        type: string
-        placeholder: "待补充"
-      - field: 质量门禁.Test
-        type: string
-        placeholder: "待补充"
-    optional_fields:
-      - field: 规则覆盖.rules_overrides
-        type: object
-        description: "项目级规则覆盖（可选）。用于在不修改 Bundle 的情况下，按项目禁用/降级/补充规则。未声明则沿用 Bundle 默认规则。"
-        example:
-          disable:
-            - "AP-8"
-          downgrade:
-            - id: "AP-12"
-              severity: "INFO"
-          add:
-            - id: "PROJ-D1"
-              name: "项目专属纪律"
-              scope: "dev"
-              rule: "..."
-    heterogeneity:
-      detect: "存在 ritsu-version: 字段 → 旧版 Ritsu 产物；不存在 → 异构配置"
-      injection_template:
-        prefix: "<!-- Ritsu Configuration Block -->"
-        fields: [ritsu-version, domain]
-        suffix: "<!-- End Ritsu Block -->"
-
-  handoff:
-    id: 1
-    path: ".ritsu/handoff-{kebab-slug}.md"
-    slug_rule: "取需求描述的前 3 个有效英文关键词，转 kebab-case 小写"
-    slug_conflict: "追加序号，如 handoff-user-login-flow-2.md"
-    required_sections:
-      - title: "边界与依赖"
-        fields:
-          - name: target_scope
-            label: "目标范围 (In Scope)"
-          - name: out_of_scope
-            label: "Out of Scope"
-            rule: "明确列出，禁止模糊"
-          - name: new_dependencies
-            label: "新增依赖"
-            format: "名称 / 版本 / License / 体积 或 '无'"
-      - title: "核心契约 (Contract)"
-        conditional_fields:
-          - domains: [backend, fullstack]
-            fields:
-              - name: api_contract
-                label: "API / 接口契约"
-                sub_fields:
-                  [method_path, request_schema, response_schema, error_codes]
-              - name: data_model
-                label: "数据模型"
-                sub_fields: [table_name, key_fields, index_design]
-          - domains: [frontend, fullstack]
-            fields:
-              - name: component_contract
-                label: "组件契约"
-                sub_fields:
-                  [component_name, props_type, emits_callbacks, state_machine]
-      - title: "攻击测试防线"
-        fields:
-          - name: downtime_response
-            label: "宕机响应"
-            rule: "外部依赖 502 时的降级方案，不允许填'暂不处理'"
-          - name: 10x_bottleneck
-            label: "10x 瓶颈"
-            rule: "流量放大 10 倍最先撑爆的点及缓解措施"
-          - name: rollback_steps
-            label: "回滚步骤"
-            rule: "上线发现致命 Bug 的确切回滚指令（逐步骤列出）"
-      - title: "Complexity Score（动态代价评估）"
-        fields:
-          - name: change_size
-            label: "变更规模(LoC/文件数)"
-            rule: "必须给出 1-10 评分 + 粗略 files/loc 估计"
-          - name: intrusion
-            label: "架构侵入度"
-            rule: "必须给出 1-10 评分 + 解释影响范围"
-          - name: runtime_cost
-            label: "运行时开销"
-            rule: "必须给出 1-10 评分 + 解释 CPU/内存/IO 影响"
-          - name: alternatives
-            label: "备选方案"
-            rule: "当 intrusion>7 时必须至少 2 个备选，并解释为何不选更稳健方案"
-      - title: "实施清单"
-        type: checklist
-        item_format: "- [ ] `{文件路径}`: {主干逻辑描述，精确到函数/组件级别}"
-        rule: "每条必须精确到文件，确保 /r-dev 执行时无需做任何技术决策"
-    placeholder_forbidden: true
-    forbidden_patterns: [TODO, 待定, 后续完善, 暂不处理]
 
   diagnosis:
     id: 2
     md_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "根因确诊"
-        id: root-cause
         fields:
           - name: root_cause
-            format: "一句话精准描述，格式：'由于 [原因]，导致 [现象]'"
       - title: "证据链"
-        id: evidence
         type: table
         columns: [序号, 证据, 来源]
-      - title: "领域影响范围"
-        id: impact
-        fields:
-          - name: impact_layer
-            enum: [仅前端渲染, 数据库数据, 服务可用性]
-          - name: impact_scope
-            enum: [单用户, 特定条件, 全量]
       - title: "复现步骤"
-        id: reproduce
         fields:
-          - name: environment
           - name: steps
             type: ordered_list
-      - title: "验证命令"
-        id: verify
-        type: code_block
-        rule: "可直接执行的验证命令（证明根因成立）"
-    optional_sections:
-      - title: "推荐修复入口"
-        items:
-          - "简单修复（< 2h）→ /r-dev [...]"
-          - "边界或方案需要重审 → /r-think [...]"
 
-  review_stamp:
-    id: 3
-    md_path: ".ritsu/review-stamp-{YYYYMMDD-HHMMSS}.md"
+  # [DEPRECATED] Handoff v4.1 以后已并入 Design Sheet，仅保留空壳兼容旧逻辑
+  handoff:
+    id: 1
+    path: ".ritsu/handoff-legacy-{slug}.md"
     required_sections:
-      - title: "结论"
-        id: verdict
+      - title: "已迁移"
         fields:
-          - name: verdict
-            type: enum
-            values: [PASS, FAIL]
-      - title: "Hard Stop 命中"
-        id: hard-stops
-        fields:
-          - name: hard_stops
-            format: "无 | R-{N} — {描述}"
-      - title: "领域发现"
-        id: findings
-        fields:
-          - name: findings
-            format: "无 | - 问题描述（严重度：高/中/低）"
-      - title: "红蓝对抗发现"
-        id: red-teaming
-        fields:
-          - name: potential_defects
-            format: "至少 3 条：- 缺陷描述（触发条件/影响/验证方式）"
-          - name: refactor_suggestions
-            format: "至少 2 条：- 重构建议（不改变行为）"
-      - title: "溯源对账"
-        id: traceability
-        fields:
-          - name: traceability
-            format: "已对账: .ritsu/assurance-sheet-{ts}.md | .ritsu/dev-report-{ts}.md | .ritsu/design-sheet-{ts}.md | 附: .ritsu/handoff-{slug}.md | 无主产物存档（风险已知悉）"
-      - title: "质量门禁执行结果"
-        id: quality-gates
-        fields:
-          - name: lint
-            format: "✅ 通过 | ❌ 失败，输出：..."
-          - name: test
-            format: "✅ 通过 | ❌ 失败，输出：..."
-    optional_sections:
-      - title: "熔断反馈（给 /r-think）"
-        id: circuit-breaker-feedback
-        fields:
-          - name: 失败摘要
-            format: "一句话总结为什么 FAIL"
-          - name: 命中规则
-            format: "R-{N} 或 AP-{N} 列表"
-          - name: 需要升维确认的问题
-            type: list
-          - name: 推荐的重设边界/契约调整
-            type: list
+          - name: migration_note
+            label: "迁移说明"
+            default: "已并入 design-sheet"
 
   optimize_report:
     id: 4
     path: ".ritsu/optimize-report-{YYYYMMDD-HHMMSS}.md"
     required_sections:
       - title: "执行摘要"
-        id: summary
         fields:
           - name: total_items
-            format: "整数"
           - name: succeeded
-            format: "整数"
-          - name: skipped
-            format: "整数（风险跳过）"
-          - name: rolled_back
-            format: "整数（验证失败回滚）"
-      - title: "成功项明细"
-        id: succeeded-items
-        type: table
-        columns: [序号, 优化项, Before → After, 验证结果]
-      - title: "跳过/回滚项"
-        id: skipped-items
-        type: table
-        columns: [序号, 优化项, 原因]
-      - title: "质量门禁"
-        id: quality-gates
-        fields:
-          - name: lint
-            format: "✅ 通过 | ❌ 失败"
-          - name: test
-            format: "✅ 通过 | ❌ 失败"
