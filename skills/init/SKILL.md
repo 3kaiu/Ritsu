@@ -1,6 +1,6 @@
 ---
 name: init
-version: "4.0.0"
+version: "4.1.0"
 description: "Ritsu 初始化模块。建立项目基线、生成 AGENTS.md 并配置忽略规则。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
 total_steps: 4
@@ -22,7 +22,7 @@ total_steps: 4
 ### 2. AGENTS.md 生成与注入
 
 根据扫描结果建立项目指纹：
-- 产出符合 v4.0 规范的 `AGENTS.md`。
+- 产出符合 v4.1 规范的 `AGENTS.md`。
 - 如果已存在，执行差异对比并建议合并或覆盖。
 
 ### 3. 环境与忽略规则配置

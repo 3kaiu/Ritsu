@@ -1,6 +1,6 @@
 ---
 name: document
-version: "3.8.0"
+version: "4.1.0"
 description: "Ritsu 扩展模块。用于维护 README、API 文档、CHANGELOG 和注释，不属于默认交付链路。"
 when_to_use: "/r-doc, 写文档, 更新文档, API文档, CHANGELOG, README, JSDoc"
 total_steps: 4

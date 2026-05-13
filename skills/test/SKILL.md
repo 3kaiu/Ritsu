@@ -1,6 +1,6 @@
 ---
 name: test
-version: "4.0.0"
+version: "4.1.0"
 description: "Ritsu 测试与验证入口。基于《设计单》和《开发回执》进行补测与质量校验。"
 when_to_use: "/r-test, 写测试, 补测试, 质量门禁, 单测, 验证"
 total_steps: 4

@@ -1,6 +1,6 @@
 ---
 name: deploy
-version: "3.8.0"
+version: "4.1.0"
 description: "Ritsu 辅助入口。用于部署、冒烟验证和回滚准备，建立在 review 结论之上。"
 when_to_use: "/r-deploy, 部署, 发布, 上线, deploy, release, 推到生产"
 total_steps: 5

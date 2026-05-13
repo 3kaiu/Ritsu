@@ -1,6 +1,6 @@
 ---
 name: triage
-version: "3.8.0"
+version: "4.1.0"
 description: "Ritsu 辅助入口。用于处理 Issue / PR 工单的分类、裁决和流转，不做业务实现。"
 when_to_use: "/r-triage, 处理 issue, 看一下 PR, 批量回复, 工单"
 total_steps: 4

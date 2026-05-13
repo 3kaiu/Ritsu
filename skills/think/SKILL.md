@@ -1,6 +1,6 @@
 ---
 name: think
-version: "4.0.0"
+version: "4.1.0"
 description: "Ritsu 需求分析入口。产出全方位的《设计单 (Design Sheet)》，并引导进入开发阶段。"
 when_to_use: "/r-think, 需求审核, 方案判断, 怎么做, 看看这个需求"
 total_steps: 4

@@ -1,6 +1,6 @@
 ---
 name: dev
-version: "4.0.0"
+version: "4.1.0"
 description: "Ritsu 开发实现入口。根据已确认的《设计单 (Design Sheet)》完成代码实现与验证。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug, 开始实现"
 total_steps: 5

@@ -1,6 +1,6 @@
 ---
 name: read
-version: "3.8.0"
+version: "4.1.0"
 description: "Ritsu 辅助入口。用于阅读代码、补上下文、回答纯理解类问题，只读不写。"
 when_to_use: "/r-read, 看看这个, 解释一下, 这段代码什么意思, 帮我读一下, 理解一下, 分析一下代码"
 total_steps: 3
