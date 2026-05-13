@@ -85,20 +85,12 @@ function getImportantSectionTitlesByType(): Partial<
     };
 
     return {
-      "think-ticket": pickTitles("intake_ticket"),
-      "think-plan": pickTitles("delivery_plan"),
+      "design-sheet": pickTitles("intake_ticket"),
       "dev-report": pickTitles("delivery_report"),
-      "review-report": pickTitles("assurance_report"),
-      "review-advice": pickTitles("release_advice"),
-      "intake-ticket": pickTitles("intake_ticket"),
-      "delivery-plan": pickTitles("delivery_plan"),
-      "delivery-report": pickTitles("delivery_report"),
-      "assurance-report": pickTitles("assurance_report"),
-      "release-advice": pickTitles("release_advice"),
+      "assurance-sheet": pickTitles("assurance_report"),
       handoff: pickTitles("handoff"),
       diagnosis: pickTitles("diagnosis"),
-      // schema uses review_stamp key; runtime artifact type is review-stamp
-      "review-stamp": pickTitles("review_stamp"),
+      "optimize-report": pickTitles("optimize_report"),
     };
   } catch {
     return {};

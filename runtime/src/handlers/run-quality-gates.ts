@@ -12,10 +12,9 @@ interface TestFailure {
 }
 
 interface QualityGateResult {
-  lint: { passed: boolean; output: string };
+  lint: { status: "passed" | "failed" | "skipped"; output: string };
   test: {
-    passed: boolean;
-    total: number;
+    status: "passed" | "failed" | "skipped";
     failures: TestFailure[];
     output: string;
   };

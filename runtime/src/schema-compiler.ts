@@ -1,22 +1,16 @@
-/**
- * Schema Compiler — 从 _shared/mcp-tools.yaml 编译 MCP Tool 定义
- *
- * 读取 YAML 文件，将每个 tool 的 input 字段转换为 JSON Schema (inputSchema)，
- * output_schema 保留供 UI 消费（不传给 MCP 协议，MCP 协议只定义 input）。
- */
-
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getSharedDir } from "./shared.js";
 import yaml from "js-yaml";
+import { z } from "zod";
 
 interface CompiledTool {
   name: string;
   description: string;
-  inputSchema: Record<string, unknown>;
+  inputSchema: z.ZodObject<any>;
   outputSchema?: Record<string, unknown>;
-  errorShape?: Record<string, unknown>;
-  callTemplate?: Record<string, unknown>;
+  error_shape?: Record<string, unknown>;
+  call_template?: Record<string, unknown>;
   validation?: string;
 }
 
@@ -29,47 +23,40 @@ interface YamlInputField {
   properties?: Record<string, unknown>;
 }
 
-function convertInputToJsonSchema(
+function convertInputToZod(
   input: Record<string, YamlInputField>,
-): Record<string, unknown> {
-  const properties: Record<string, unknown> = {};
-  const required: string[] = [];
+): z.ZodObject<any> {
+  const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const [key, field] of Object.entries(input)) {
-    if (field.type === "enum" && field.values) {
-      properties[key] = {
-        type: "string",
-        enum: field.values,
-        description: field.description ?? "",
-      };
-    } else if (field.type === "list") {
-      properties[key] = {
-        type: "array",
-        items: { type: "string" },
-        description: field.description ?? "",
-      };
+    let type: z.ZodTypeAny;
+
+    if (field.type === "enum" && field.values && field.values.length > 0) {
+      type = z.enum(field.values as [string, ...string[]]);
+    } else if (field.type === "list" || field.type === "array") {
+      type = z.array(z.string());
     } else if (field.type === "object") {
-      properties[key] = {
-        type: "object",
-        description: field.description ?? "",
-        ...(field.properties ? { properties: field.properties } : {}),
-      };
+      type = z.any(); // Simplified for now
+    } else if (field.type === "number" || field.type === "integer") {
+      type = z.number();
+    } else if (field.type === "boolean") {
+      type = z.boolean();
     } else {
-      properties[key] = {
-        type: field.type,
-        description: field.description ?? "",
-      };
+      type = z.string();
     }
-    if (field.required) {
-      required.push(key);
+
+    if (field.description) {
+      type = type.describe(field.description);
     }
+
+    if (!field.required) {
+      type = type.optional();
+    }
+
+    shape[key] = type;
   }
 
-  return {
-    type: "object",
-    properties,
-    required: required.length > 0 ? required : undefined,
-  };
+  return z.object(shape);
 }
 
 export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
@@ -86,14 +73,13 @@ export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
       name: t.name,
       description: t.description,
       inputSchema: t.input
-        ? convertInputToJsonSchema(t.input as Record<string, YamlInputField>)
-        : { type: "object", properties: {} },
+        ? convertInputToZod(t.input as Record<string, YamlInputField>)
+        : z.object({}),
     };
 
-    // 保留非 MCP 协议字段供 handler 使用
     if (t.output_schema) tool.outputSchema = t.output_schema;
-    if (t.error_shape) tool.errorShape = t.error_shape;
-    if (t.call_template) tool.callTemplate = t.call_template;
+    if (t.error_shape) tool.error_shape = t.error_shape;
+    if (t.call_template) tool.call_template = t.call_template;
     if (t.validation) tool.validation = t.validation;
 
     return tool;

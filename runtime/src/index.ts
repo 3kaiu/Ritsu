@@ -50,7 +50,7 @@ async function main() {
     server.tool(
       tool.name,
       tool.description,
-      tool.inputSchema,
+      tool.inputSchema.shape,
       registerHandlers[tool.name] ??
         (async () => ({
           content: [{ type: "text", text: "handler not implemented" }],

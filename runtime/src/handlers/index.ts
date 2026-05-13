@@ -32,12 +32,6 @@ import { ritsu_exec } from "./exec.js";
 import { ritsu_get_changed_files } from "./get-changed-files.js";
 import { ritsu_get_diff } from "./get-diff.js";
 import { ritsu_run_quality_gates } from "./run-quality-gates.js";
-import { ritsu_list_flows } from "./list-flows.js";
-import { ritsu_validate_flow } from "./validate-flow.js";
-import { ritsu_run_flow } from "./run-flow.js";
-import { ritsu_resume_flow } from "./resume-flow.js";
-import { ritsu_get_flow_state } from "./get-flow-state.js";
-import { ritsu_apply_flow_decision } from "./apply-flow-decision.js";
 
 // ─── Handler Registry ────────────────────────────────────────
 
@@ -66,10 +60,4 @@ export const registerHandlers: Record<
   ritsu_get_changed_files,
   ritsu_get_diff,
   ritsu_run_quality_gates,
-  ritsu_list_flows,
-  ritsu_validate_flow,
-  ritsu_run_flow,
-  ritsu_resume_flow,
-  ritsu_get_flow_state,
-  ritsu_apply_flow_decision,
 };

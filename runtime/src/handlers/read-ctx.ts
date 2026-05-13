@@ -265,6 +265,67 @@ function buildRecoveryContext(
   };
 }
 
+// ─── 智能下一步建议与断点对账 ───
+
+function computeNextStepAndBreakpoint(
+  root: string,
+  lastIncomplete: Record<string, unknown> | null,
+  lastCompleted: Record<string, unknown> | null,
+  allEntries: Record<string, unknown>[],
+): { recommended_next_step: string | null; breakpoint_summary: string | null } {
+  if (lastIncomplete) {
+    const skill = String(lastIncomplete.skill ?? "");
+    const stage = getStageForSkill(skill);
+    return {
+      recommended_next_step: `/r-${skill}`,
+      breakpoint_summary: `检测到未完成的任务：${stage} (${skill})。建议继续执行。`,
+    };
+  }
+
+  if (!lastCompleted) {
+    return {
+      recommended_next_step: "/r-init",
+      breakpoint_summary: "项目尚未初始化或无历史记录。建议从 /r-init 开始。",
+    };
+  }
+
+  const lastSkill = String(lastCompleted.skill ?? "");
+  const lastStage = getStageForSkill(lastSkill);
+
+  const stateMap: Record<string, { next: string | null; summary: string }> = {
+    init: {
+      next: "/r-think",
+      summary: "项目已初始化。可以开始需求分析 (/r-think)。",
+    },
+    think: {
+      next: "/r-dev",
+      summary: "《设计单 (Design Sheet)》已完成。建议开始开发 (/r-dev)。",
+    },
+    dev: {
+      next: "/r-review",
+      summary: "代码实现已完成。建议进行验收审查 (/r-review)。",
+    },
+    test: {
+      next: "/r-review",
+      summary: "测试验证已完成。建议进行最终验收 (/r-review)。",
+    },
+    review: {
+      next: null,
+      summary: "上一次验收已完成。所有交付已闭环。",
+    },
+  };
+
+  const recommendation = stateMap[lastStage] ?? {
+    next: null,
+    summary: `上一次任务 (${lastStage}) 已完成。`,
+  };
+
+  return {
+    recommended_next_step: recommendation.next,
+    breakpoint_summary: recommendation.summary,
+  };
+}
+
 export async function ritsu_read_ctx(): Promise<CallToolResult> {
   const root = getProjectRoot();
   const ctxPath = getCtxPath(root);
@@ -307,6 +368,15 @@ export async function ritsu_read_ctx(): Promise<CallToolResult> {
   data.reality_check = checkRealityDesync(root, lastCompleted);
 
   data.circuit_breaker_status = computeCircuitBreaker(allEntries);
+
+  const nextStep = computeNextStepAndBreakpoint(
+    root,
+    lastIncomplete,
+    lastCompleted,
+    allEntries,
+  );
+  data.recommended_next_step = nextStep.recommended_next_step;
+  data.breakpoint_summary = nextStep.breakpoint_summary;
 
   if (recentEntries.length === 0) {
     return warnResult(
