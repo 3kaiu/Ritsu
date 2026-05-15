@@ -38,7 +38,7 @@ npx tsc --noEmit
 
 ## Conventional Commits
 
-We follow the [Conventional Commits](https://www.conventionalcommits.org/) specification for our commit messages:
+Ritsu follows the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages:
 
 - `feat:` for a new feature
 - `fix:` for a bug fix

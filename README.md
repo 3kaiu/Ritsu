@@ -9,7 +9,7 @@
 [![codecov](https://codecov.io/gh/3kaiu/Ritsu/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/3kaiu/Ritsu)
 [![Version](https://img.shields.io/badge/version-5.2.0-blue.svg)](AGENTS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg)](package.json)
+[![Node](https://img.shields.io/badge/node-%3E%3D20.12.0-green.svg)](package.json)
 
 [快速开始](#-快速开始) • [核心理念](#-核心理念) • [指令集](#-指令参考) • [CLI 工具](#-cli-工具) • [贡献指南](CONTRIBUTING.md)
 
@@ -105,5 +105,5 @@ graph TD
 ---
 
 <div align="center">
-Built with ❤️ by Antigravity AI Engineering Team
+Built with ❤️ by **The User + Antigravity AI**
 </div>
