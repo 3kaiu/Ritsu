@@ -16,12 +16,15 @@ import {
   ritsu_read_preferences,
   ritsu_write_preference,
 } from "./preferences.js";
+import { ritsu_open_span } from "./open-span.js";
+import { ritsu_close_span } from "./close-span.js";
+import { ritsu_join_trace } from "./join-trace.js";
 
 // ─── Handler Registry ────────────────────────────────────────
 
 export const registerHandlers: Record<
   string,
-  (params: any) => Promise<CallToolResult>
+  (params: Record<string, unknown>) => Promise<CallToolResult>
 > = {
   ritsu_emit_event,
   ritsu_read_ctx,
@@ -34,4 +37,7 @@ export const registerHandlers: Record<
   ritsu_run_quality_gates,
   ritsu_read_preferences,
   ritsu_write_preference,
+  ritsu_open_span,
+  ritsu_close_span,
+  ritsu_join_trace,
 };

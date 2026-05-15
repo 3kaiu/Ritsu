@@ -57,7 +57,7 @@
 1. 读取 `AGENTS.md` 的 `domain`。
 2. 调用 `ritsu_get_changed_files`。
 
-对于 **Critical (P2)** 任务，调用 `ritsu_emit_event` 追加 started 事件。
+对于 **Critical (P2)** 任务，调用 `ritsu_open_span` 开启追踪，获取 `trace_id` 和 `span_id`。如果用户提供了 `trace_id`，则需作为 `parent_span_id` 传入以关联上下文。
 
 ---
 
@@ -68,8 +68,8 @@
 - Standard: `design-brief` / `dev-report`
 - Critical: `design-sheet` / `dev-report` / `assurance-sheet`
 
-### 2.2 事件追踪
-对于 Standard/Critical，在阶段结束时追加 `done` 事件。
+### 2.2 事件与 Span 追踪
+对于 Standard/Critical，在阶段结束时调用 `ritsu_close_span`（如果已开启 Span）或追加 `done` 事件。
 
 ---
 

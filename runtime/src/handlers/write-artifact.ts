@@ -23,6 +23,7 @@ import {
   textResult,
   jsonErrorResult,
 } from "./_utils.js";
+import { evaluatePolicies } from "../policy/index.js";
 
 const RITSU_DIR = ".ritsu";
 const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
@@ -30,6 +31,7 @@ const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
   "design-brief": "design_brief",
   "dev-report": "delivery_report",
   "assurance-sheet": "assurance_sheet",
+  "coordination-sheet": "coordination_sheet",
 };
 
 type ArtifactSchemaSection = {
@@ -340,23 +342,30 @@ export async function ritsu_write_artifact(
     ]);
   }
 
-  // 占位符拦截 — runtime 当前只对 artifact 内容做最小约束
-  const placeholderPattern = /\bTODO\b|待定|暂不处理|后续完善|\bTBD\b/;
-  if (placeholderPattern.test(content)) {
+  // 政策引擎拦截
+  const policyResult = evaluatePolicies({
+    action: "write_artifact",
+    target: filename,
+    content: content,
+    context: { skill: (params.context as any)?.skill },
+  });
+
+  if (!policyResult.passed) {
+    const violations = policyResult.violations
+      .filter((v) => v.severity === "fatal" || v.severity === "hard_stop")
+      .map((v) => ({
+        code: "policy_violation" as any,
+        severity: "error" as const,
+        path: "content",
+        message: `[${v.rule_id}] ${v.message}`,
+        artifact_type: type,
+        expected: [v.suggestion ?? "Comply with policy"],
+        actual: [v.evidence ?? "Policy violation"],
+      }));
+    
     return artifactWriteErrorResult(
-      "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",
-      [
-        {
-          code: "placeholder_content",
-          severity: "error",
-          path: "content",
-          message:
-            "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",
-          artifact_type: type,
-          expected: ["content without placeholder markers"],
-          actual: ["placeholder detected"],
-        },
-      ],
+      "write rejected by policy engine",
+      violations
     );
   }
 

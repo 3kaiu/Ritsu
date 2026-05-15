@@ -9,6 +9,7 @@
 import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 // removed unused resolve, dirname
 import { getCtxPath } from "./ctx-path.js";
+import { legacyCidToTraceId, legacyCidToSpanId } from "./correlation.js";
 
 let cachedEntries: Record<string, unknown>[] | null = null;
 let lastMtime: number = 0;
@@ -44,7 +45,15 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
         const line = content.slice(start, end).trim();
         if (line) {
           try {
-            entries.push(JSON.parse(line));
+            const parsed = JSON.parse(line);
+            if (parsed.correlation_id && !parsed.trace_id) {
+              parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
+              parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
+            }
+            if (!parsed.correlation_id && parsed.trace_id) {
+              parsed.correlation_id = parsed.trace_id;
+            }
+            entries.push(parsed);
           } catch {
             // ignore malformed line
           }
@@ -57,7 +66,15 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
       const lastLine = content.slice(start).trim();
       if (lastLine) {
         try {
-          entries.push(JSON.parse(lastLine));
+          const parsed = JSON.parse(lastLine);
+          if (parsed.correlation_id && !parsed.trace_id) {
+            parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
+            parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
+          }
+          if (!parsed.correlation_id && parsed.trace_id) {
+            parsed.correlation_id = parsed.trace_id;
+          }
+          entries.push(parsed);
         } catch {
           // ignore invalid json
         }
@@ -103,7 +120,17 @@ export function readRecentEntries(
     const content = buffer.toString("utf-8");
     const lines = content.split("\n").filter(l => l.trim());
     const recent = lines.slice(-limit).map(l => {
-      try { return JSON.parse(l); } catch { return null; }
+      try {
+        const parsed = JSON.parse(l);
+        if (parsed.correlation_id && !parsed.trace_id) {
+          parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
+          parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
+        }
+        if (!parsed.correlation_id && parsed.trace_id) {
+          parsed.correlation_id = parsed.trace_id;
+        }
+        return parsed;
+      } catch { return null; }
     }).filter(Boolean);
 
     return recent;

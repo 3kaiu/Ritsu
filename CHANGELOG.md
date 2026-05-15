@@ -31,6 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Initial release of Ritsu v5 architecture.
-- Explicit Staging: `think`, `dev`, `test`, `hunt`, `review`.
+- Explicit Staging: `think`, `dev`, `hunt`, `review`. (Note: `test` is merged into `dev`).
 - MCP-based toolset.
 - `AGENTS.md` project baseline.

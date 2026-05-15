@@ -9,12 +9,22 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 type CtxEvent = {
   ts: string;
   correlation_id: string;
+  trace_id?: string;
+  span_id?: string;
+  parent_span_id?: string;
+  span_kind?: "root" | "internal";
   skill: string;
   domain: string;
-  status: "started" | "done" | "failed" | "artifact_written";
+  status: "started" | "done" | "failed" | "artifact_written" | "violation_detected";
   step?: string;
   artifact?: string;
   error?: string;
+  cost?: {
+    tokens_in?: number;
+    tokens_out?: number;
+    model?: string;
+    duration_ms?: number;
+  };
 };
 
 const COLORS = {
@@ -38,6 +48,8 @@ export function usage(): string {
     "ritsu cat <cid>            # 按 correlation_id 展示一条任务链路的 ctx 事件（彩色）",
     "ritsu cat --recent <N>     # 展示最近 N 条 ctx 事件",
     "ritsu cat --file <path>    # 直接指定 ctx jsonl 文件路径",
+    "ritsu trace <id>           # 展示 Trace 链路和 Span 树（自动兼容 legacy CID）",
+    "ritsu trace --open         # 展示当前所有未关闭的 Trace",
     "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
     "",
@@ -70,7 +82,27 @@ function parseJsonl(path: string): CtxEvent[] {
     if (!line.trim()) continue;
     try {
       const obj = JSON.parse(line) as CtxEvent;
-      if (obj && obj.correlation_id && obj.status) events.push(obj);
+      if (obj && obj.status) {
+        // polyfill trace_id
+        if (obj.correlation_id && !obj.trace_id) {
+          const match = obj.correlation_id.match(/^cid-(\d{8})-(.+)$/);
+          if (match) {
+            const dateStr = match[1];
+            const seqStr = match[2];
+            const hex = seqStr.padStart(16, "0");
+            const spanHex = seqStr.padStart(8, "0");
+            obj.trace_id = `trace-${dateStr}-${hex}`;
+            obj.span_id = `span-${spanHex}`;
+          } else if (obj.correlation_id.startsWith("trace-")) {
+            obj.trace_id = obj.correlation_id;
+            obj.span_id = `span-00000000`;
+          }
+        }
+        if (!obj.correlation_id && obj.trace_id) {
+          obj.correlation_id = obj.trace_id;
+        }
+        events.push(obj);
+      }
     } catch {
       // ignore bad lines
     }
@@ -99,7 +131,8 @@ export function formatSkill(skill: string): string {
 
 export function formatEvent(e: CtxEvent): string {
   const ts = color(e.ts, "gray");
-  const cid = color(e.correlation_id, "blue");
+  const idStr = e.trace_id ? e.trace_id.slice(-8) + ":" + (e.span_id?.slice(-8) ?? "") : e.correlation_id;
+  const cid = color(idStr, "blue");
   const skill = color(e.skill, "yellow");
   const domain = color(e.domain, "gray");
   const status = color(e.status, statusColor(e.status));
@@ -189,7 +222,7 @@ async function runExport(outPath: string | null) {
   }
 
   const events = parseJsonl(ctxFile);
-  const tasks: Record<string, { skill: string, domain: string, startTs: string, endTs?: string, status: string, artifacts: string[], error?: string }> = {};
+  const tasks: Record<string, { skill: string, domain: string, startTs: string, endTs?: string, status: string, artifacts: string[], error?: string, totalTokensIn: number, totalTokensOut: number }> = {};
 
   for (const e of events) {
     if (!tasks[e.correlation_id]) {
@@ -198,8 +231,15 @@ async function runExport(outPath: string | null) {
         domain: e.domain,
         startTs: e.ts,
         status: "in_progress",
-        artifacts: []
+        artifacts: [],
+        totalTokensIn: 0,
+        totalTokensOut: 0
       };
+    }
+    
+    if (e.cost) {
+      tasks[e.correlation_id].totalTokensIn += e.cost.tokens_in ?? 0;
+      tasks[e.correlation_id].totalTokensOut += e.cost.tokens_out ?? 0;
     }
     
     if (e.status === "done") {
@@ -220,14 +260,15 @@ async function runExport(outPath: string | null) {
     "",
     "## Task History",
     "",
-    "| CID | Skill | Domain | Status | Duration | Artifacts |",
-    "| --- | --- | --- | --- | --- | --- |"
+    "| CID | Skill | Domain | Status | Duration | Artifacts | Tokens (In/Out) |",
+    "| --- | --- | --- | --- | --- | --- | --- |"
   ];
 
   for (const [cid, t] of Object.entries(tasks)) {
     const statusIcon = t.status === "completed" ? "✅" : (t.status === "failed" ? "❌" : "⏳");
     const arts = t.artifacts.length > 0 ? t.artifacts.map(a => `\`${a}\``).join(", ") : "-";
-    lines.push(`| \`${cid}\` | ${t.skill} | ${t.domain} | ${statusIcon} ${t.status} | ${t.startTs} | ${arts} |`);
+    const tokens = `${t.totalTokensIn} / ${t.totalTokensOut}`;
+    lines.push(`| \`${cid}\` | ${t.skill} | ${t.domain} | ${statusIcon} ${t.status} | ${t.startTs} | ${arts} | ${tokens} |`);
   }
 
   const markdown = lines.join("\n");
@@ -236,6 +277,102 @@ async function runExport(outPath: string | null) {
     console.log(color(`Exported to: ${outPath}`, "green"));
   } else {
     console.log(markdown);
+  }
+}
+
+async function runTrace(traceId: string | null, openFlag: boolean) {
+  const root = getProjectRoot();
+  const ctxFile = findLatestCtxFile(root);
+  if (!ctxFile) {
+    console.error(color("No context file found", "red"));
+    process.exit(1);
+  }
+
+  const events = parseJsonl(ctxFile);
+
+  if (openFlag) {
+    const traces: Record<string, boolean> = {}; // trace_id -> isClosed
+    for (const e of events) {
+      if (e.trace_id) {
+        if (!traces.hasOwnProperty(e.trace_id)) traces[e.trace_id] = false;
+        if (e.span_kind === "root" && (e.status === "done" || e.status === "failed")) {
+          traces[e.trace_id] = true;
+        }
+      }
+    }
+    const openTraces = Object.entries(traces).filter(([id, closed]) => !closed).map(([id]) => id);
+    if (openTraces.length === 0) {
+      console.log(color("No open traces found.", "green"));
+      return;
+    }
+    console.log(color("Open Traces:", "cyan"));
+    for (const id of openTraces) {
+      const rootEvent = events.find(e => e.trace_id === id && e.status === "started");
+      const skill = rootEvent ? rootEvent.skill : "unknown";
+      console.log(`- ${color(id, "blue")} (${color(skill, "yellow")})`);
+    }
+    return;
+  }
+
+  if (!traceId) {
+    console.error(color("Please provide a trace ID or use --open", "red"));
+    process.exit(1);
+  }
+
+  // Handle legacy CID input
+  let targetTraceId = traceId;
+  if (traceId.startsWith("cid-")) {
+    const match = traceId.match(/^cid-(\d{8})-(.+)$/);
+    if (match) {
+      const hex = match[2].padStart(16, "0");
+      targetTraceId = `trace-${match[1]}-${hex}`;
+    }
+  }
+
+  const traceEvents = events.filter((e) => e.trace_id === targetTraceId);
+  if (traceEvents.length === 0) {
+    console.error(color(`Trace not found: ${targetTraceId}`, "yellow"));
+    process.exit(2);
+  }
+
+  console.log(color(`Trace ID: ${targetTraceId}`, "blue"));
+  
+  // Build span tree
+  const spans: Record<string, { id: string; parent?: string; events: CtxEvent[] }> = {};
+  for (const e of traceEvents) {
+    const sid = e.span_id ?? "unknown";
+    if (!spans[sid]) spans[sid] = { id: sid, parent: e.parent_span_id, events: [] };
+    spans[sid].events.push(e);
+  }
+
+  const rootSpans = Object.values(spans).filter(s => !s.parent || !spans[s.parent]);
+  
+  function printSpan(span: any, indent: string) {
+    const sorted = span.events.sort((a: CtxEvent, b: CtxEvent) => a.ts.localeCompare(b.ts));
+    const startE = sorted.find((e: CtxEvent) => e.status === "started") || sorted[0];
+    const endE = sorted.slice().reverse().find((e: CtxEvent) => e.status === "done" || e.status === "failed");
+    
+    const skill = color(startE.skill, "yellow");
+    const domain = color(startE.domain, "dim");
+    const status = endE ? color(endE.status, statusColor(endE.status)) : color("started", "cyan");
+    const durationStr = (startE && endE && endE.cost?.duration_ms) ? color(` ${endE.cost.duration_ms}ms`, "dim") : "";
+    
+    console.log(`${indent}├─ [${color(span.id.slice(-8), "blue")}] ${skill} ${domain} - ${status}${durationStr}`);
+    
+    const artifacts = sorted.filter((e: CtxEvent) => e.status === "artifact_written" && e.artifact).map((e: CtxEvent) => e.artifact);
+    if (artifacts.length > 0) {
+      console.log(`${indent}│  └─ ${color("artifacts:", "dim")} ${artifacts.join(", ")}`);
+    }
+
+    const children = Object.values(spans).filter((s: any) => s.parent === span.id);
+    for (const child of children) {
+      printSpan(child, indent + "│  ");
+    }
+  }
+
+  console.log(color("Span Tree:", "dim"));
+  for (const root of rootSpans) {
+    printSpan(root, "");
   }
 }
 
@@ -261,6 +398,17 @@ function main() {
       if (cmdArgs[i] === "--out") outPath = cmdArgs[++i];
     }
     runExport(outPath);
+    return;
+  }
+
+  if (cmd === "trace") {
+    let traceId = null;
+    let openFlag = false;
+    for (const arg of cmdArgs) {
+      if (arg === "--open") openFlag = true;
+      else if (!arg.startsWith("-")) traceId = arg;
+    }
+    runTrace(traceId, openFlag);
     return;
   }
 

@@ -47,14 +47,34 @@ async function main() {
 
   // 注册工具 + handler
   for (const tool of tools) {
+    const rawHandler = registerHandlers[tool.name] ??
+        (async () => ({
+          content: [{ type: "text" as const, text: "handler not implemented" }],
+        }));
+
+    const wrappedHandler = async (params: any, extra?: any) => {
+      const result = await rawHandler(params);
+      if (process.env.RITSU_STRICT_OUTPUT === '1' && tool.outputSchema && result.content && result.content[0] && result.content[0].type === "text" && result.content[0].text) {
+        try {
+          const parsedContent = JSON.parse(result.content[0].text);
+          if (!parsedContent.error) {
+            tool.outputSchema.parse(parsedContent);
+          }
+        } catch (e: any) {
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify({ error: "STRICT_OUTPUT_ERROR", message: e.message }) }],
+            isError: true,
+          };
+        }
+      }
+      return result;
+    };
+
     server.tool(
       tool.name,
       tool.description,
       tool.inputSchema.shape,
-      registerHandlers[tool.name] ??
-        (async () => ({
-          content: [{ type: "text", text: "handler not implemented" }],
-        })),
+      wrappedHandler,
     );
   }
 

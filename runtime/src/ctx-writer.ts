@@ -67,8 +67,8 @@ export async function appendEvent(
 
   const release = await lock(ctxPath);
   try {
-    // 在锁内生成 correlation_id（若未提供）
-    if (!event.correlation_id) {
+    // 在锁内生成 correlation_id（若未提供且没有 trace_id）
+    if (!event.correlation_id && !event.trace_id) {
       const { dateStr, nextSeq } = scanMaxSeq(ctxPath);
       event.correlation_id = formatCorrelationId(dateStr, nextSeq);
     }

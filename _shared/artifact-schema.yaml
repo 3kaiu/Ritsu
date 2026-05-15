@@ -142,3 +142,17 @@ schemas:
         fields:
           - name: steps
             type: ordered_list
+
+  coordination_sheet:
+    required_sections:
+      - title: Intent & Trace
+        fields:
+          - label: "Original Goal"
+          - label: "Trace ID"
+      - title: Child Spans
+        fields:
+          - label: "Span Declarations"
+      - title: Handoff Matrix
+        fields:
+          - label: "Dependencies"
+          - label: "Shared Context"

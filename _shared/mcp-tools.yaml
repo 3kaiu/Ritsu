@@ -21,6 +21,15 @@ tools:
       correlation_id:
         type: string
         required: false
+      trace_id:
+        type: string
+        required: false
+      span_id:
+        type: string
+        required: false
+      agent:
+        type: object
+        required: false
       skill:
         type: string
         required: false
@@ -88,7 +97,7 @@ tools:
     input:
       type:
         type: enum
-        values: [design-sheet, design-brief, dev-report, assurance-sheet, diagnosis]
+        values: [design-sheet, design-brief, dev-report, assurance-sheet, diagnosis, coordination-sheet]
         required: true
       filename: { type: string, required: true }
       content: { type: string, required: true }
@@ -220,4 +229,67 @@ tools:
         ok: { type: boolean }
         id: { type: string }
         matches: { type: array }
+
+  - name: ritsu_open_span
+    description: 创建 root 或 child span，写入 started 事件。
+    call_template:
+      tool: ritsu_open_span
+      params:
+        skill: "{skill_name}"
+        domain: "{value}"
+    input:
+      skill: { type: string, required: true }
+      domain: { type: string, required: true }
+      trace_id: { type: string, required: false }
+      parent_span_id: { type: string, required: false }
+      agent: { type: object, required: false }
+    output_schema:
+      type: object
+      required: [trace_id, span_id, status]
+      properties:
+        trace_id: { type: string }
+        span_id: { type: string }
+        status: { type: string }
+
+  - name: ritsu_close_span
+    description: 关闭 span，写入 done 或 failed 事件。
+    call_template:
+      tool: ritsu_close_span
+      params:
+        trace_id: "{trace_id}"
+        span_id: "{span_id}"
+        status: "done"
+        skill: "{skill_name}"
+        domain: "{value}"
+    input:
+      trace_id: { type: string, required: true }
+      span_id: { type: string, required: true }
+      status: { type: enum, values: [done, failed], required: true }
+      skill: { type: string, required: true }
+      domain: { type: string, required: true }
+      error: { type: string, required: false }
+      cost: { type: object, required: false }
+    output_schema:
+      type: object
+      required: [trace_id, span_id, status]
+      properties:
+        trace_id: { type: string }
+        span_id: { type: string }
+        status: { type: string }
+
+  - name: ritsu_join_trace
+    description: 查询 trace 状态，返回 span tree 与 artifacts 列表。
+    call_template:
+      tool: ritsu_join_trace
+      params:
+        trace_id: "{trace_id}"
+    input:
+      trace_id: { type: string, required: true }
+    output_schema:
+      type: object
+      required: [trace_id, tree, artifacts]
+      properties:
+        trace_id: { type: string }
+        tree: { type: array }
+        artifacts: { type: array }
 

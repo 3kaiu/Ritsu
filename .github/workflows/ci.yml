@@ -34,6 +34,11 @@ jobs:
           cd runtime
           node version-check.js
 
+      - name: Lint Check
+        run: |
+          cd runtime
+          npm run lint
+
       - name: Type Check
         run: |
           cd runtime

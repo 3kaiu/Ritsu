@@ -20,6 +20,28 @@ function todayPrefix(): { dateStr: string; prefix: string } {
   return { dateStr, prefix: `cid-${dateStr}-` };
 }
 
+export function legacyCidToTraceId(cid: string): string {
+  if (cid.startsWith("trace-")) return cid;
+  // cid format: cid-YYYYMMDD-seq (e.g. cid-20260515-001)
+  const match = cid.match(/^cid-(\d{8})-(.+)$/);
+  if (!match) return `trace-19700101-0000000000000000`;
+  const dateStr = match[1];
+  const seqStr = match[2];
+  // pad to 16 hex
+  const hex = seqStr.padStart(16, "0");
+  return `trace-${dateStr}-${hex}`;
+}
+
+export function legacyCidToSpanId(cid: string): string {
+  if (cid.startsWith("span-")) return cid;
+  const match = cid.match(/^cid-\d{8}-(.+)$/);
+  if (!match) return `span-00000000`;
+  const seqStr = match[1];
+  // pad to 8 hex
+  const hex = seqStr.padStart(8, "0");
+  return `span-${hex}`;
+}
+
 let _seqCache: { dateStr: string; maxSeq: number } | null = null;
 
 /** 从 ctx 文件内容中扫描当日 max seq（在锁内调用，保证原子性） */

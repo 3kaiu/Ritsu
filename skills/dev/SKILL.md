@@ -47,7 +47,7 @@ total_steps: 5
 
 **准入条件**: 架构变更、基础组件修改、跨模块重构。
 
-1. **完整对账**: `ritsu_read_ctx` + 关联 `design-sheet` + `emit_event(started)`。
+1. **完整对账**: `ritsu_read_ctx` + 关联 `design-sheet` + 若存在 `coordination-sheet`，读取分配的 `trace_id` 和 `parent_span_id`。调用 `ritsu_open_span`。
 2. **技术栈感知**: 识别项目指纹，自动切换资深专家人格。
 3. **偏好加载**: 读取 `.ritsu/preferences.yaml`。
 4. **高保真实现**: 严格服从 `design-sheet`，代码风格与领域 YAML 100% 对齐。

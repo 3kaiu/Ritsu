@@ -8,7 +8,7 @@ interface CompiledTool {
   name: string;
   description: string;
   inputSchema: z.ZodObject<any>;
-  outputSchema?: Record<string, unknown>;
+  outputSchema?: z.ZodTypeAny;
   error_shape?: Record<string, unknown>;
   call_template?: Record<string, unknown>;
   validation?: string;
@@ -86,6 +86,19 @@ function convertInputToZod(
   return z.object(shape);
 }
 
+function convertOutputSchemaToZod(schema: any): z.ZodTypeAny {
+  if (!schema || schema.type !== "object" || !schema.properties) {
+    return z.any();
+  }
+  const requiredFields = Array.isArray(schema.required) ? schema.required : [];
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const [key, prop] of Object.entries(schema.properties as Record<string, any>)) {
+    const field: YamlInputField = { ...prop, required: requiredFields.includes(key) };
+    shape[key] = convertFieldToZod(field);
+  }
+  return z.object(shape);
+}
+
 /**
  * Compiles MCP tool definitions from a YAML declaration file.
  * Automatically resolves paths and validates schema integrity.
@@ -109,7 +122,7 @@ export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
     };
 
     // Optional fields with fallback safety
-    if (t.output_schema) tool.outputSchema = t.output_schema;
+    if (t.output_schema) tool.outputSchema = convertOutputSchemaToZod(t.output_schema);
     if (t.error_shape) tool.error_shape = t.error_shape;
     if (t.call_template) tool.call_template = t.call_template;
     if (t.validation) tool.validation = t.validation;

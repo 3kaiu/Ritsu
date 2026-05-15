@@ -12,9 +12,9 @@ export async function ritsu_emit_event(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
   const eventType = String(params.event_type ?? "");
-  const correlationId = params.correlation_id
-    ? String(params.correlation_id)
-    : "";
+  const correlationId = params.correlation_id ? String(params.correlation_id) : "";
+  const traceId = params.trace_id ? String(params.trace_id) : undefined;
+  const spanId = params.span_id ? String(params.span_id) : undefined;
   const step = params.step ? String(params.step) : undefined;
   const rawArtifactMeta =
     params.artifact_meta &&
@@ -31,14 +31,21 @@ export async function ritsu_emit_event(
   const event: Record<string, unknown> = {
     ts: ts(),
     ...(correlationId ? { correlation_id: correlationId } : {}),
+    ...(traceId ? { trace_id: traceId } : {}),
+    ...(spanId ? { span_id: spanId } : {}),
     skill: String(params.skill ?? "unknown"),
     domain: String(params.domain ?? "unknown"),
     status: eventType,
   };
 
+  if (params.agent) event.agent = params.agent;
+
   if (step) event.step = step;
   if (params.artifact !== undefined) event.artifact = params.artifact;
   if (params.error) event.error = String(params.error);
+  if (params.cost && typeof params.cost === "object") {
+    event.cost = params.cost;
+  }
   if (rawArtifactMeta) {
     const rawArtifactType =
       typeof rawArtifactMeta.type === "string" ? rawArtifactMeta.type : "";

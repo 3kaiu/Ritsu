@@ -16,7 +16,6 @@ export function getSharedDir(): string {
 export const SKILL_STAGE_MAP: Record<string, string> = {
   think: "think",
   dev: "dev",
-  test: "test",
   hunt: "hunt",
   review: "review",
 };
@@ -46,10 +45,19 @@ export const ARTIFACT_REGISTRY: ArtifactDefinition[] = [
   { type: "dev-report", prefix: "dev-report-", layer: "primary" },
   { type: "assurance-sheet", prefix: "assurance-sheet-", layer: "primary" },
   { type: "diagnosis", prefix: "diagnosis-", layer: "evidence" },
+  { type: "coordination-sheet", prefix: "coordination-sheet-", layer: "primary" },
   { type: "ctx", prefix: "ctx-", layer: "system" },
 ];
 
-export const ARTIFACT_VALID_TYPES = ARTIFACT_REGISTRY.map((a) => a.type);
+export const ARTIFACT_VALID_TYPES = [
+  "design-sheet",
+  "design-brief",
+  "dev-report",
+  "assurance-sheet",
+  "diagnosis",
+  "coordination-sheet",
+  "ctx",
+] as const;
 export type ArtifactType = (typeof ARTIFACT_VALID_TYPES)[number];
 
 export function getCanonicalArtifactType(type: string): string {

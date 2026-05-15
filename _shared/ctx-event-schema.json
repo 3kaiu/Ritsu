@@ -2,9 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ritsu-ctx-event",
   "title": "Ritsu Context Event",
-  "description": "v5.2.0 — Ritsu ctx JSONL 事件 Schema。自适应分级交付流。",
+  "description": "v5.2.0 — Ritsu ctx JSONL 事件 Schema。自适应分级交付流。注意：freestyle 不在此列，不写入 ctx。",
   "type": "object",
-  "required": ["ts", "correlation_id", "skill", "domain", "status"],
+  "required": ["ts", "status"],
   "properties": {
     "ts": {
       "type": "string",
@@ -12,7 +12,32 @@
     },
     "correlation_id": {
       "type": "string",
-      "pattern": "^cid-\\d{8}-\\d+$"
+      "deprecated": true,
+      "description": "Legacy field, replaced by trace_id + span_id in v6.0+"
+    },
+    "trace_id": {
+      "type": "string",
+      "pattern": "^trace-\\d{8}-[0-9a-f]{16}$"
+    },
+    "span_id": {
+      "type": "string",
+      "pattern": "^span-[0-9a-f]{8}$"
+    },
+    "parent_span_id": {
+      "type": "string",
+      "pattern": "^span-[0-9a-f]{8}$"
+    },
+    "agent": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "type": "string" },
+        "session_id": { "type": "string" }
+      }
+    },
+    "span_kind": {
+      "type": "string",
+      "enum": ["root", "internal", "client", "server"]
     },
     "skill": {
       "type": "string",
@@ -28,7 +53,7 @@
     },
     "status": {
       "type": "string",
-      "enum": ["started", "done", "failed", "artifact_written"]
+      "enum": ["started", "done", "failed", "artifact_written", "violation_detected"]
     },
     "step": {
       "type": "string",
@@ -39,6 +64,25 @@
     },
     "error": {
       "type": "string"
+    },
+    "cost": {
+      "type": "object",
+      "properties": {
+        "tokens_in": { "type": "integer", "minimum": 0 },
+        "tokens_out": { "type": "integer", "minimum": 0 },
+        "model": { "type": "string" },
+        "duration_ms": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "violation": {
+      "type": "object",
+      "properties": {
+        "rule_id": { "type": "string", "pattern": "^(POL|AP|R)-\\d+$" },
+        "severity": { "enum": ["fatal", "error", "warn", "hard_stop"] },
+        "evidence": { "type": "string" },
+        "blocked": { "type": "boolean" }
+      },
+      "required": ["rule_id", "severity"]
     },
     "artifact_meta": {
       "type": "object",

@@ -40,11 +40,11 @@ total_steps: 4
 
 ### 🔴 Critical 路径 (P2)
 
-1. **完整审计**: `ritsu_read_ctx` + 关联 `design-sheet` + `dev-report`。
+1. **完整审计**: 调用 `ritsu_join_trace` 获取 Span Tree 验证链路完整性，结合 `ritsu_read_ctx` + 关联 `design-sheet` + `dev-report`。
 2. **深度架构审计**: 
    - 提取专项优化与攻击向量规则。
    - 反模式拦截。
    - 架构一致性验证。
 3. **验收单 (Assurance Sheet) 产出**: 包含结论、风险矩阵、发布建议。
 4. **偏好深度学习**: 从验收结论中提取架构级、命名级偏好，并调用 `ritsu_write_preference` 更新自适应记忆。
-5. **归档**: `emit_event(done)`。
+5. **归档**: 调用 `ritsu_close_span` 结束追踪。

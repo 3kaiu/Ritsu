@@ -44,4 +44,5 @@ total_steps: 4
      - **Mobile**: 检查内存泄漏 (dispose)、列表虚拟化、离线降级方案。
    - **架构侵入度评估**: 识别受影响的上下游模块。
 4. **产出完整 `design-sheet`**: 包含全部架构维度（方案范围、核心契约、实施清单、验证计划）。
-5. **引导**: "架构设计已就绪。建议运行 `/r-dev` 开始实现。"
+5. **Multi-Agent 协调 (按需)**: 如果任务需拆分为多个独立工单（Multi-Agent），调用 `ritsu_write_artifact` 创建 `coordination-sheet`，并指导后续 Agent 执行对应的子 Span。
+6. **引导**: "架构设计已就绪。建议运行 `/r-dev` 开始实现。"

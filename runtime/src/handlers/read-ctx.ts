@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import {
   readRecentEntries,
@@ -314,10 +314,6 @@ function computeNextStepAndBreakpoint(
       next: "/r-review",
       summary: "代码实现已完成。建议进行验收审查 (/r-review)。",
     },
-    test: {
-      next: "/r-review",
-      summary: "测试验证已完成。建议进行最终验收 (/r-review)。",
-    },
     review: {
       next: null,
       summary: "上一次验收已完成。所有交付已闭环。",
@@ -355,7 +351,10 @@ export async function ritsu_read_ctx(
     return warnResult(data, "ctx file does not exist yet — no events recorded");
   }
 
-  const allEntries = readAllEntries(root);
+  const ctxStats = existsSync(ctxPath) ? statSync(ctxPath) : null;
+  const useTailRead = !isDetail && ctxStats && ctxStats.size > 256 * 1024;
+
+  const allEntries = useTailRead ? readRecentEntries(root, 50) : readAllEntries(root);
   const lastIncomplete = readLastIncomplete(root);
   const lastCompleted = readLastCompleted(root);
   const recentEntries = readRecentEntries(root, 10);

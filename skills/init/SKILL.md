@@ -23,6 +23,18 @@ total_steps: 4
 
 建立项目质量与协作基线：
 - **技术栈声明**：在 `AGENTS.md` 中显式标注检测到的技术栈组合。
+- **Ritsu 运行块**：在 `AGENTS.md` 中生成如下格式的运行时配置块：
+  ```html
+  <!-- Ritsu Configuration Block -->
+  ritsu-version: 5.2.0
+  domain: <detected_domain>
+  tech_fingerprints:
+    - <stack1>
+  rules_overrides:
+    disable: []
+    downgrade: []
+  <!-- End Ritsu Block -->
+  ```
 - **质量门禁注入**：根据技术栈自动填充对应的测试与 Lint 命令。
 - **人格锁定**：在 `AGENTS.md` 中预设该项目默认的“资深架构师”人格。
 

@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "ritsu",
-      "description": "Installs the full Ritsu toolkit. Registers the explicit delivery chain under the ritsu namespace: /r-init, /r-think, /r-dev, /r-test, /r-hunt, /r-review, plus extension skills.",
+      "description": "Installs the full Ritsu toolkit. Registers the explicit delivery chain under the ritsu namespace: /r-init, /r-think, /r-dev, /r-hunt, /r-review, plus extension skills.",
       "version": "5.2.0",
       "category": "development",
       "source": "./",
@@ -61,16 +61,6 @@
       "version": "5.2.0",
       "category": "development",
       "source": "./skills/hunt",
-      "homepage": "https://github.com/3kaiu/Ritsu",
-      "skills": ["./"],
-      "strict": false
-    },
-    {
-      "name": "ritsu-triage",
-      "description": "Inbox Zero machine for issue/PR triage. Dispatches tasks based on context. Does not diagnose technical issues or write business code.",
-      "version": "5.2.0",
-      "category": "development",
-      "source": "./skills/triage",
       "homepage": "https://github.com/3kaiu/Ritsu",
       "skills": ["./"],
       "strict": false

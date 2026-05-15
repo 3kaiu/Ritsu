@@ -24,6 +24,9 @@ global:
     pattern: "用户让修 Bug A，顺手重构了旁边的代码 B"
     enforcement: "只触碰范围内的必要代码"
     severity: FATAL
+    detector:
+      type: scope_diff
+      target: diff
   - id: AP-5
     name: Confidence without evidence
     pattern: "回复'这应该能工作'但不提供任何运行日志"
@@ -35,6 +38,15 @@ global:
     enforcement: "必须一次性完成具体实现或指明阻碍的具体原因"
     exemption: "Schema 0 (AGENTS.md) 的 '待补充' 占位符豁免此规则——init 阶段半成品允许占位，后续技能发现时应提示补充"
     severity: FATAL
+    detector:
+      type: regex
+      target: artifact_content
+      patterns:
+        - "\\bTODO\\b"
+        - "\\bTBD\\b"
+        - "待定|暂不处理|后续完善"
+      exemption:
+        - when: { skill: init, target_file: "AGENTS.md" }
   - id: AP-7
     name: Silent failures
     pattern: "命令执行报错了，假装没看见继续下一步"
@@ -50,6 +62,11 @@ global:
     pattern: "在提交的代码、PR 评论或 Issue 回复中加上 Co-authored-by: Claude/AI"
     enforcement: "你的产出归属于用户，绝不带有 AI 机器人的身份痕迹"
     severity: FATAL
+    detector:
+      type: regex
+      target: diff
+      patterns:
+        - "Co-authored-by:\\s*(Claude|GPT|AI|Anthropic)"
   - id: AP-10
     name: State skip (Critical tasks)
     pattern: "对于 Critical (P2) 级别任务，跳过 think 直接进入 dev。"
@@ -74,10 +91,18 @@ review:
     name: 版本号不同步
     pattern: "package.json 等多处版本号出现割裂"
     severity: HARD_STOP
+    detector:
+      type: cross_file
+      target: diff
   - id: R-3
     name: 明文凭证泄露
     pattern: "存在硬编码的 Token、Key、或敏感日志全量打印"
     severity: HARD_STOP
+    detector:
+      type: regex
+      target: diff
+      patterns:
+        - "(?i)(api_key|token|password)\\s*=\\s*['\"][^'\"]+['\"]"
   - id: R-4
     name: 破坏性契约变更
     pattern: "修改了现有 API/数据格式但不向后兼容，且无双写/迁移方案"

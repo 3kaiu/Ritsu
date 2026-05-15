@@ -18,7 +18,9 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "version:check": "node ./version-check.js"
+    "version:check": "node ./version-check.js",
+    "sync-version": "node ./scripts/sync-version.js",
+    "prepublishOnly": "npm run build"
   },
   "repository": {
     "type": "git",
