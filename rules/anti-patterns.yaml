@@ -14,6 +14,9 @@ global:
     pattern: "引用或调用函数前，未 grep 验证其真实存在"
     enforcement: "引用前必须 grep 验证，禁止制造 Unknown identifiers 导致编译失败"
     severity: FATAL
+    detector:
+      type: ast
+      check_identifiers: true
   - id: AP-3
     name: Serial interrogation
     pattern: "遇到不清晰的需求，分成多次对话追问"
@@ -79,13 +82,23 @@ global:
     enforcement: "必须先通过角色探针确认领域，再引用 domains/ 下对应的领域配置"
     severity: FATAL
 
-  # AP-12 已移除
+  - id: AP-12
+    name: Project preference violation
+    pattern: "违反了通过 ritsu mine 提炼并 promote 的项目特定偏好"
+    enforcement: "必须遵循 .ritsu/preferences.yaml 中定义的项目惯例"
+    severity: WARN
+    detector:
+      type: preference_lint
+      target: artifact_content
 
 review:
   - id: R-1
     name: 不明标识符
     pattern: "代码中引入了找不到定义的变量或组件"
     severity: HARD_STOP
+    detector:
+      type: ast
+      check_identifiers: true
     note: "ref AP-2：本条为 review 阶段的 HARD_STOP 特化，只提升严重度与拦截策略，不新增规则语义"
   - id: R-2
     name: 版本号不同步

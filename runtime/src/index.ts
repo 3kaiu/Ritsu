@@ -55,17 +55,24 @@ async function main() {
 
     const wrappedHandler = async (params: any, extra?: any) => {
       const result = await rawHandler(params);
-      if (process.env.RITSU_STRICT_OUTPUT === '1' && tool.outputSchema && result.content && result.content[0] && result.content[0].type === "text" && result.content[0].text) {
+      const isProd = process.env.NODE_ENV === 'production';
+      const strictMode = process.env.RITSU_STRICT_OUTPUT ?? (isProd ? 'warn' : '1');
+
+      if (strictMode !== '0' && tool.outputSchema && result.content && result.content[0] && result.content[0].type === "text" && result.content[0].text) {
         try {
           const parsedContent = JSON.parse(result.content[0].text);
           if (!parsedContent.error) {
             tool.outputSchema.parse(parsedContent);
           }
         } catch (e: any) {
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify({ error: "STRICT_OUTPUT_ERROR", message: e.message }) }],
-            isError: true,
-          };
+          if (strictMode === 'warn') {
+            console.warn(`[ritsu-mcp-server] ⚠️  STRICT_OUTPUT_WARN for tool '${tool.name}': ${e.message}`);
+          } else {
+            return {
+              content: [{ type: "text" as const, text: JSON.stringify({ error: "STRICT_OUTPUT_ERROR", tool: tool.name, message: e.message }) }],
+              isError: true,
+            };
+          }
         }
       }
       return result;

@@ -10,6 +10,7 @@ import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { lock, check as checkLock } from "proper-lockfile";
 import { getCtxPath, ensureCtxFile } from "./ctx-path.js";
 import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
+import { signEvent, getOrCreateKey } from "./policy/signature.js";
 
 let _lastLineCount = 0;
 let _lastCtxMonth = "";
@@ -71,6 +72,12 @@ export async function appendEvent(
     if (!event.correlation_id && !event.trace_id) {
       const { dateStr, nextSeq } = scanMaxSeq(ctxPath);
       event.correlation_id = formatCorrelationId(dateStr, nextSeq);
+    }
+
+    // Trace Signing (Batch 8.2)
+    const key = getOrCreateKey();
+    if (key) {
+      event.signature = signEvent(event, key);
     }
 
     const line = JSON.stringify(event);

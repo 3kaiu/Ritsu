@@ -60,9 +60,40 @@ export async function ritsu_join_trace(
     }
   }
 
+  // Coordination Analysis
+  let coordinationSheet = null;
+  const projectRoot = getProjectRoot();
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+
+  for (const art of artifacts) {
+    if (art.includes("coordination-sheet")) {
+      const fullPath = path.resolve(projectRoot, ".ritsu", art);
+      if (fs.existsSync(fullPath)) {
+        coordinationSheet = fs.readFileSync(fullPath, "utf-8");
+        break;
+      }
+    }
+  }
+
+  let coordinationIssues: string[] = [];
+  if (coordinationSheet) {
+    const spanMatches = coordinationSheet.matchAll(/\| (span-[0-9a-f]{8,}) \|/g);
+    for (const match of spanMatches) {
+      const declaredSpanId = match[1];
+      if (!spans[declaredSpanId] || spans[declaredSpanId].status !== "done") {
+        coordinationIssues.push(`Declared span ${declaredSpanId} is missing or not done.`);
+      }
+    }
+  }
+
   return textResult(JSON.stringify({
     trace_id: traceId,
     tree: rootSpans,
-    artifacts: Array.from(new Set(artifacts))
+    artifacts: Array.from(new Set(artifacts)),
+    coordination: coordinationSheet ? {
+      status: coordinationIssues.length === 0 ? "fully_coordinated" : "partial",
+      issues: coordinationIssues
+    } : undefined
   }, null, 2));
 }

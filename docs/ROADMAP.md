@@ -10,6 +10,11 @@
 > - [risk-register.md](./risk-register.md) — 18 项开放风险登记册
 > - [v2-stress-test.md](./v2-stress-test.md) — 本路线的压力测试与修正建议（执行前必读）
 > - [v2-execution-priority.md](./v2-execution-priority.md) — 基于已落地交叉重排的 7 个执行 batch
+>
+> **RFC 索引**：
+> - [RFC-001](./rfc/001-multi-agent-trace.md) — Multi-Agent Trace Protocol (v6.0)
+> - [RFC-002](./rfc/002-cross-agent-collaboration.md) — Cross-Agent Collaboration Protocol (v6.1)
+> - [RFC-003](./rfc/003-advanced-coordination.md) — Advanced Coordination & Observability (v6.2)
 
 ---
 
@@ -45,13 +50,15 @@
 
 ---
 
-## 2. 四阶段路线
+## 2. 阶段路线
 
 ```
-Phase A (M1–M3)  生成时刻闭环         → v5.4.0
-Phase B (M4–M6)  测试充分性引擎       → v5.5.0
-Phase C (M7–M8)  工业级 Review 缩放   → v5.6.0
-Phase D (M9–M12) 闭环固化 + 团队层    → v6.0.0
+Phase A  (M1–M3)    生成时刻闭环                → v5.4.0
+Phase B  (M4–M6)    测试充分性引擎              → v5.5.0
+Phase C  (M7–M8)    工业级 Review 缩放          → v5.6.0
+Phase D  (M9–M12)   闭环固化 + 团队层           → v6.0.0
+Phase E  (~8 weeks) 跨 Agent 协作协议（v6.1）   → v6.1.0   ← see RFC-002
+Phase F  (~10 weeks)高阶协调与可观测（v6.2）    → v6.2.0   ← see RFC-003
 ```
 
 ### 2.1 🟢 Phase A · 生成时刻闭环 (Generation Time Closed-Loop) — ✅ 已完成 (v5.4.0)
@@ -120,6 +127,70 @@ Phase D (M9–M12) 闭环固化 + 团队层    → v6.0.0
 | **D4** | CLI `ritsu doctor --health`：客观三指标——detector 命中率、miner promote 率、coverage 趋势（取代 v1 暗示的主观时间指标） | `runtime/src/cli.ts` |
 
 **DoD D**：5 人团队 30 天数据，hot-rules 单调收敛；偏好 promote ≥ 10；新模型版本上线后所有 detector 无需修改。
+
+---
+
+### 2.5 🟣 Phase E · 跨 Agent 协作协议 (Cross-Agent Collaboration Protocol) — 🚧 设计中
+
+**目标**：把 RFC-001 的"事件账本"升级为多 agent 协作的"调度基底"——跨进程可串联、事件可信、并行不冲突、任务可机器领取。
+**版本目标**：v6.1.0。
+**Scope**：中集（用户决策）—— 跨进程传播 + HMAC 签名 + file-lease + coordination-sheet 机器可读 + task claim 协议。**显式不做**网络协议、OAuth、agent 编排框架、能力协商、预算跟踪。
+**完整规范**：[RFC-002](./rfc/002-cross-agent-collaboration.md)
+
+| ID | 任务 | 关键文件 |
+| --- | --- | --- |
+| **E1** | `RITSU_TRACE_PARENT` 跨进程传播 + `ritsu_inject_trace_context` / `extract_trace_context` handler | `runtime/src/handlers/inject-trace.ts`（新）、`open-span.ts` 改造 |
+| **E2** | HMAC 签名 schema 升级 + `ritsu_verify_trace` handler + CLI `trace --verify` + `init-key` | `_shared/ctx-event-schema.json`、`runtime/src/handlers/verify-trace.ts`（新）、`runtime/src/cli.ts` |
+| **E3** | File lease 三件套：`ritsu_claim_file` / `release_file` / `list_leases` + write-artifact 自动 claim/release | `runtime/src/handlers/lease.ts`（新）、`write-artifact.ts` 改造 |
+| **E4** | `coordination-sheet` YAML frontmatter schema + `task_assignments[]` 校验 | `_shared/artifact-schema.yaml`、`runtime/src/handlers/write-artifact.ts` 改造 |
+| **E5** | 任务 claim 协议：`ritsu_claim_task` / `complete_task` / `list_pending_tasks` + CLI `task ...` 子命令 | `runtime/src/handlers/task.ts`（新）、`runtime/src/cli.ts` |
+| **E6** | 跨进程 demo + 集成测试（三个异构 shell 模拟三 agent 协作产出 PR） | `runtime/tests/integration/cross-agent.test.ts`（新） |
+
+**DoD E**：
+- 三个异构 shell 跨进程协作完成一个 PR，最终 `ritsu trace --verify` 全绿
+- 故意让两 agent claim 同一 task → 第二个失败 with `already_claimed`
+- 故意让两 agent claim 同一文件 → 第二个失败 with conflict
+- 故意篡改一行 ctx-*.jsonl → `--verify` 必报 invalid signature
+
+**估算**：~8 周（详见 RFC-002 §10）
+
+---
+
+### 2.6 🟪 Phase F · 高阶协调与可观测 (Advanced Coordination & Observability) — 🚧 设计中
+
+**目标**：在 v6.1 多 agent 可执行协作的基础上，让协作**可优化、可观测、可对外集成**——不增加新人学习曲线。
+**版本目标**：v6.2.0。
+**Scope**：6 项——Capability Registry + Budget Tracking + OTel TRACEPARENT 双向 + ed25519 升级（团队层非对称信任）+ Directory-level lease + `doctor --metrics`。**显式不做**实时调度器、付费/计费、OTel collector 自身、Prometheus 替代品、服务化注册中心。
+**完整规范**：[RFC-003](./rfc/003-advanced-coordination.md)
+
+| ID | 任务 | 关键文件 |
+| --- | --- | --- |
+| **F1** | Agent Capability Registry：`register_capability` / `query_capabilities` handler + CLI `agent ...` 子命令 | `runtime/src/handlers/capability.ts`（新）、`.ritsu/agents/<agent_id>.yaml` |
+| **F2** | Budget Tracking：coordination-sheet frontmatter 加 budget 字段 + `check_budget` / `reserve_budget` / `release_reservation` handler + close_span 自动结算 | `_shared/artifact-schema.yaml`、`runtime/src/handlers/budget.ts`（新） |
+| **F3** | OTel TRACEPARENT 双向 import：open_span fallback 解析 + external_trace_id 字段 | `runtime/src/handlers/open-span.ts`、`_shared/ctx-event-schema.json` |
+| **F4** | OTel export：CLI `trace --otel <id> --format <jaeger\|zipkin\|otlp-json>` | `runtime/src/cli.ts` |
+| **F5** | ed25519 升级：`init-key --algo` + signatures[] schema + `.ritsu/team-trust/` + `trust-policy.yaml` + `trust revoke` CLI | `runtime/src/handlers/sign.ts` 改造、`.ritsu/team-trust/`（新） |
+| **F6** | Directory-level lease：path 支持 `/` 结尾目录前缀 + 冲突规则实现 | `runtime/src/handlers/lease.ts` 改造 |
+| **F7** | Metrics CLI：`doctor --metrics --since N --format json` + 历史快照 `.ritsu/health-snapshots.jsonl` | `runtime/src/cli.ts` |
+
+**DoD F**：
+- 一个真实多 agent PR 走完整链路：capability query → task claim with budget → 跨进程协作 → ed25519 签名 → OTel 导出到 Jaeger 可视化
+- `ritsu doctor --metrics --since 30d` 在 Ritsu 自身仓库出 7 维统计无空指标
+- 模型升级（Opus 4.7 → 4.8）只需新增 `.ritsu/agents/claude-opus-4-8.yaml`，无代码改动
+
+**估算**：~10 周（详见 RFC-003 §10）
+
+---
+
+### 2.7 候选方向决策日志
+
+Phase E 启动期间收集的后续候选已沉淀，详见 [decision-log.md](./decision-log.md)。简要摘要：
+
+| 候选 | 决策 | 落地 |
+| --- | --- | --- |
+| RFC-002 路线压力测试 | 暂缓（设计成熟度足够） | — |
+| RFC-002 拆解整合 execution-priority | 接受 | Batch 8 见 [v2-execution-priority.md](./v2-execution-priority.md) |
+| RFC-003 v6.2 议题起草 | 接受 | [RFC-003](./rfc/003-advanced-coordination.md) + Batch 9 |
 
 ---
 

@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
+import { releaseAllForSpan } from "./file-lease.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +46,10 @@ export async function ritsu_close_span(
     event.cost = params.cost;
   }
 
+  if (params.step) {
+    event.step = String(params.step);
+  }
+
   if (params.metadata) {
     event.metadata = params.metadata;
   }
@@ -55,6 +60,9 @@ export async function ritsu_close_span(
   }
 
   await appendEvent(root, event);
+
+  // Batch 8.3: Release all file leases for this span
+  releaseAllForSpan(root, spanId);
 
   // Auto-sync on root span close
   // ritsu_close_span is called. If parent_span_id isn't provided or explicitly tracked, we trigger sync anyway since this is asynchronous and non-blocking.

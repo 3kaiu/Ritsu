@@ -5,7 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [5.6.0] - 2026-05-15 (Proposed)
+## [6.1.0] - 2026-05-15
+
+### Added
+- **Multi-Agent Coordination**: `coordination-sheet` and span inheritance via `RITSU_TRACE_PARENT`.
+- **HMAC Trace Signing**: Centralized event signing for distributed trust.
+- **File Lease Protocol**: `claim_file` and `release_file` for multi-agent concurrency control.
+- **Task Claiming**: `claim_task` and `list_pending_tasks` for coordinated execution.
+
+## [6.0.0] - 2026-05-15
+
+### Added
+- **AST Detector**: Structural analysis for identifier validation and structural integrity.
+- **Preference Detection**: Automated project convention enforcement via `preference_lint`.
+- **Triple Verification CI**: Protocol for Design ↔ Dev ↔ Assurance alignment.
+- **Health Dashboard**: 4 key metrics (interception rate, promotion rate, coverage, process completeness).
+- **Strict Mode**: `RITSU_STRICT_OUTPUT` default-on for dev environment.
+
+## [5.6.0] - 2026-05-15
 
 ### Added
 - MIT License.

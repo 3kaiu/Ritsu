@@ -306,5 +306,107 @@ tools:
       properties:
         trace_id: { type: string }
         tree: { type: array }
-        artifacts: { type: array }
+  
+  - name: ritsu_init_trust_key
+    description: "初始化项目级 HMAC 信任密钥（存储在 .ritsu/secret.key），开启 Trace 签名机制。"
+    call_template:
+      tool: ritsu_init_trust_key
+      params: {}
+    input:
+      force: { type: boolean, required: false, description: "If true, overwrites existing key." }
+    output_schema:
+      type: object
+      required: [ok, path]
+      properties:
+        ok: { type: boolean }
+        path: { type: string }
+
+  - name: ritsu_claim_file
+    description: "申请锁定一个文件（File Lease），防止多 Agent 冲突修改。"
+    call_template:
+      tool: ritsu_claim_file
+      params:
+        path: "{file_path}"
+        span_id: "{span_id}"
+    input:
+      path: { type: string, required: true }
+      span_id: { type: string, required: true }
+      ttl_ms: { type: integer, required: false, description: "Lease validity duration (default 5min)." }
+    output_schema:
+      type: object
+      required: [ok, path]
+      properties:
+        ok: { type: boolean }
+        path: { type: string }
+        message: { type: string }
+
+  - name: ritsu_release_file
+    description: "释放一个文件的锁定。"
+    call_template:
+      tool: ritsu_release_file
+      params:
+        path: "{file_path}"
+        span_id: "{span_id}"
+    input:
+      path: { type: string, required: true }
+      span_id: { type: string, required: true }
+    output_schema:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+
+  - name: ritsu_list_leases
+    description: "查看当前所有活跃的文件锁定状态。"
+    call_template:
+      tool: ritsu_list_leases
+    input: {}
+    output_schema:
+      type: object
+      required: [leases]
+
+  - name: ritsu_claim_task
+    description: "领取一个在协调单 (coordination-sheet) 中声明的子任务。"
+    call_template:
+      tool: ritsu_claim_task
+      params:
+        span_id: "{span_id}"
+        agent_id: "{agent_id}"
+    input:
+      span_id: { type: string, required: true }
+      agent_id: { type: string, required: true }
+    output_schema:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+
+  - name: ritsu_list_pending_tasks
+    description: "从所有协调单中提取当前待领取的任务列表。"
+    call_template:
+      tool: ritsu_list_pending_tasks
+    input: {}
+    output_schema:
+      type: object
+      required: [tasks]
+      properties:
+        tasks: { type: array }
+
+  - name: ritsu_verify_trace
+    description: "校验 Trace 链路中所有事件的 HMAC 签名，确保数据完整性与来源可信。"
+    call_template:
+      tool: ritsu_verify_trace
+      params:
+        trace_id: "{trace_id}"
+    input:
+      trace_id: { type: string, required: true }
+    output_schema:
+      type: object
+      required: [trace_id, valid, violation_count]
+      properties:
+        trace_id: { type: string }
+        valid: { type: boolean }
+        violation_count: { type: integer }
+        details: { type: array }
 

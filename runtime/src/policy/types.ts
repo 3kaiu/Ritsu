@@ -6,6 +6,7 @@ export interface PolicyViolation {
   message: string;
   evidence?: string;
   suggestion?: string;
+  confidence?: number; // 0-1
 }
 
 export interface PolicyRule {
@@ -16,7 +17,7 @@ export interface PolicyRule {
   exemption?: ExemptionConfig[];
 }
 
-export type DetectorType = "regex" | "cross_file" | "scope_diff" | "ast" | "contract_coverage";
+export type DetectorType = "regex" | "cross_file" | "scope_diff" | "ast" | "contract_coverage" | "preference_lint";
 
 export interface DetectorConfig {
   type: DetectorType;

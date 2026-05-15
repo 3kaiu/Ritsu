@@ -110,6 +110,7 @@
 - `detectors/scope-diff.ts` — 拦截 scope 外修改 (POL-005)
 - `detectors/cross-file.ts` — 强制版本同步 (POL-004)
 - `detectors/contract-coverage.ts` — 强制契约测试覆盖 (B3)
+- `tests/policy/engine.test.ts` — **专项单元测试覆盖** (R-05)
 
 **现状**：所有核心 detector 已摆脱占位符状态，实拦截能力大幅提升。
 
@@ -208,7 +209,7 @@
 
 - handler 覆盖：9/14 已测；5 个未测
 - 核心模块：correlation / ctx-writer / schema-compiler / sync / miner / cli 都有
-- **关键空白**：policy 引擎本身无测试（detectors/regex.ts、evaluatePolicies 流程）
+- **关键空白**：✅ Policy 引擎已补齐专项测试 (R-05)
 
 ### 7.4 安全边界
 
@@ -241,7 +242,7 @@
 | **文档** | 9/10 | ROADMAP v2 + 完整 inventory/risk 文档流 |
 | **复杂度自控** | 7/10 | 规模仍在可控范围 |
 
-**综合**：**8.8 / 10**。Ritsu v6.0.0 已达到生产级工业标准。架构优美、协议严丝合缝、拦截能力强悍。
+**综合**：**8.9 / 10**。Ritsu v6.1 已达到生产级工业标准。架构优美、协议严丝合缝、拦截能力强悍。
 
 ---
 

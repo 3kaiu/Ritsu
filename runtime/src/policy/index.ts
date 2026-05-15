@@ -6,6 +6,7 @@ import { CrossFileDetector } from "./detectors/cross-file.js";
 import { ScopeDiffDetector } from "./detectors/scope-diff.js";
 import { ContractCoverageDetector } from "./detectors/contract-coverage.js";
 import { ASTDetector } from "./detectors/ast.js";
+import { PreferenceLintDetector } from "./detectors/preference-lint.js";
 
 const detectors: Record<string, DetectorPlugin> = {
   regex: new RegexDetector(),
@@ -13,6 +14,7 @@ const detectors: Record<string, DetectorPlugin> = {
   scope_diff: new ScopeDiffDetector(),
   contract_coverage: new ContractCoverageDetector(),
   ast: new ASTDetector(),
+  preference_lint: new PreferenceLintDetector(),
 };
 
 export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; violations: PolicyViolation[] } {

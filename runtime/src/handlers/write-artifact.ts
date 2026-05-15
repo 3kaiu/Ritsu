@@ -7,6 +7,7 @@ import {
   writeFileSync,
   renameSync,
   rmSync,
+  appendFileSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -24,6 +25,23 @@ import {
   jsonErrorResult,
 } from "./_utils.js";
 import { evaluatePolicies } from "../policy/index.js";
+import { getCtxPath } from "../ctx-path.js";
+
+async function emitViolation(ruleId: string, severity: string, message: string, evidence?: string) {
+  const root = getProjectRoot();
+  const ctxPath = getCtxPath(root);
+  const event = {
+    ts: new Date().toISOString().replace(/[-:]/g, "").slice(0, 8) + "-" + new Date().toISOString().slice(11, 19).replace(/:/g, ""),
+    status: "violation_detected",
+    violation: {
+      rule_id: ruleId,
+      severity,
+      evidence: evidence || message,
+      blocked: true
+    }
+  };
+  appendFileSync(ctxPath, JSON.stringify(event) + "\n");
+}
 
 const RITSU_DIR = ".ritsu";
 const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
@@ -249,6 +267,34 @@ export function collectArtifactContentIssuesDetailed(
     }
   }
 
+  // Deep Content Validation (Batch 1.2 / 1.3)
+  if (type === "design-sheet") {
+    const executionBody = getSectionBody(content, "6. 实施清单 (Execution)");
+    if (!executionBody || !executionBody.includes("verification_plan") || !executionBody.includes("contracts:")) {
+      issues.push({
+        code: "artifact_schema_missing_field_label",
+        artifact_type: type,
+        section_title: "6. 实施清单 (Execution)",
+        field_label: "contracts",
+        path: "artifact.sections.6.fields.contracts",
+        message: "design-sheet P2 must contain structured 'contracts' in verification_plan",
+      });
+    }
+  }
+
+  if (type === "dev-report") {
+    if (!content.includes("Quality Gates") && !content.includes("quality_gates_result")) {
+      issues.push({
+        code: "artifact_schema_missing_field_label",
+        artifact_type: type,
+        section_title: "交付摘要",
+        field_label: "quality_gates_result",
+        path: "artifact.sections.交付摘要.fields.quality_gates_result",
+        message: "dev-report must contain 'Quality Gates' result (lint/test status)",
+      });
+    }
+  }
+
   return issues;
 }
 
@@ -351,6 +397,11 @@ export async function ritsu_write_artifact(
   });
 
   if (!policyResult.passed) {
+    const topViolation = policyResult.violations.find((v) => v.severity === "fatal" || v.severity === "hard_stop") || policyResult.violations[0];
+    
+    // C4a: Emit violation event
+    await emitViolation(topViolation.rule_id, topViolation.severity, topViolation.message, topViolation.evidence);
+
     const violations = policyResult.violations
       .filter((v) => v.severity === "fatal" || v.severity === "hard_stop")
       .map((v) => ({
@@ -431,6 +482,9 @@ export async function ritsu_write_artifact(
 
   const validationIssues = collectArtifactContentIssuesDetailed(type, content);
   if (validationIssues.length > 0) {
+    // Also emit violation for schema failure
+    await emitViolation("AP-Schema", "error", validationIssues[0].message);
+
     const violations = buildArtifactValidationViolations(validationIssues);
     return jsonErrorResult(
       buildArtifactErrorPayload(

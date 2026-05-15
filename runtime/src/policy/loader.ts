@@ -2,8 +2,10 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import yaml from "js-yaml";
 import type { PolicyRule, Severity } from "./types.js";
-import { getProjectRoot } from "../handlers/_utils.js"; // wait, cannot import from handlers like this directly, need to check if _utils.ts exists there
-// Actually, I can use process.env.RITSU_PROJECT_ROOT ?? process.cwd()
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 function getProjectRootLocal(): string {
   return process.env.RITSU_PROJECT_ROOT ?? process.cwd();
@@ -18,7 +20,7 @@ export function loadPolicies(): PolicyRule[] {
   const root = getProjectRootLocal();
   
   // 1. Load baseline anti-patterns
-  const apPath = resolve(__dirname, "../../../../rules/anti-patterns.yaml");
+  const apPath = resolve(__dirname, "../../../rules/anti-patterns.yaml");
   let rules: PolicyRule[] = [];
   if (existsSync(apPath)) {
     const raw = readFileSync(apPath, "utf-8");

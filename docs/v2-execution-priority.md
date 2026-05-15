@@ -156,6 +156,57 @@ v2 ROADMAP 假设所有任务都从零开始——但盘点发现：
 
 ---
 
+### Batch 8 · 跨 Agent 协作协议（M13-M14, 2 个月）
+
+**目标**：实现 [RFC-002](./rfc/002-cross-agent-collaboration.md) 中集——跨进程 + 签名 + lease + task claim。
+**对应**：[ROADMAP](./ROADMAP.md) Phase E。
+
+| 顺序 | 任务 | 来源 RFC-002 | 工作量 | 收益 |
+|---|---|---|---|---|
+| 8.1 | `RITSU_TRACE_PARENT` 协议 + `inject_trace_context` / `extract_trace_context` handler | E1 | 1 周 | 跨进程 trace 串联可用 |
+| 8.2 | HMAC 签名 schema + `verify_trace` handler + CLI `trace --verify` + `init-key` | E2 | 2 周 | 事件可信、伪造可检测 |
+| 8.3 | File lease 三件套（`claim_file` / `release_file` / `list_leases`）+ write-artifact 集成 + close_span auto-release | E3 | 1.5 周 | 并行 agent 不冲突 |
+| 8.4 | coordination-sheet YAML frontmatter 升级 + artifact-schema.yaml 强约束 + write-artifact 校验 | E4 | 1 周 | 协调单机器可读 |
+| 8.5 | 任务 claim 协议（`claim_task` / `complete_task` / `list_pending_tasks`）+ CLI `task ...` 子命令 | E5 | 1.5 周 | 任务可机器领取 |
+| 8.6 | 跨进程 demo + 集成测试（三个异构 shell 模拟三 agent 协作产 PR） | E6 | 1 周 | DoD 验证闭环 |
+
+**Batch 8 DoD**：
+- 三个异构 shell 跨进程协作完成一个真实 PR
+- `ritsu trace --verify <trace_id>` 全绿
+- 并行 claim 同一 task / file 必返 conflict
+- 故意篡改 ctx-*.jsonl 一行能被 `--verify` 抓出
+- coordination-sheet 含 frontmatter 时 task claim API 可用；不含时降级为纯人读且 API 明确报错
+
+→ **E 阶段完成，发布 v6.1.0**。
+
+---
+
+### Batch 9 · 高阶协调与可观测（M15-M17, 2.5 个月）
+
+**目标**：实现 [RFC-003](./rfc/003-advanced-coordination.md) 6 项——capability + budget + OTel + ed25519 + dir-lease + metrics。
+**对应**：[ROADMAP](./ROADMAP.md) Phase F。
+
+| 顺序 | 任务 | 来源 RFC-003 | 工作量 | 收益 |
+|---|---|---|---|---|
+| 9.1 | Agent Capability Registry：`.ritsu/agents/<id>.yaml` schema + `register_capability` / `query_capabilities` + CLI `agent ...` | F1 | 1.5 周 | planner 可查询 agent 能力 |
+| 9.2 | Budget Tracking：coordination-sheet frontmatter 加 budget 字段 + `check_budget` / `reserve_budget` / `release_reservation` + close_span 自动结算 + `budget_warn` / `budget_exhausted` 事件 | F2 | 2 周 | task 级 token/cost 预算 |
+| 9.3 | OTel TRACEPARENT 双向 import + open_span fallback 解析 + `external_trace_id` 字段 | F3 | 1 周 | 既有 OTel 上下文可串入 |
+| 9.4 | OTel export：CLI `trace --otel <id> --format <jaeger\|zipkin\|otlp-json>` | F4 | 1.5 周 | Ritsu trace 可视化进 Jaeger |
+| 9.5 | ed25519 升级：`init-key --algo` + signatures[] schema + `.ritsu/team-trust/` + `trust-policy.yaml` + `trust revoke` CLI | F5 | 2 周 | 团队层非对称信任 |
+| 9.6 | Directory-level lease：path 支持 `/` 结尾目录前缀 + 冲突规则实现 + 测试 | F6 | 1 周 | 大范围 claim 可用 |
+| 9.7 | Metrics CLI：`doctor --metrics --since N --format json` + `.ritsu/health-snapshots.jsonl` 历史快照 | F7 | 1.5 周 | 全维度可观测 |
+| 9.8 | 集成测试 + 多 OTel 后端 demo + 多 agent 真实 PR 闭环 | F8 | 1 周 | DoD 验证 |
+
+**Batch 9 DoD**：
+- 一个真实多 agent PR 走完整链路：capability query → task claim with budget → 跨进程协作（v6.1）→ ed25519 签名 → OTel 导出到 Jaeger 可视化
+- `ritsu doctor --metrics --since 30d` 在 Ritsu 自身仓库出 7 维统计无空指标
+- 模型升级（Opus 4.7 → 4.8）只需新增一份 `.ritsu/agents/claude-opus-4-8.yaml`，无代码改动
+- `ritsu trust revoke` 后旧事件 verify 必报 invalid
+
+→ **F 阶段完成，发布 v6.2.0**。
+
+---
+
 ## 3. 时间线对比
 
 | 维度 | 原 v2 | 重排后 |

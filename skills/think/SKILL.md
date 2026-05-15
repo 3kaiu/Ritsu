@@ -43,6 +43,10 @@ total_steps: 4
      - **Backend**: 评估数据库事务、N+1 查询、接口幂等性、SQL 注入风险。
      - **Mobile**: 检查内存泄漏 (dispose)、列表虚拟化、离线降级方案。
    - **架构侵入度评估**: 识别受影响的上下游模块。
-4. **产出完整 `design-sheet`**: 包含全部架构维度（方案范围、核心契约、实施清单、验证计划）。
-5. **Multi-Agent 协调 (按需)**: 如果任务需拆分为多个独立工单（Multi-Agent），调用 `ritsu_write_artifact` 创建 `coordination-sheet`，并指导后续 Agent 执行对应的子 Span。
-6. **引导**: "架构设计已就绪。建议运行 `/r-dev` 开始实现。"
+4. **产出设计产物**: 
+   - 如果是单人任务: 产出完整 `design-sheet`。
+   - 如果是复杂任务 (Multi-Agent): 
+     - 调用 `ritsu_open_span` 创建根 Span。
+     - 调用 `ritsu_write_artifact` 创建 `coordination-sheet`。
+     - 拆分任务并指导后续 Agent 执行对应的子 Span。
+5. **引导**: "架构设计已就绪。建议运行 `/r-dev` 开始实现。"

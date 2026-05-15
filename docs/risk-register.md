@@ -15,9 +15,7 @@
 
 | ID | 风险描述 | 类型 | 严重度 | 状态 | 缓解措施 | 关联路线 |
 |---|---|---|---|---|---|---|
-| **R-04** | `output_schema` 仅在 `RITSU_STRICT_OUTPUT=1` 环境变量开启时校验，默认关闭；所有 14 个 tool 的 output 声明形同虚设 | 协议-运行时不一致 | High | 开放 | 推荐：dev 环境默认开启；prod 模式 warn 不 throw | (原 v1 E3.S3.1) |
 | **R-05** | policy 引擎自身无单元测试；regex.ts / evaluatePolicies / loader 的合并逻辑全部未覆盖 | 测试空白 | High | 开放 | 补 `runtime/tests/policy/*.test.ts`，至少覆盖 regex / loader merge | （独立项） |
-| **R-06** | `policy/loader.ts` 无缓存——每次评估重新读取 anti-patterns.yaml + AGENTS.md | 性能 | Medium | 已缓解 | 加了 mtime-based 缓存 | Phase A |
 | **R-07** | `ctx-reader.ts` 静默 skip 坏 JSON 行；可能掩盖数据丢失或并发写入撕裂 | 静默失败 | Medium | 开放 | 至少 console.warn 记录跳过行数；可加 `--strict` CLI 选项 | （独立项） |
 | **R-08** | `correlation.ts` 无 collision 检测；依赖单调 seq + lock；如果 lock 失败或时钟回拨，可能产生重复 cid | 数据完整性 | Medium | 监测 | 加 cid 重复检测警告；时钟回拨场景写入测试 | （独立项） |
 | **R-09** | `miner.ts` 对每个文件调用 `git log -p --since=<ts>`——大仓库（>1k 文件改动）性能可能不可接受 | 性能-规模 | Medium | 监测 | 改为一次 `git log --since=<ts>` 拿全量再按文件分组 | （独立项） |
@@ -31,9 +29,9 @@
 ## 2. 风险类型分布
 
 ```
-Critical:  2  ████
-High:      7  ██████████████
-Medium:    7  ██████████████
+Critical:  1  ██
+High:      5  ██████████
+Medium:    6  ████████████
 Low:       2  ████
 ```
 
@@ -53,6 +51,8 @@ Low:       2  ████
 | **R-12** | preferences schema 无人消费 | Phase A 已实现 preference_lint detector |
 | **R-13** | `runtime/dist/` 追踪问题 | 已通过 `git rm --cached` 并更新 .gitignore 解决 |
 | **R-14** | 全局版本漂移 | 已通过 `sync-version.js` 实现全局 v5.6.0 统一 |
+| **R-04** | `output_schema` 强制化 | 已通过 `RITSU_STRICT_OUTPUT` 默认开启机制闭环 |
+| **R-06** | Policy 加载性能 | 已通过 mtime-based 缓存机制闭环 |
 
 ---
 

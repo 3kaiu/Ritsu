@@ -67,6 +67,7 @@ schemas:
                   id: string
                   description: string
                   test_file_hint: string
+                  assertion_marker: string  # Optional: keyword to find in test file
 
   design_brief:
     id: 13
@@ -94,6 +95,13 @@ schemas:
             label: "合并结论"
           - name: deployability
             label: "上线结论"
+          - name: contract_verdict
+            label: "契约对账 (Contract Verdicts)"
+            type: array
+            items:
+              contract_id: string
+              status: enum [passed, failed, partial]
+              evidence: string
       - title: "2. 风险与阻断 (Risks)"
       - title: "3. 发布与协作 (Advice)"
         fields:
@@ -120,6 +128,9 @@ schemas:
             label: "实施结果"
           - name: verification_result
             label: "验证结果"
+          - name: quality_gates_result
+            label: "质量门禁对账 (Quality Gates)"
+            rule: "必须包含 lint/test 的通过状态及覆盖率数据"
       - title: "变更明细"
 
   agents_md:

@@ -77,19 +77,23 @@
     "violation": {
       "type": "object",
       "properties": {
-        "rule_id": { "type": "string", "pattern": "^(POL|AP|R)-\\d+$" },
+        "rule_id": { "type": "string", "pattern": "^[A-Z0-9-]+$" },
         "severity": { "enum": ["fatal", "error", "warn", "hard_stop"] },
         "evidence": { "type": "string" },
         "blocked": { "type": "boolean" }
       },
       "required": ["rule_id", "severity"]
     },
+    "signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "artifact_meta": {
       "type": "object",
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["design-sheet", "design-brief", "dev-report", "assurance-sheet", "diagnosis", "ctx"]
+          "enum": ["design-sheet", "design-brief", "dev-report", "assurance-sheet", "diagnosis", "ctx", "coordination-sheet"]
         },
         "size_bytes": {
           "type": "integer"

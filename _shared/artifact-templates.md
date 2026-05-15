@@ -128,6 +128,32 @@
 - 关联设计单: {design-sheet 路径}
 
 ---
+## Coordination Sheet (协调单)
+
+适用产物类型：`coordination-sheet`
+适用场景：Multi-Agent 协作、任务拆分、复杂跨模块并行。
+
+```markdown
+# Coordination Sheet (协调单)
+
+## 1. Intent & Trace
+- Original Goal: {原始总任务描述}
+- Trace ID: {trace-XXXX-XXXX} (根 Trace)
+
+## 2. Child Spans (子工单声明)
+| Span ID | Agent Role | Sub-task Description | Priority |
+| --- | --- | --- | --- |
+| {span-XXXX} | {frontend|backend|...} | {子任务内容} | {P0|P1|P2} |
+
+## 3. Handoff Matrix (交接矩阵)
+- Dependencies: {子任务间的依赖关系，如 Span A 必须在 Span B 之前完成}
+- Shared Context: {需要共享的变量、配置、或临时文件路径}
+
+## 4. Constraint Propagation (约束透传)
+- Key Preferences: {从总任务透传给子任务的项目偏好}
+- Design Boundaries: {总任务划定的技术边界}
+
+---
 ## 🚀 下一步建议
-{建议运行 /r-review 进行最终验收}
+{建议分发给对应的 Agent 执行，并在子任务结束后通过 /r-join-trace 汇总}
 ```

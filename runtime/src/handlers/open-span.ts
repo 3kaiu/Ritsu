@@ -21,8 +21,18 @@ export async function ritsu_open_span(
   
   const skill = String(params.skill ?? "unknown");
   const domain = String(params.domain ?? "unknown");
-  const parentSpanId = params.parent_span_id ? String(params.parent_span_id) : undefined;
-  const traceId = params.trace_id ? String(params.trace_id) : generateTraceId();
+
+  // Multi-Agent Trace Propagation (RFC-001)
+  let traceId = params.trace_id ? String(params.trace_id) : undefined;
+  let parentSpanId = params.parent_span_id ? String(params.parent_span_id) : undefined;
+
+  if (process.env.RITSU_TRACE_PARENT && !traceId) {
+    const [t, p] = process.env.RITSU_TRACE_PARENT.split(":");
+    traceId = t;
+    if (!parentSpanId) parentSpanId = p;
+  }
+
+  if (!traceId) traceId = generateTraceId();
   const spanId = generateSpanId();
   
   const event: Record<string, unknown> = {
@@ -45,6 +55,10 @@ export async function ritsu_open_span(
 
   if (params.name) {
     event.name = String(params.name);
+  }
+
+  if (params.step) {
+    event.step = String(params.step);
   }
 
   if (params.metadata) {

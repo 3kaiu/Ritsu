@@ -28,6 +28,12 @@ type CtxEvent = {
     model?: string;
     duration_ms?: number;
   };
+  violation?: {
+    rule_id: string;
+    severity: string;
+    evidence?: string;
+    blocked?: boolean;
+  };
 };
 
 const COLORS = {
@@ -166,36 +172,32 @@ function joinTrace(root: string, traceId: string) {
   return { events: traceEvents };
 }
 
-async function runHotRules() {
+async function runHotRules(since: string | null = null) {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, ".ritsu");
   if (!existsSync(ritsuDir)) return;
 
-  const files = readdirSync(ritsuDir).filter(f => f.startsWith("ctx-") && f.endsWith(".jsonl"));
+  const files = readdirSync(ritsuDir).filter(f => f.startsWith("ctx-") && f.endsWith(".jsonl")).sort();
+  
   const counts: Record<string, number> = {};
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - 30);
+  const limitDate = since ? since.replace(/-/g, "") : new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, "");
 
   for (const f of files) {
     const events = parseJsonl(resolve(ritsuDir, f));
     for (const e of events) {
-      if (e.status === "violation_detected") {
-        const eventDate = new Date(e.ts);
-        if (eventDate >= cutoffDate) {
-          // rule_id might be in metadata or a top-level field if schema was updated
-          // According to ctx-event-schema.json, it's in violation object
-          const rid = (e as any).violation?.rule_id || "unknown";
-          counts[rid] = (counts[rid] || 0) + 1;
+      if (e.status === "violation_detected" && e.violation?.rule_id) {
+        if (e.ts.slice(0, 10).replace(/-/g, "") >= limitDate) {
+          counts[e.violation.rule_id] = (counts[e.violation.rule_id] || 0) + 1;
         }
       }
     }
   }
 
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  console.log(color("\nTop Policy Violations (Last 30 Days):", "magenta"));
   if (sorted.length === 0) {
-    console.log(color("  No violations recorded.", "dim"));
+    console.log(color("No violations detected in the specified period.", "gray"));
   } else {
+    console.log(color(`Top Hot Rules (Since ${limitDate}):`, "cyan"));
     for (const [rid, count] of sorted.slice(0, 10)) {
       console.log(`  - ${color(rid, "yellow")}: ${count} times`);
     }
@@ -278,7 +280,11 @@ async function runDoctor(args: string[] = []) {
   console.log(color(`Project Root: ${root}`, "dim"));
 
   if (args.includes("--hot-rules")) {
-    await runHotRules();
+    let since = null;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === "--since") since = args[++i];
+    }
+    await runHotRules(since);
     return;
   }
 
