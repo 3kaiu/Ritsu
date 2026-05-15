@@ -51,6 +51,6 @@ total_steps: 5
 2. **技术栈感知**: 识别项目指纹，自动切换资深专家人格。
 3. **偏好加载**: 读取 `.ritsu/preferences.yaml`。
 4. **高保真实现**: 严格服从 `design-sheet`，代码风格与领域 YAML 100% 对齐。
-5. **质量门禁**: `ritsu_run_quality_gates` + `ritsu_contract_validate`。
+5. **质量门禁**: `ritsu_run_quality_gates`。
 6. **产物交付**: 产出完整 `dev-report` + `emit_event(done)` + 交付摘要。
 7. **强制引导**: "代码已实现。建议运行 `/r-review` 进行最终验收。"

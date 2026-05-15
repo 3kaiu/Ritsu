@@ -16,9 +16,7 @@
 | 架构迁移 / 底层组件变更 | → `think` | Critical |
 | 报错 / 排障 / 为什么不工作 | → `hunt` | Standard |
 | 解释代码 / 这是什么 / 分析 | → `freestyle` | — |
-| 快速问答 / 概念解释 | → `freestyle` | — |
-| Code Review / 审查代码 | → `review` | Standard |
-| 处理 Issue / PR | → `triage` | — |
+| 快速问答 | → `freestyle` | — |
 
 **注意**: 自动路由只是建议，AI 应在回复开头简短说明路由决策。
 

@@ -16,7 +16,7 @@
     },
     "skill": {
       "type": "string",
-      "enum": ["init", "think", "dev", "test", "hunt", "review"]
+      "enum": ["init", "think", "dev", "hunt", "review"]
     },
     "domain": {
       "type": "string",

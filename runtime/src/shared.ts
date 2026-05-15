@@ -45,9 +45,7 @@ export const ARTIFACT_REGISTRY: ArtifactDefinition[] = [
   { type: "design-brief", prefix: "design-brief-", layer: "primary" },
   { type: "dev-report", prefix: "dev-report-", layer: "primary" },
   { type: "assurance-sheet", prefix: "assurance-sheet-", layer: "primary" },
-  { type: "handoff", prefix: "handoff-", layer: "evidence" },
   { type: "diagnosis", prefix: "diagnosis-", layer: "evidence" },
-  { type: "optimize-report", prefix: "optimize-report-", layer: "evidence" },
   { type: "ctx", prefix: "ctx-", layer: "system" },
 ];
 

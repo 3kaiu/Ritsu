@@ -33,7 +33,8 @@ total_steps: 4
 
 1. **证据链对账**: 关联最新的 `design-brief` 或 `dev-report`。
 2. **质量审计**: 检查代码一致性，对照 `anti-patterns.yaml` 进行红线扫描。
-3. **验收结论**: 给出 PASS/FAIL 结论。仅在失败时建议产出轻量反馈。
+3. **偏好学习 (Preference Learning)**: 若存在明显的样式或库选用倾向，调用 `ritsu_write_preference` 记录。
+4. **验收结论**: 给出 PASS/FAIL 结论。
 
 ---
 
@@ -45,5 +46,5 @@ total_steps: 4
    - 反模式拦截。
    - 架构一致性验证。
 3. **验收单 (Assurance Sheet) 产出**: 包含结论、风险矩阵、发布建议。
-4. **偏好学习 (Preference Learning)**: 从验收结论和反馈中提取项目级偏好（如：命名风格、库选用倾向），并调用 `ritsu_write_preference` 更新自适应记忆。
+4. **偏好深度学习**: 从验收结论中提取架构级、命名级偏好，并调用 `ritsu_write_preference` 更新自适应记忆。
 5. **归档**: `emit_event(done)`。

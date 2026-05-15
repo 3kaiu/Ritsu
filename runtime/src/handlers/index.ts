@@ -6,14 +6,6 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ritsu_emit_event } from "./emit-event.js";
 import { ritsu_read_ctx } from "./read-ctx.js";
 import { ritsu_read_agents } from "./read-agents.js";
-import { ritsu_contract_validate } from "./contract-validate.js";
-import { ritsu_build_kg } from "./kg-build.js";
-import { ritsu_query_kg } from "./kg-query.js";
-import { ritsu_ts_check } from "./ts-check.js";
-import {
-  ritsu_semantic_search,
-  ritsu_semantic_index_build,
-} from "./semantic-search.js";
 import { ritsu_write_artifact } from "./write-artifact.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
@@ -34,14 +26,6 @@ export const registerHandlers: Record<
   ritsu_emit_event,
   ritsu_read_ctx,
   ritsu_read_agents,
-  ritsu_contract_validate,
-  ritsu_kg_query: async (params) => {
-    if (params.action === "update") return ritsu_build_kg(params);
-    return ritsu_query_kg(params);
-  },
-  ritsu_ts_check,
-  ritsu_semantic_search,
-  ritsu_semantic_index_build,
   ritsu_write_artifact,
   ritsu_list_artifacts,
   ritsu_exec,

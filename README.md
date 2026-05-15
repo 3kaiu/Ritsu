@@ -30,9 +30,8 @@ npx skills add 3kaiu/Ritsu -a claude-code -g -y
 | 指令 | 适用场景 | 核心产物 |
 | --- | --- | --- |
 | `/r-think` | 需求审核、技术方案设计、技术契约确认 | **`design-sheet.md`** |
-| `/r-dev` | 代码实现、Bug 修复、快速路径执行 | **`dev-report.md`** |
+| `/r-dev` | 代码实现、Bug 修复、质量门禁校验 | **`dev-report.md`** |
 | `/r-review` | 最终交付验收、发布风险评估、反馈回流 | **`assurance-sheet.md`** |
-| `/r-test` | 质量门禁校验、补齐单元测试 | 验证摘要 |
 | `/r-hunt` | 根因诊断、技术取证、修复建议 | 诊断报告 |
 
 ---
