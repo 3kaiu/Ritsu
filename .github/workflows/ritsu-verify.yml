@@ -1,0 +1,35 @@
+name: Ritsu Triple Verification
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: runtime/package-lock.json
+
+      - name: Install dependencies
+        run: cd runtime && npm install
+
+      - name: Build Ritsu Runtime
+        run: cd runtime && npm run build
+
+      - name: Run Ritsu Doctor
+        run: cd runtime && node dist/cli.js doctor
+
+      - name: Run Triple Verification
+        run: cd runtime && node dist/cli.js trace --check-triple

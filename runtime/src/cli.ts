@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { syncPush, syncPull } from "./sync.js";
 import { minePreferences, promotePreference } from "./miner.js";
+import { legacyCidToTraceId } from "./correlation.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -52,8 +53,10 @@ export function usage(): string {
     "ritsu cat --file <path>    # 直接指定 ctx jsonl 文件路径",
     "ritsu trace <id>           # 展示 Trace 链路和 Span 树（自动兼容 legacy CID）",
     "ritsu trace --open         # 展示当前所有未关闭的 Trace",
+    "ritsu trace --check-triple  # 验证最新 Trace 的三方一致性 (Design ↔ Dev ↔ Assurance)",
     "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
     "ritsu doctor --hot-rules   # 离线统计 30 天内 rule_id 触发热度",
+    "ritsu doctor --health      # 输出核心健康度 4 指标与趋势分析",
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
     "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",
     "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
@@ -155,6 +158,14 @@ export function formatEvent(e: CtxEvent): string {
   return `${ts} ${cid}  ${skill} ${domain}  ${status}${details ? ` ${details}` : ""}`;
 }
 
+function joinTrace(root: string, traceId: string) {
+  const ctxFile = findLatestCtxFile(root);
+  if (!ctxFile) return { events: [] };
+  const events = parseJsonl(ctxFile);
+  const traceEvents = events.filter(e => e.trace_id === traceId || legacyCidToTraceId(e.correlation_id) === traceId);
+  return { events: traceEvents };
+}
+
 async function runHotRules() {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, ".ritsu");
@@ -191,6 +202,76 @@ async function runHotRules() {
   }
 }
 
+async function runDoctorHealth() {
+  const root = getProjectRoot();
+  console.log(color("Ritsu Health Dashboard — Objective Metrics", "cyan"));
+
+  const ctxFile = findLatestCtxFile(root);
+  if (!ctxFile) {
+    console.error(color("No context file found", "red"));
+    return;
+  }
+
+  const events = parseJsonl(ctxFile);
+  const totalEvents = events.length;
+  const violations = events.filter(e => e.status === "violation_detected").length;
+  const artifactWritten = events.filter(e => e.status === "artifact_written").length;
+
+  // Metric 1: Interception Rate
+  const interceptRate = totalEvents > 0 ? (violations / totalEvents * 100).toFixed(1) : "0.0";
+  console.log(`- Policy Interception Rate:   ${color(`${interceptRate}%`, "yellow")} (${violations} violations in ${totalEvents} events)`);
+
+  // Metric 2: Preference Promotion
+  const promoted = events.filter(e => e.skill === "miner" && e.status === "done").length;
+  console.log(`- Preference Promotion Rate: ${color(`${promoted}`, "yellow")} rules promoted this month`);
+
+  // Metric 3: Coverage Trend
+  const qgFile = resolve(root, ".ritsu/last-quality-gate.json");
+  let currentCoverage = "0.0";
+  if (existsSync(qgFile)) {
+    const qg = JSON.parse(readFileSync(qgFile, "utf-8"));
+    currentCoverage = qg.coverage?.total?.lines?.pct ?? "0.0";
+  }
+  console.log(`- Current Test Coverage:      ${color(`${currentCoverage}%`, "green")}`);
+
+  // Metric 4: Triple Verification Rate
+  const traces = [...new Set(events.map(e => e.trace_id).filter(Boolean))];
+  let triplePassed = 0;
+  for (const tid of traces) {
+    const tree = joinTrace(root, tid as string);
+    const types = new Set(tree.events.filter((e: any) => e.status === "artifact_written").map((e: any) => (e as any).artifact_meta?.type));
+    if ((types.has("design-sheet") || types.has("design-brief")) && types.has("dev-report") && types.has("assurance-sheet")) {
+      triplePassed++;
+    }
+  }
+  const tripleRate = traces.length > 0 ? (triplePassed / traces.length * 100).toFixed(1) : "0.0";
+  console.log(`- Triple Verification Rate:   ${color(`${tripleRate}%`, "cyan")} (${triplePassed}/${traces.length} traces)`);
+
+  // Snapshotting
+  const snapshotFile = resolve(root, ".ritsu/health-snapshots.jsonl");
+  const snapshot = {
+    ts: new Date().toISOString(),
+    interceptRate,
+    promoted,
+    currentCoverage,
+    tripleRate,
+    tracesCount: traces.length
+  };
+  appendFileSync(snapshotFile, JSON.stringify(snapshot) + "\n");
+  console.log(color(`\n✔ Health snapshot saved to .ritsu/health-snapshots.jsonl`, "dim"));
+
+  const snapshots = existsSync(snapshotFile) ? parseJsonl(snapshotFile) : [];
+  
+  if (snapshots.length > 0) {
+    const prev = snapshots[snapshots.length - 1] as any;
+    if (prev.currentCoverage) {
+      const diff = (parseFloat(currentCoverage) - parseFloat(prev.currentCoverage)).toFixed(1);
+      const trend = parseFloat(diff) >= 0 ? color(`+${diff}%`, "green") : color(`${diff}%`, "red");
+      console.log(`Trend: Coverage moved ${trend} since last check.`);
+    }
+  }
+}
+
 async function runDoctor(args: string[] = []) {
   const root = getProjectRoot();
   console.log(color("Ritsu Doctor — Running Health Check...", "cyan"));
@@ -198,6 +279,11 @@ async function runDoctor(args: string[] = []) {
 
   if (args.includes("--hot-rules")) {
     await runHotRules();
+    return;
+  }
+
+  if (args.includes("--health")) {
+    await runDoctorHealth();
     return;
   }
 
@@ -329,12 +415,51 @@ async function runExport(outPath: string | null) {
   }
 }
 
-async function runTrace(traceId: string | null, openFlag: boolean) {
+async function runTrace(traceId: string | null, openFlag: boolean = false, checkTriple: boolean = false) {
   const root = getProjectRoot();
   const ctxFile = findLatestCtxFile(root);
   if (!ctxFile) {
     console.error(color("No context file found", "red"));
     process.exit(1);
+  }
+
+  if (checkTriple) {
+    console.log(color("Ritsu Triple Verification — Checking latest Trace...", "cyan"));
+    const events = parseJsonl(ctxFile);
+    // Find the latest trace_id mentioned in the events
+    let lastTraceId: string | null = null;
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].trace_id) {
+        lastTraceId = events[i].trace_id ?? null;
+        break;
+      }
+    }
+    
+    if (!lastTraceId) {
+      console.error(color("✖ No traces found in the latest context file.", "red"));
+      process.exit(1);
+    }
+
+    const spanTree = joinTrace(root, lastTraceId as string);
+    const artifacts = spanTree.events.filter((e: any) => e.status === "artifact_written");
+    const types = new Set(artifacts.map((e: any) => (e as any).artifact_meta?.type));
+
+    const hasDesign = types.has("design-sheet") || types.has("design-brief");
+    const hasDev = types.has("dev-report");
+    const hasAssurance = types.has("assurance-sheet");
+
+    console.log(`Trace: ${color(lastTraceId, "yellow")}`);
+    console.log(`- Design:    ${hasDesign ? color("✔", "green") : color("✘", "red")}`);
+    console.log(`- Dev:       ${hasDev ? color("✔", "green") : color("✘", "red")}`);
+    console.log(`- Assurance: ${hasAssurance ? color("✔", "green") : color("✘", "red")}`);
+
+    if (hasDesign && hasDev && hasAssurance) {
+      console.log(color("\n✔ Triple Verification Passed!", "green"));
+    } else {
+      console.error(color("\n✖ Triple Verification Failed! Missing evidence in chain.", "red"));
+      process.exit(1);
+    }
+    return;
   }
 
   const events = parseJsonl(ctxFile);
@@ -509,11 +634,13 @@ function main() {
   if (cmd === "trace") {
     let traceId = null;
     let openFlag = false;
+    let checkTriple = false;
     for (const arg of cmdArgs) {
       if (arg === "--open") openFlag = true;
+      else if (arg === "--check-triple") checkTriple = true;
       else if (!arg.startsWith("-")) traceId = arg;
     }
-    runTrace(traceId, openFlag);
+    runTrace(traceId, openFlag, checkTriple);
     return;
   }
 

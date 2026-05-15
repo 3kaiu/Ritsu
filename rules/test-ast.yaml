@@ -1,0 +1,7 @@
+review:
+  - id: TEST-AST
+    description: "Unused variable check via AST"
+    detector:
+      type: ast
+      check_unused: true
+    severity: FATAL
