@@ -4,6 +4,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { syncPush, syncPull } from "./sync.js";
+import { minePreferences } from "./miner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +56,7 @@ export function usage(): string {
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
     "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",
     "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
+    "ritsu mine [--days 7]      # 离线挖掘偏好，生成 Mining Sheet",
     "",
     "  think -> dev -> test/hunt -> review",
     "\nENV:",
@@ -396,6 +398,18 @@ async function runSync(action: string) {
   }
 }
 
+async function runMine(days: number) {
+  console.log(color(`Ritsu Preference Miner — Scanning past ${days} days...`, "cyan"));
+  const outPath = minePreferences(days);
+  if (!outPath) {
+    console.log(color("No human corrections found for AI-generated artifacts.", "green"));
+    return;
+  }
+  console.log(color(`✔ Mining Sheet generated successfully!`, "green"));
+  console.log(color(`Please ask your LLM to review the sheet and extract rules:`, "dim"));
+  console.log(color(`  > ${outPath}`, "yellow"));
+}
+
 function main() {
   const args = process.argv.slice(2);
   const helpRequested = args.length === 0 || args.includes("-h") || args.includes("--help");
@@ -434,6 +448,15 @@ function main() {
 
   if (cmd === "sync") {
     runSync(cmdArgs[0]);
+    return;
+  }
+
+  if (cmd === "mine") {
+    let days = 7;
+    for (let i = 0; i < cmdArgs.length; i++) {
+      if (cmdArgs[i] === "--days") days = parseInt(cmdArgs[++i] ?? "7", 10);
+    }
+    runMine(days);
     return;
   }
 

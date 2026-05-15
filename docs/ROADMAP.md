@@ -75,13 +75,9 @@ Ritsu 要选 AI 越强反而越值钱的赛道：
 **Epic**：
 1. **E7 Git-Native 共享** — `ritsu sync push/pull` 把 .ritsu/ 同步到 `refs/ritsu/*` 命名空间
 2. **E8 GitHub App** — PR 自动渲染 design-sheet + verdict，CI 校验三方一致（design ↔ diff ↔ assurance）
-3. **E9 月度复盘** — `ritsu retro` 自动产出失败模式聚合、accept rate、token 经济学
-4. **E10 偏好挖掘** — `ritsu_mine_preferences` 离线扫 git log + .ritsu/ 历史反向推导项目偏好
+3. **E9 偏好挖掘与规则自动生成** — `ritsu_mine_preferences` 离线扫 Git 历史，将人类纠错行为自动固化为防呆规则（替代纯统计报表，做具有执行力的反馈闭环）
 
-**验收信号**：一个 5 人团队跑 3 个月后能在 5 分钟内回答：
-- 上季度 AI 引入了多少 bug？
-- 被 review 拒绝的最常见原因是什么？
-- preferences 命中率提升了多少？
+**验收信号**：一个 5 人团队跑 3 个月后：
 
 ---
 
@@ -118,7 +114,7 @@ Ritsu 要选 AI 越强反而越值钱的赛道：
 | --- | --- | --- |
 | 缺陷追溯率 | > 60% | 线上 bug 能在 .ritsu/ 历史里找到决策记录的比例 |
 | 决策复用率 | > 30% | preferences 命中导致 AI 改方向的次数 / 总任务数 |
-| 复盘 actionability | 单调上升 | 每月 retro 衍生的 anti-pattern 升级数 |
+| 复盘 actionability | 单调上升 | 每月衍生的 anti-pattern 升级数 |
 
 ---
 
