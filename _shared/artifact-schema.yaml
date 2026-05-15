@@ -60,6 +60,13 @@ schemas:
         fields:
           - name: verification_plan
             label: "验证计划"
+            sub_fields: 
+              - name: contracts
+                type: array
+                items:
+                  id: string
+                  description: string
+                  test_file_hint: string
 
   design_brief:
     id: 13

@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "ritsu",
-  "description": "Ritsu AI delivery workflow bundle: init, think, dev, test, hunt, review, plus focused extension skills.",
+  "description": "Ritsu AI delivery workflow bundle: init, think, dev, hunt, review, plus focused extension skills.",
   "owner": {
     "name": "3kaiu",
     "email": "3kaiu@example.com"
@@ -61,6 +61,16 @@
       "version": "5.2.0",
       "category": "development",
       "source": "./skills/hunt",
+      "homepage": "https://github.com/3kaiu/Ritsu",
+      "skills": ["./"],
+      "strict": false
+    },
+    {
+      "name": "ritsu-augment",
+      "description": "Test sufficiency engine. Reads design-sheet contracts and coverage gaps to propose and implement missing test cases.",
+      "version": "5.5.0",
+      "category": "development",
+      "source": "./skills/augment",
       "homepage": "https://github.com/3kaiu/Ritsu",
       "skills": ["./"],
       "strict": false

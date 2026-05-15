@@ -16,7 +16,7 @@ export interface PolicyRule {
   exemption?: ExemptionConfig[];
 }
 
-export type DetectorType = "regex" | "cross_file" | "scope_diff" | "ast";
+export type DetectorType = "regex" | "cross_file" | "scope_diff" | "ast" | "contract_coverage";
 
 export interface DetectorConfig {
   type: DetectorType;

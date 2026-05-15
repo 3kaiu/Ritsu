@@ -21,6 +21,7 @@ export function minePreferences(days: number): string | null {
   cutoffDate.setDate(cutoffDate.getDate() - days);
 
   const artifactEvents: ArtifactEvent[] = [];
+  const violations: any[] = [];
 
   for (const f of files) {
     const lines = readFileSync(join(ritsuDir, f), "utf-8").split(/\r?\n/);
@@ -28,18 +29,19 @@ export function minePreferences(days: number): string | null {
       if (!line.trim()) continue;
       try {
         const obj = JSON.parse(line);
+        const eventDate = new Date(obj.ts);
+        if (eventDate < cutoffDate) continue;
+
         if (obj.status === "artifact_written" && obj.artifact) {
-          const eventDate = new Date(obj.ts);
-          if (eventDate >= cutoffDate) {
-            artifactEvents.push({ ts: obj.ts, artifact: obj.artifact });
-          }
+          artifactEvents.push({ ts: obj.ts, artifact: obj.artifact });
+        } else if (obj.status === "violation_detected") {
+          violations.push(obj);
         }
       } catch {}
     }
   }
 
-  // Keep only the earliest write event within the window for each artifact to see all subsequent changes
-  // Or rather, the latest write event? If AI writes it multiple times, we want the diff after the LAST AI write.
+  // Keep only the latest write event for each artifact
   const latestWrites = new Map<string, string>();
   for (const e of artifactEvents) {
     const existing = latestWrites.get(e.artifact);
@@ -52,16 +54,11 @@ export function minePreferences(days: number): string | null {
 
   for (const [file, ts] of latestWrites.entries()) {
     try {
-      // Get git diff from the time of AI writing until now (HEAD or Working Tree)
-      // We can use git diff with a time-based rev parse, but simpler: git log -p since ts
-      // Or just git diff HEAD@{ts} -- file? git reflog might not have it.
-      // Easiest reliable way: git log -p --since="<ts>" -- <file>
       const diff = execSync(`git log -p --since="${ts}" -- "${file}"`, {
         cwd: root,
         stdio: ["ignore", "pipe", "ignore"],
       }).toString().trim();
 
-      // If the file is modified in the working tree, also grab that diff
       const workingDiff = execSync(`git diff -- "${file}"`, {
         cwd: root,
         stdio: ["ignore", "pipe", "ignore"],
@@ -74,11 +71,11 @@ export function minePreferences(days: number): string | null {
         corrections.push({ file, diff: combinedDiff });
       }
     } catch {
-      // Ignore git errors (e.g., file not tracked)
+      // Ignore git errors
     }
   }
 
-  if (corrections.length === 0) return null;
+  if (corrections.length === 0 && violations.length === 0) return null;
 
   // Generate Mining Sheet
   const dateStr = new Date().toISOString().slice(0, 10);
@@ -88,15 +85,8 @@ export function minePreferences(days: number): string | null {
     `# Ritsu Preference Mining Sheet`,
     `> Generated: ${dateStr} (Scanning past ${days} days)`,
     ``,
-    `The following diffs represent files that were initially written by the AI, but subsequently modified (corrected) by humans or subsequent commits.`,
-    ``,
-    `## Task for the AI Assistant:`,
-    `Please carefully analyze the diffs below. Your goal is to extract **tacit knowledge** and **implicit team preferences** from these corrections.`,
-    `If you identify a clear pattern (e.g., "The human replaced \`console.log\` with \`logger.info\`" or "The human restructured the React component to use a specific custom hook"), please define a new anti-pattern or preference rule.`,
-    ``,
-    `Output your findings in the format required by \`rules/anti-patterns.yaml\` or \`preferences.yaml\`.`,
-    ``,
-    `---`,
+    `## Section 1: Human Corrections`,
+    `The following diffs represent files that were initially written by the AI, but subsequently modified by humans.`,
     ``,
   ];
 
@@ -108,6 +98,68 @@ export function minePreferences(days: number): string | null {
     lines.push("");
   }
 
+  if (violations.length > 0) {
+    lines.push(`## Section 2: Policy Violations`);
+    lines.push(`The following violations were detected by Ritsu's policy engine during the last ${days} days.`);
+    lines.push(``);
+    for (const v of violations) {
+      lines.push(`- **Rule**: ${v.rule_id} (${v.skill})`);
+      lines.push(`  - **Message**: ${v.message}`);
+      lines.push(`  - **Evidence**: \`${v.evidence}\``);
+      lines.push(``);
+    }
+  }
+
+  lines.push(`---`);
+  lines.push(`## Proposals for AI Assistant:`);
+  lines.push(`Please analyze the data above and propose new preference rules in the following YAML format:`);
+  lines.push(``);
+  lines.push("```yaml");
+  lines.push("- id: pref-unique-id");
+  lines.push("  match_regex: \"...\"");
+  lines.push("  scope: coding_style");
+  lines.push("  auto_inject_to: [think, dev]");
+  lines.push("```");
+  lines.push(``);
+
   writeFileSync(outPath, lines.join("\n"));
   return outPath;
 }
+
+export function promotePreference(prefId: string): boolean {
+  const root = getProjectRoot();
+  const ritsuDir = resolve(root, RITSU_DIR);
+  const prefPath = resolve(root, ".ritsu/preferences.yaml");
+
+  const files = readdirSync(ritsuDir).filter((f) => f.startsWith("mining-sheet-") && f.endsWith(".md")).sort();
+  if (files.length === 0) return false;
+
+  // Search from the most recent sheet
+  for (let i = files.length - 1; i >= 0; i--) {
+    const content = readFileSync(join(ritsuDir, files[i]), "utf-8");
+    // Simple regex to extract YAML block with specific prefId
+    // This is a bit naive but works for a prototype
+    const regex = new RegExp(`- id: ${prefId}[\\s\\S]+?(?=\\n-|\\n\\s*\\n|\\n\`\`\`)`, "g");
+    const match = content.match(regex);
+    
+    if (match) {
+      const yamlSnippet = match[0].trim();
+      let currentPrefs = "";
+      if (existsSync(prefPath)) {
+        currentPrefs = readFileSync(prefPath, "utf-8");
+      }
+      
+      // Check if already exists
+      if (currentPrefs.includes(`id: ${prefId}`)) {
+        return true; // Already promoted
+      }
+
+      const separator = currentPrefs.trim() ? "\n\n" : "preferences:\n";
+      writeFileSync(prefPath, currentPrefs.trim() + separator + yamlSnippet + "\n");
+      return true;
+    }
+  }
+
+  return false;
+}
+

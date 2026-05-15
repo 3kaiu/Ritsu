@@ -4,11 +4,13 @@ import { RegexDetector } from "./detectors/regex.js";
 
 import { CrossFileDetector } from "./detectors/cross-file.js";
 import { ScopeDiffDetector } from "./detectors/scope-diff.js";
+import { ContractCoverageDetector } from "./detectors/contract-coverage.js";
 
 const detectors: Record<string, DetectorPlugin> = {
   regex: new RegexDetector(),
   cross_file: new CrossFileDetector(),
   scope_diff: new ScopeDiffDetector(),
+  contract_coverage: new ContractCoverageDetector(),
 };
 
 export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; violations: PolicyViolation[] } {
@@ -34,7 +36,10 @@ export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; vi
     if (exempted) continue;
 
     // 2. Run detector
-    if (rule.detector && detectors[rule.detector.type]) {
+    if (rule.detector) {
+      if (!detectors[rule.detector.type]) {
+        throw new Error(`Detector type '${rule.detector.type}' is not registered. Used in rule '${rule.id}'.`);
+      }
       const detector = detectors[rule.detector.type];
       
       // If the detector target doesn't match the current action, skip

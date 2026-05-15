@@ -19,6 +19,7 @@ import {
 import { ritsu_open_span } from "./open-span.js";
 import { ritsu_close_span } from "./close-span.js";
 import { ritsu_join_trace } from "./join-trace.js";
+import { ritsu_diff_chunks } from "./diff-chunks.js";
 
 // ─── Handler Registry ────────────────────────────────────────
 
@@ -40,4 +41,5 @@ export const registerHandlers: Record<
   ritsu_open_span,
   ritsu_close_span,
   ritsu_join_trace,
+  ritsu_diff_chunks,
 };

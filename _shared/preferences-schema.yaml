@@ -7,7 +7,9 @@ schema:
     rules:
       - id: string  # 自动生成 pref-{N}
         source: string  # 提取来源（如 assurance-sheet 路径）
-        pattern: string  # 偏好描述
+        match_regex: string  # Optional: Regex pattern to match code against
+        forbid_lib: string   # Optional: Library import/usage to forbid
+        require_call: string # Optional: Specific function/method call required
         scope: enum [coding_style, library_choice, naming_convention, architecture]
         auto_inject_to: list [think, dev, review]  # 自动注入的阶段
         confidence: number  # 0-1

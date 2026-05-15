@@ -1,7 +1,19 @@
-# Phase 1 — 自洽 + 政策引擎雏形
+> ⚠️ **本文档已归档（2026-05-15）**
+>
+> 已被 [ROADMAP v2](./ROADMAP.md) 的 Phase A 吸收。新路线直接跳过 v5.3，把本文档列出的自洽硬指标（版本号 SoT 统一、`runtime/dist/` 退 git、skill 集合三方对齐、AGENTS.md ritsu block 模板化、5 条 anti-pattern 运行时拦截）并入 v5.4 一次性交付。
+>
+> 保留本文档仅用于：
+> - 追溯 v1 路线下的具体 Story（S1.1–S1.5、S2.1–S2.5、S3.1–S3.4）拆分思路
+> - ROADMAP v2 §3 中"v1 项 → v2 处理"表的引用源
+>
+> **不要按本文档执行**——请改用 ROADMAP v2。
+
+---
+
+# Phase 1 — 自洽 + 政策引擎雏形（已归档）
 
 > **窗口**：2026-05 起 6 个月
-> **状态**：Drafting
+> **状态**：Archived（被 ROADMAP v2 Phase A 吸收）
 > **目标版本**：v5.3.x – v5.4.x（v6.0 在 Phase 2 切换为 trace 协议）
 
 ---

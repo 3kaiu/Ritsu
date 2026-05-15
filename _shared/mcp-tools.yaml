@@ -176,6 +176,21 @@ tools:
         total_files: { type: integer }
         diff: { type: string }
 
+  - name: ritsu_diff_chunks
+    description: 按 hunk 切分 diff 并进行风险加权（SQL、Auth、API签名等），为 Phase B/C 的前置基础设施。
+    call_template:
+      tool: ritsu_diff_chunks
+      params:
+        cached: false
+    input:
+      cached: { type: boolean, required: false }
+    output_schema:
+      type: object
+      required: [total_chunks, chunks]
+      properties:
+        total_chunks: { type: integer }
+        chunks: { type: array }
+
   - name: ritsu_run_quality_gates
     description: 执行项目质量门禁（Lint + Test）。
     call_template:

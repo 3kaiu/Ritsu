@@ -45,6 +45,10 @@ export async function ritsu_close_span(
     event.cost = params.cost;
   }
 
+  if (params.metadata) {
+    event.metadata = params.metadata;
+  }
+
   const validation = validateEvent(event);
   if (!validation.valid) {
     return errorResult(`event validation failed: ${validation.errors?.join(", ")}`);

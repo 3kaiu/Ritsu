@@ -43,6 +43,14 @@ export async function ritsu_open_span(
     event.agent = params.agent;
   }
 
+  if (params.name) {
+    event.name = String(params.name);
+  }
+
+  if (params.metadata) {
+    event.metadata = params.metadata;
+  }
+
   const validation = validateEvent(event);
   if (!validation.valid) {
     return errorResult(`event validation failed: ${validation.errors?.join(", ")}`);

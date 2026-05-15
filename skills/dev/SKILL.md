@@ -38,8 +38,8 @@ total_steps: 5
 2. **技术栈感知**: 识别项目指纹，加载对应领域纪律。
 3. **偏好加载**: 若 `.ritsu/preferences.yaml` 存在，读取并遵循项目偏好（如：优先使用 ahooks、组件拆分粒度等）。
 4. **编码实现**: 服从设计文档并执行领域纪律 (HC-1/HC-2/HC-3)。
-5. **质量门禁**: 运行 `ritsu_run_quality_gates`。
-6. **交付摘要**: 输出变更概要和下一步建议。产出轻量 `dev-report`。
+5. **质量门禁**: 运行 `ritsu_run_quality_gates`。未通过则禁止交付。
+6. **交付摘要**: 必须将 quality_gates 的结果写入 `dev-report` 的 verification_result 中，产出轻量交付摘要。
 
 ---
 
@@ -51,6 +51,6 @@ total_steps: 5
 2. **技术栈感知**: 识别项目指纹，自动切换资深专家人格。
 3. **偏好加载**: 读取 `.ritsu/preferences.yaml`。
 4. **高保真实现**: 严格服从 `design-sheet`，代码风格与领域 YAML 100% 对齐。
-5. **质量门禁**: `ritsu_run_quality_gates`。
-6. **产物交付**: 产出完整 `dev-report` + `emit_event(done)` + 交付摘要。
+5. **质量门禁**: 运行 `ritsu_run_quality_gates`。未通过则禁止 `emit_event(done)`。
+6. **产物交付**: 产出完整 `dev-report`（必须包含 quality_gates 结果） + `emit_event(done)` + 交付摘要。
 7. **强制引导**: "代码已实现。建议运行 `/r-review` 进行最终验收。"

@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { getProjectRoot, textResult } from "./_utils.js";
@@ -17,6 +17,10 @@ interface QualityGateResult {
     status: "passed" | "failed" | "skipped";
     failures: TestFailure[];
     output: string;
+  };
+  coverage?: {
+    summary: any;
+    per_file: Record<string, any>;
   };
 }
 
@@ -169,13 +173,45 @@ export async function ritsu_run_quality_gates(
   const allPassed = result.lint.status === "passed" && result.test.status === "passed";
   const anyFailed = result.lint.status === "failed" || result.test.status === "failed";
 
-  return textResult(
-    JSON.stringify({
-      passed: allPassed && !anyFailed,
-      status: anyFailed ? "failed" : (allPassed ? "passed" : "partially_skipped"),
-      lint: result.lint,
-      test: result.test,
-      strict,
-    }),
-  );
+  // Check for coverage
+  const coveragePath = resolve(root, "coverage/coverage-summary.json");
+  if (existsSync(coveragePath)) {
+    try {
+      const covData = JSON.parse(readFileSync(coveragePath, "utf-8"));
+      const perFile: Record<string, any> = {};
+      for (const [file, stats] of Object.entries(covData)) {
+        if (file !== "total") {
+          // Normalize paths
+          const relPath = file.replace(root + "/", "");
+          perFile[relPath] = stats;
+        }
+      }
+      result.coverage = {
+        summary: covData.total,
+        per_file: perFile,
+      };
+    } catch {
+      // ignore
+    }
+  }
+
+  const jsonOutput = JSON.stringify({
+    passed: allPassed && !anyFailed,
+    status: anyFailed ? "failed" : (allPassed ? "passed" : "partially_skipped"),
+    lint: result.lint,
+    test: result.test,
+    coverage: result.coverage,
+    strict,
+  });
+
+  // Save for detectors to consume
+  try {
+    const lastGatePath = resolve(root, ".ritsu/last-quality-gate.json");
+    writeFileSync(lastGatePath, JSON.stringify(result));
+  } catch {
+    // ignore
+  }
+
+  return textResult(jsonOutput);
 }
+

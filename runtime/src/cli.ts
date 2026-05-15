@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { syncPush, syncPull } from "./sync.js";
-import { minePreferences } from "./miner.js";
+import { minePreferences, promotePreference } from "./miner.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,10 +53,12 @@ export function usage(): string {
     "ritsu trace <id>           # 展示 Trace 链路和 Span 树（自动兼容 legacy CID）",
     "ritsu trace --open         # 展示当前所有未关闭的 Trace",
     "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
+    "ritsu doctor --hot-rules   # 离线统计 30 天内 rule_id 触发热度",
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
     "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",
     "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
-    "ritsu mine [--days 7]      # 离线挖掘偏好，生成 Mining Sheet",
+    "ritsu mine --report [--days 7]  # 离线挖掘偏好，生成 Mining Sheet",
+    "ritsu mine --promote <id>  # 将 Mining Sheet 中的提议晋升为正式偏好",
     "",
     "  think -> dev -> test/hunt -> review",
     "\nENV:",
@@ -153,13 +155,55 @@ export function formatEvent(e: CtxEvent): string {
   return `${ts} ${cid}  ${skill} ${domain}  ${status}${details ? ` ${details}` : ""}`;
 }
 
-async function runDoctor() {
+async function runHotRules() {
+  const root = getProjectRoot();
+  const ritsuDir = resolve(root, ".ritsu");
+  if (!existsSync(ritsuDir)) return;
+
+  const files = readdirSync(ritsuDir).filter(f => f.startsWith("ctx-") && f.endsWith(".jsonl"));
+  const counts: Record<string, number> = {};
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - 30);
+
+  for (const f of files) {
+    const events = parseJsonl(resolve(ritsuDir, f));
+    for (const e of events) {
+      if (e.status === "violation_detected") {
+        const eventDate = new Date(e.ts);
+        if (eventDate >= cutoffDate) {
+          // rule_id might be in metadata or a top-level field if schema was updated
+          // According to ctx-event-schema.json, it's in violation object
+          const rid = (e as any).violation?.rule_id || "unknown";
+          counts[rid] = (counts[rid] || 0) + 1;
+        }
+      }
+    }
+  }
+
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  console.log(color("\nTop Policy Violations (Last 30 Days):", "magenta"));
+  if (sorted.length === 0) {
+    console.log(color("  No violations recorded.", "dim"));
+  } else {
+    for (const [rid, count] of sorted.slice(0, 10)) {
+      console.log(`  - ${color(rid, "yellow")}: ${count} times`);
+    }
+  }
+}
+
+async function runDoctor(args: string[] = []) {
   const root = getProjectRoot();
   console.log(color("Ritsu Doctor — Running Health Check...", "cyan"));
   console.log(color(`Project Root: ${root}`, "dim"));
 
+  if (args.includes("--hot-rules")) {
+    await runHotRules();
+    return;
+  }
+
   let errors = 0;
   let warnings = 0;
+// ...
 
   // 1. Check AGENTS.md
   const agentsPath = resolve(root, "AGENTS.md");
@@ -398,16 +442,43 @@ async function runSync(action: string) {
   }
 }
 
-async function runMine(days: number) {
-  console.log(color(`Ritsu Preference Miner — Scanning past ${days} days...`, "cyan"));
-  const outPath = minePreferences(days);
-  if (!outPath) {
-    console.log(color("No human corrections found for AI-generated artifacts.", "green"));
+async function runMine(args: string[]) {
+  let days = 7;
+  let report = false;
+  let promoteId: string | null = null;
+
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--days") days = parseInt(args[++i] ?? "7", 10);
+    else if (args[i] === "--report") report = true;
+    else if (args[i] === "--promote") promoteId = args[++i] ?? null;
+  }
+
+  if (promoteId) {
+    console.log(color(`Ritsu Preference Miner — Promoting ${promoteId}...`, "cyan"));
+    const ok = promotePreference(promoteId);
+    if (ok) {
+      console.log(color(`✔ Preference ${promoteId} promoted successfully to .ritsu/preferences.yaml`, "green"));
+    } else {
+      console.error(color(`✖ Failed to find proposal for ${promoteId} in recent mining sheets.`, "red"));
+      process.exit(1);
+    }
     return;
   }
-  console.log(color(`✔ Mining Sheet generated successfully!`, "green"));
-  console.log(color(`Please ask your LLM to review the sheet and extract rules:`, "dim"));
-  console.log(color(`  > ${outPath}`, "yellow"));
+
+  if (report || args.length === 0) {
+    console.log(color(`Ritsu Preference Miner — Scanning past ${days} days...`, "cyan"));
+    const outPath = minePreferences(days);
+    if (!outPath) {
+      console.log(color("No human corrections or violations found.", "green"));
+      return;
+    }
+    console.log(color(`✔ Mining Sheet generated successfully!`, "green"));
+    console.log(color(`Please ask your LLM to review the sheet and extract rules:`, "dim"));
+    console.log(color(`  > ${outPath}`, "yellow"));
+    return;
+  }
+
+  console.log(usage());
 }
 
 function main() {
@@ -422,7 +493,7 @@ function main() {
   const [cmd, ...cmdArgs] = args;
 
   if (cmd === "doctor") {
-    runDoctor();
+    runDoctor(cmdArgs);
     return;
   }
 
@@ -452,11 +523,7 @@ function main() {
   }
 
   if (cmd === "mine") {
-    let days = 7;
-    for (let i = 0; i < cmdArgs.length; i++) {
-      if (cmdArgs[i] === "--days") days = parseInt(cmdArgs[++i] ?? "7", 10);
-    }
-    runMine(days);
+    runMine(cmdArgs);
     return;
   }
 
