@@ -1,6 +1,6 @@
 ---
 name: hunt
-version: "5.0.0"
+version: "5.2.0"
 description: "Ritsu 技术诊断入口。通过取证与假设验证锁定根因，并给出修复建议。"
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 total_steps: 4

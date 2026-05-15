@@ -1,6 +1,6 @@
 ---
 name: review
-version: "5.0.0"
+version: "5.2.0"
 description: "Ritsu 最终验收入口。产出《验收单 (Assurance Sheet)》，决定是否可合并、可上线。"
 when_to_use: "/r-review, review, code review, 审查代码, 最终验收"
 total_steps: 4

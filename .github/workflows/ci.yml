@@ -29,6 +29,11 @@ jobs:
           cd runtime
           npm install
 
+      - name: Version Consistency Check
+        run: |
+          cd runtime
+          node version-check.js
+
       - name: Type Check
         run: |
           cd runtime

@@ -1,6 +1,6 @@
 ---
 name: think
-version: "5.0.0"
+version: "5.2.0"
 description: "Ritsu 需求分析入口。根据任务等级产出对应深度的设计文档。"
 when_to_use: "/r-think, 需求审核, 方案判断, 怎么做, 看看这个需求"
 total_steps: 4

@@ -1,4 +1,4 @@
-# Ritsu 产物契约 v5.0.0
+# Ritsu 产物契约 v5.2.0
 # 定义所有跨技能中间产物的强制格式。
 # 下游技能读取上游产物时，必须按此 Schema 解析，禁止自由解读。
 # ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
@@ -122,7 +122,7 @@ schemas:
     required_fields:
       - field: ritsu-version
         type: string
-        pattern: "5.0.x"
+        pattern: "5\\.\\d+\\.\\d+"
       - field: domain
         type: enum
         values: [frontend, backend, fullstack, infra, data]
