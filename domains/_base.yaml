@@ -1,4 +1,4 @@
-# Domain: Base (通用基线) v5.2.0
+# Domain: Base (通用基线) v5.6.0
 # 所有领域配置隐式继承本基线。领域文件仅声明增量内容，与 _base.yaml 重复的禁止出现。
 
 hypothesis_directions:

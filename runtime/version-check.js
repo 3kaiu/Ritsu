@@ -40,7 +40,7 @@ const targets = [
   { file: "_shared/ctx-event-schema.json", pattern: /"v(\d+\.\d+\.\d+) — / },
 
   // SKILL.md frontmatter
-  ...["init", "think", "dev", "hunt", "review", "freestyle"].map((s) => ({
+  ...["init", "think", "dev", "hunt", "review", "freestyle", "augment"].map((s) => ({
     file: `skills/${s}/SKILL.md`,
     pattern: /version:\s*"(\d+\.\d+\.\d+)"/,
   })),
@@ -83,6 +83,7 @@ const targets = [
 
   // README.md badge
   { file: "README.md", pattern: /badge\/version-(\d+\.\d+\.\d+)-/ },
+  { file: "CHANGELOG.md", pattern: /## \[(\d+\.\d+\.\d+)\]/ },
 
   // AGENTS.md
   { file: "AGENTS.md", pattern: /ritsu-version:\s*(\d+\.\d+\.\d+)/ },

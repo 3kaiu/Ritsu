@@ -1,4 +1,4 @@
-# Domain: Data / ML (数据与机器学习) v5.2.0
+# Domain: Data / ML (数据与机器学习) v5.6.0
 # 继承 _base.yaml 全部内容。支持多技术栈倾向性（Big Data/Machine Learning）。
 
 extends: _base
