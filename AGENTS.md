@@ -1,7 +1,7 @@
-# Project Baseline: Ritsu v5.0.0
+# Project Baseline: Ritsu v5.1.0
 # Created by Antigravity AI Engineering Framework
 
-ritsu-version: 5.0.0
+ritsu-version: 5.1.0
 domain: fullstack
 
 ## Technical Stack

@@ -13,6 +13,7 @@ import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
 
 let _lastLineCount = 0;
 let _lastCtxMonth = "";
+let _lastCtxPath = "";
 
 /** 清理残留锁文件（进程异常退出后可能遗留） */
 async function cleanupStaleLock(ctxPath: string): Promise<void> {
@@ -54,10 +55,11 @@ export async function appendEvent(
 ): Promise<AppendResult> {
   const ctxPath = ensureCtxFile(projectRoot);
 
-  // 月度切换检测
+  // 月度切换或路径切换检测
   const currentMonth = new Date().toISOString().slice(0, 7);
-  if (currentMonth !== _lastCtxMonth) {
+  if (currentMonth !== _lastCtxMonth || ctxPath !== _lastCtxPath) {
     _lastCtxMonth = currentMonth;
+    _lastCtxPath = ctxPath;
     _lastLineCount = recalcLineCount(ctxPath);
   }
 
@@ -75,7 +77,7 @@ export async function appendEvent(
     appendFileSync(ctxPath, line + "\n");
     _lastLineCount++;
   } finally {
-    await unlock(ctxPath);
+    await release(); // proper-lockfile suggests using the release function returned by lock()
   }
 
   return {
@@ -83,6 +85,13 @@ export async function appendEvent(
     lineCount: _lastLineCount,
     correlation_id: String(event.correlation_id),
   };
+}
+
+/** 重置计数器（测试用） */
+export function _resetWriterCache(): void {
+  _lastLineCount = 0;
+  _lastCtxMonth = "";
+  _lastCtxPath = "";
 }
 
 /** 重置行数计数器（索引重建时调用） */
@@ -95,6 +104,7 @@ export function syncLineCountFromCtxFile(projectRoot: string): void {
   const ctxPath = getCtxPath(projectRoot);
   _lastLineCount = recalcLineCount(ctxPath);
   _lastCtxMonth = new Date().toISOString().slice(0, 7);
+  _lastCtxPath = ctxPath;
 }
 
 /** 获取 ctx 文件路径（供外部使用） */

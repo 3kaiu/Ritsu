@@ -82,13 +82,22 @@ function statusWeight(status: string): number {
 function pruneRecentEntries(
   entries: Record<string, unknown>[],
   limit: number,
+  lastIncompleteCid?: string | null,
+  lastCompletedCid?: string | null,
 ): Record<string, unknown>[] {
   if (entries.length <= limit) return entries;
 
   // Prefer important statuses, but keep recency: score = weight + recency bonus
   const scored = entries.map((e, idx) => {
     const s = String(e.status ?? "");
-    const w = statusWeight(s);
+    const cid = String(e.correlation_id ?? "");
+    let w = statusWeight(s);
+
+    // Force inclusion of anchor points
+    if (cid && (cid === lastIncompleteCid || cid === lastCompletedCid)) {
+      w += 10; // Mega boost
+    }
+
     // recency bonus: last entries get slightly higher
     const recency = idx / Math.max(1, entries.length - 1);
     const score = w + recency;
@@ -326,9 +335,12 @@ function computeNextStepAndBreakpoint(
   };
 }
 
-export async function ritsu_read_ctx(): Promise<CallToolResult> {
+export async function ritsu_read_ctx(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
   const root = getProjectRoot();
   const ctxPath = getCtxPath(root);
+  const isDetail = !!params.detail;
 
   const data: Record<string, unknown> = {
     last_incomplete: null,
@@ -347,17 +359,25 @@ export async function ritsu_read_ctx(): Promise<CallToolResult> {
   const lastIncomplete = readLastIncomplete(root);
   const lastCompleted = readLastCompleted(root);
   const recentEntries = readRecentEntries(root, 10);
-  const recentEntriesPruned = pruneRecentEntries(
-    allEntries,
-    PRUNED_RECENT_LIMIT,
-  );
   const failedSummary = summarizeFailedEntries(allEntries);
 
   data.last_incomplete = attachStage(lastIncomplete);
   data.last_completed = attachStage(lastCompleted);
   data.recent_entries = attachStageToEntries(recentEntries);
-  data.recent_entries_pruned = attachStageToEntries(recentEntriesPruned);
-  data.failed_summary = failedSummary;
+
+  if (isDetail) {
+    const recentEntriesPruned = pruneRecentEntries(
+      allEntries,
+      PRUNED_RECENT_LIMIT,
+      lastIncomplete?.correlation_id as string,
+      lastCompleted?.correlation_id as string,
+    );
+    data.recent_entries_pruned = attachStageToEntries(recentEntriesPruned);
+    data.failed_summary = failedSummary;
+  } else {
+    // 紧凑模式：只保留失败计数，不保留明细
+    data.failed_count = failedSummary.total_failed;
+  }
 
   data.recovery_context = buildRecoveryContext(
     lastIncomplete,
@@ -375,8 +395,15 @@ export async function ritsu_read_ctx(): Promise<CallToolResult> {
     lastCompleted,
     allEntries,
   );
-  data.recommended_next_step = nextStep.recommended_next_step;
-  data.breakpoint_summary = nextStep.breakpoint_summary;
+
+  // 优先级：熔断重定向 > 断点恢复 > 阶段建议
+  if (data.circuit_breaker_status.should_redirect) {
+    data.recommended_next_step = `/r-${data.circuit_breaker_status.should_redirect}`;
+    data.breakpoint_summary = `检测到连续失败，建议回流至 ${data.circuit_breaker_status.should_redirect} 阶段重新分析。`;
+  } else {
+    data.recommended_next_step = nextStep.recommended_next_step;
+    data.breakpoint_summary = nextStep.breakpoint_summary;
+  }
 
   if (recentEntries.length === 0) {
     return warnResult(

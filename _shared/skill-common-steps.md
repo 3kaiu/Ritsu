@@ -45,6 +45,7 @@
 ### 0.3 现场对账 (仅 Standard/Critical)
 
 调用 `ritsu_read_ctx`（Critical 必选，Standard 可选）：
+- **模式选择**：默认使用 `detail: false` 以节省 Token。仅在 `circuit_breaker_status` 异常或需要追溯 10 条以上历史时开启 `detail: true`。
 - **断点识别**：查看 `breakpoint_summary` 和 `recommended_next_step`。
 - **产物关联**：自动加载最近的 `design-sheet` 或 `dev-report`。
 
@@ -87,3 +88,32 @@
 - 关键结论: {一句话描述核心产出}
 - 下一步建议: {明确的指令建议}
 ```
+---
+
+## Step 5: 产物编写范式 (Few-Shot Prompting)
+
+为了确保产物质量，请参考以下 `design-sheet` 优秀范例：
+
+**示例 1: 复杂重构 (Critical)**
+> ## 1. 任务识别 (Intake)
+> - 任务类型: 重构 (Refactoring)
+> - 当前目标: 将 Monolithic `AuthService` 拆分为 `OAuthManager` 与 `SessionStore`
+> - 风险等级: Critical
+> ## 2. 方案与边界 (Plan)
+> - 交付目标: 消除 `AuthService` 的循环依赖，实现 100% 单元测试覆盖
+> - 纳入范围: `src/services/auth/*`
+> - 不纳入范围: 外部 OAuth 提供商回调逻辑
+> ## 4. 决策理由 (Decision Rationale)
+> - 关键决策: 采用 Repository Pattern 隔离数据库操作，便于 Mock 测试。
+> - 被拒绝方案: 依赖注入库 (InversifyJS): 增加 Bundle Size，不符合项目 Lean 原则。
+> ## 6. 实施清单 (Execution)
+> - 实施步骤:
+>   - [ ] `src/services/auth/oauth-manager.ts`: 新建 OAuth 处理类
+>   - [ ] `src/services/auth/session-store.ts`: 迁移 Redis 存储逻辑
+
+**示例 2: 简单功能 (Standard)**
+> ## 目标
+> - 交付目标: 在导航栏增加 "关于我们" 链接
+> ## 关键改动
+> - 修改 `Navbar.tsx` 增加 Link 组件
+> - 路由配置 `routes.ts` 增加 `/about`

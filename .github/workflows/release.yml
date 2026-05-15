@@ -6,32 +6,39 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-wasm:
+  verify-and-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          targets: wasm32-unknown-unknown
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: runtime/package-lock.json
 
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
-
-      - name: Build WASM
+      - name: Install dependencies
         run: |
-          cd runtime/core
-          wasm-pack build --target nodejs --release --out-dir ../pkg
+          cd runtime
+          npm install
 
-      - name: Package WASM for release
+      - name: Run Tests
         run: |
-          mkdir -p /tmp/ritsu-wasm
-          cp -r runtime/pkg/* /tmp/ritsu-wasm/
-          cd /tmp
-          tar -czf ritsu-core-wasm.tar.gz ritsu-wasm/
+          cd runtime
+          npm test
+
+      - name: Build MCP Server
+        run: |
+          cd runtime
+          npm run build
+
+      - name: Package Artifact
+        run: |
+          tar -czf ritsu-v5.1.0-runtime.tar.gz runtime/dist runtime/package.json runtime/node_modules _shared
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: /tmp/ritsu-core-wasm.tar.gz
+          files: ritsu-v5.1.0-runtime.tar.gz
           generate_release_notes: true

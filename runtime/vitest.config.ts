@@ -10,7 +10,7 @@ process.env.RITSU_SHARED_DIR = resolve(__dirname, "../_shared");
 export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
-    passWithNoTests: true,
+    passWithNoTests: false,
     typecheck: {
       enabled: false,
     },

@@ -48,7 +48,11 @@ tools:
     call_template:
       tool: ritsu_read_ctx
       params: {}
-    input: {}
+    input:
+      detail:
+        type: boolean
+        required: false
+        description: "If true, returns full event history and detailed failure analysis. Default is false (compact mode)."
     output_schema:
       type: object
       required: [last_incomplete, last_completed, recent_entries, recovery_context]

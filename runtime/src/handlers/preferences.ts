@@ -46,7 +46,20 @@ export async function ritsu_write_preference(
 
   const rule = params.rule as PreferenceRule;
   if (!rule || !rule.pattern || !rule.scope) {
-    return errorResult("rule with pattern and scope is required");
+    return errorResult("Rule with 'pattern' and 'scope' is required");
+  }
+
+  const validScopes = ["coding_style", "library_choice", "naming_convention", "architecture"];
+  if (!validScopes.includes(rule.scope)) {
+    return errorResult(`Invalid scope: ${rule.scope}. Must be one of: ${validScopes.join(", ")}`);
+  }
+
+  if (rule.confidence !== undefined && (rule.confidence < 0 || rule.confidence > 1)) {
+    return errorResult("Confidence must be between 0 and 1");
+  }
+
+  if (rule.auto_inject_to && !Array.isArray(rule.auto_inject_to)) {
+    return errorResult("auto_inject_to must be an array of skill names (e.g. ['think', 'dev'])");
   }
 
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });

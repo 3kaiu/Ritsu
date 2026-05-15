@@ -41,13 +41,20 @@ schemas:
               - name: component_contract
                 label: "组件契约"
                 sub_fields: [component_name, props_type, emits_callbacks]
-      - title: "4. 代价与风险 (Metrics & Risks)"
+      - title: "4. 决策理由 (Decision Rationale)"
+        description: "记录针对关键技术选型的考量，以及被拒绝的备选方案。为后续维护提供上下文。"
+        fields:
+          - name: key_decisions
+            label: "关键决策"
+          - name: rejected_alternatives
+            label: "被拒绝方案"
+      - title: "5. 代价与风险 (Metrics & Risks)"
         fields:
           - name: rollback_steps
             label: "回滚步骤"
             rule: "上线发现致命 Bug 的确切回滚指令"
             optional: true
-      - title: "5. 实施清单 (Execution)"
+      - title: "6. 实施清单 (Execution)"
         type: checklist
         item_format: "- [ ] `{文件路径}`: {主干逻辑描述}"
         fields:

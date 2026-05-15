@@ -341,7 +341,7 @@ export async function ritsu_write_artifact(
   }
 
   // 占位符拦截 — runtime 当前只对 artifact 内容做最小约束
-  const placeholderPattern = /TODO|待定|暂不处理|后续完善|TBD/;
+  const placeholderPattern = /\bTODO\b|待定|暂不处理|后续完善|\bTBD\b/;
   if (placeholderPattern.test(content)) {
     return artifactWriteErrorResult(
       "content contains placeholder (TODO/待定/暂不处理/后续完善/TBD), write rejected",

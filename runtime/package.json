@@ -16,7 +16,7 @@
     "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "version:check": "node -e \"const pkg=require('./package.json'); const pv=pkg.ritsu_protocol_version; const schema=require('fs').readFileSync(require('path').resolve(__dirname,'../_shared/ctx-event-schema.json'),'utf8'); const sv=schema.match(/v(\\d+\\.\\d+\\.\\d+)/)?.[1]; if(pv!==sv){console.error('Protocol version mismatch: runtime expects '+pv+' but skills define '+sv);process.exit(1)}console.log('Protocol aligned: '+pv+' (runtime: '+pkg.version+')')\""
+    "version:check": "node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('./package.json','utf8')); const pv=pkg.ritsu_protocol_version; const schema=fs.readFileSync('../_shared/ctx-event-schema.json','utf8'); const sv=JSON.parse(schema).description.match(/v(\\d+\\.\\d+\\.\\d+)/)?.[1]; if(pv!==sv){console.error('Protocol version mismatch: runtime expects '+pv+' but schema defines '+sv);process.exit(1)} console.log('Protocol aligned: '+pv)\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",

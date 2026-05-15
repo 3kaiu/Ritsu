@@ -1,6 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { spawn } from "node:child_process";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
+import { runGit } from "./_git-utils.js";
 
 interface ChangedFile {
   path: string;
@@ -38,19 +39,6 @@ function inferDomain(files: ChangedFile[]): string {
   return top;
 }
 
-function runGit(args: string[], cwd: string): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolve) => {
-    const child = spawn("git", args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString("utf-8")));
-    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString("utf-8")));
-    child.on("close", (code) => {
-      resolve({ ok: code === 0, output: (code === 0 ? stdout : stderr || stdout).trim() });
-    });
-    child.on("error", (err) => resolve({ ok: false, output: err.message }));
-  });
-}
 
 export async function ritsu_get_changed_files(
   params: Record<string, unknown>,
