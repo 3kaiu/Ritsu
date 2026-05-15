@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
+import { syncPush, syncPull } from "./sync.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +53,8 @@ export function usage(): string {
     "ritsu trace --open         # 展示当前所有未关闭的 Trace",
     "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
+    "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",
+    "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
     "",
     "  think -> dev -> test/hunt -> review",
     "\nENV:",
@@ -376,6 +379,23 @@ async function runTrace(traceId: string | null, openFlag: boolean) {
   }
 }
 
+async function runSync(action: string) {
+  if (action === "push") {
+    console.log(color("Pushing .ritsu harness to refs/ritsu/* ...", "dim"));
+    const ok = syncPush();
+    if (ok) console.log(color("✔ Sync push successful.", "green"));
+    else console.error(color("✖ Sync push failed.", "red"));
+  } else if (action === "pull") {
+    console.log(color("Pulling .ritsu harness from refs/ritsu/* ...", "dim"));
+    const ok = syncPull();
+    if (ok) console.log(color("✔ Sync pull successful.", "green"));
+    else console.error(color("✖ Sync pull failed.", "red"));
+  } else {
+    console.error(color(`Unknown sync action: ${action}`, "red"));
+    process.exit(1);
+  }
+}
+
 function main() {
   const args = process.argv.slice(2);
   const helpRequested = args.length === 0 || args.includes("-h") || args.includes("--help");
@@ -409,6 +429,11 @@ function main() {
       else if (!arg.startsWith("-")) traceId = arg;
     }
     runTrace(traceId, openFlag);
+    return;
+  }
+
+  if (cmd === "sync") {
+    runSync(cmdArgs[0]);
     return;
   }
 

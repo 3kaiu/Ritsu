@@ -13,6 +13,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { compileToolsFromYaml } from "./schema-compiler.js";
 import { registerHandlers } from "./handlers/index.js";
 import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -110,6 +111,22 @@ function gracefulShutdown(signal: string) {
       }
     } catch {
       // 尽力清理，不阻塞关闭
+    }
+  }
+
+  // Auto-sync on shutdown
+  if (process.env.RITSU_AUTO_SYNC !== '0') {
+    const cliPath = resolve(__dirname, "cli.js");
+    if (existsSync(cliPath)) {
+      try {
+        const child = spawn(process.execPath, [cliPath, "sync", "push"], {
+          detached: true,
+          stdio: "ignore",
+        });
+        child.unref();
+      } catch {
+        // ignore
+      }
     }
   }
 

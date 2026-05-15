@@ -2,6 +2,12 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
 import { validateEvent } from "../event-validator.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
+import { spawn } from "node:child_process";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export async function ritsu_close_span(
   params: Record<string, unknown>,
@@ -45,6 +51,21 @@ export async function ritsu_close_span(
   }
 
   await appendEvent(root, event);
+
+  // Auto-sync on root span close
+  // ritsu_close_span is called. If parent_span_id isn't provided or explicitly tracked, we trigger sync anyway since this is asynchronous and non-blocking.
+  if (process.env.RITSU_AUTO_SYNC !== '0') {
+    const cliPath = resolve(__dirname, "../cli.js");
+    if (existsSync(cliPath)) {
+      try {
+        const child = spawn(process.execPath, [cliPath, "sync", "push"], {
+          detached: true,
+          stdio: "ignore",
+        });
+        child.unref();
+      } catch {}
+    }
+  }
 
   return textResult(JSON.stringify({
     trace_id: traceId,
