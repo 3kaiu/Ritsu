@@ -1,4 +1,4 @@
-# Ritsu 产物契约 v4.1.0
+# Ritsu 产物契约 v5.0.0
 # 定义所有跨技能中间产物的强制格式。
 # 下游技能读取上游产物时，必须按此 Schema 解析，禁止自由解读。
 # ritsu_write_artifact 工具在写入时会校验此 Schema，发现占位符自动拒绝写入。
@@ -7,6 +7,7 @@ schemas:
   design_sheet:
     id: 10
     path: ".ritsu/design-sheet-{YYYYMMDD-HHMMSS}.md"
+    tier: critical
     required_sections:
       - title: "1. 任务识别 (Intake)"
         fields:
@@ -42,13 +43,10 @@ schemas:
                 sub_fields: [component_name, props_type, emits_callbacks]
       - title: "4. 代价与风险 (Metrics & Risks)"
         fields:
-          - name: complexity_score
-            label: "复杂度评分 (1-10)"
-          - name: intrusion
-            label: "架构侵入度 (1-10)"
           - name: rollback_steps
             label: "回滚步骤"
             rule: "上线发现致命 Bug 的确切回滚指令"
+            optional: true
       - title: "5. 实施清单 (Execution)"
         type: checklist
         item_format: "- [ ] `{文件路径}`: {主干逻辑描述}"
@@ -56,9 +54,25 @@ schemas:
           - name: verification_plan
             label: "验证计划"
 
+  design_brief:
+    id: 13
+    path: ".ritsu/design-brief-{YYYYMMDD-HHMMSS}.md"
+    tier: standard
+    required_sections:
+      - title: "目标"
+        fields:
+          - name: delivery_goal
+            label: "交付目标"
+      - title: "关键改动"
+      - title: "实施清单"
+        type: checklist
+        item_format: "- [ ] {步骤描述}"
+      - title: "验证"
+
   assurance_sheet:
     id: 12
     path: ".ritsu/assurance-sheet-{YYYYMMDD-HHMMSS}.md"
+    tier: critical
     required_sections:
       - title: "1. 验收结论 (Verdict)"
         fields:
@@ -84,6 +98,7 @@ schemas:
   delivery_report:
     id: 11
     path: ".ritsu/dev-report-{YYYYMMDD-HHMMSS}.md"
+    tier: standard
     required_sections:
       - title: "交付摘要"
         fields:
@@ -100,7 +115,7 @@ schemas:
     required_fields:
       - field: ritsu-version
         type: string
-        pattern: "4.1.x"
+        pattern: "5.0.x"
       - field: domain
         type: enum
         values: [frontend, backend, fullstack, infra, data]
@@ -108,6 +123,7 @@ schemas:
   diagnosis:
     id: 2
     md_path: ".ritsu/diagnosis-{YYYYMMDD-HHMMSS}.md"
+    tier: standard
     required_sections:
       - title: "根因确诊"
         fields:
@@ -119,23 +135,3 @@ schemas:
         fields:
           - name: steps
             type: ordered_list
-
-  # [DEPRECATED] Handoff v4.1 以后已并入 Design Sheet，仅保留空壳兼容旧逻辑
-  handoff:
-    id: 1
-    path: ".ritsu/handoff-legacy-{slug}.md"
-    required_sections:
-      - title: "已迁移"
-        fields:
-          - name: migration_note
-            label: "迁移说明"
-            default: "已并入 design-sheet"
-
-  optimize_report:
-    id: 4
-    path: ".ritsu/optimize-report-{YYYYMMDD-HHMMSS}.md"
-    required_sections:
-      - title: "执行摘要"
-        fields:
-          - name: total_items
-          - name: succeeded

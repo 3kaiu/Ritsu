@@ -1,44 +1,49 @@
 ---
 name: review
-version: "4.1.0"
+version: "5.0.0"
 description: "Ritsu 最终验收入口。产出《验收单 (Assurance Sheet)》，决定是否可合并、可上线。"
 when_to_use: "/r-review, review, code review, 审查代码, 最终验收"
 total_steps: 4
 ---
 
-# Review: 架构级质量验收
-11: 
-12: **触发条件**：用户输入 `/r-review`。
-13: 
-14: ## 执行流水线
-15: 
-16: ### 1. 证据链对账与技术栈感知 (Stack Perception)
-17: 
-18: > 引用 `_shared/skill-common-steps.md` Step 0
-19: 
-20: 自动关联：
-21: - 代码变更 (Diff)
-22: - 关联的 **`design-sheet`**（原始设计）与 **`dev-report`**（开发回执）
-23: - **技术栈感知**：识别项目指纹，自动切换至对应的资深架构师人格（Persona）。
-24: 
-25: ### 2. 深度架构审计与红线检查
-26: 
-27: **审计准则**：
-28: - **多态质量门禁**：根据感知的技术栈，从 `frontend.yaml`, `backend.yaml`, `infra.yaml`, `data.yaml` 或 `fullstack.yaml` 中提取专项优化与攻击向量规则。
-29: - **反模式拦截**：对照 `_shared/anti-patterns.yaml` 检查。
-30: - **架构一致性**：验证变更是否背离了 `design-sheet` 中的核心架构决策。
-31: 
-32: ### 3. 验收单 (Assurance Sheet) 产出
-33: 
-34: 产出 **`assurance-sheet`**：
-35: - **结论**：PASS (可合并) / FAIL (须修复)。
-36: - **风险矩阵**：按技术栈细分的潜在隐患（如：React Stale Closure, Go Goroutine Leak, K8s Config Drift）。
-37: - **发布建议**：灰度策略、观测指标与回滚预案。
-38: 
-39: ### 4. 交付总结与交付物归档
-40: 
-41: > 引用 `_shared/skill-common-steps.md` Step 4（skill=review）
-42: 
-43: **引导建议**：
-44: - 如果 FAIL，明确告知应回到哪个阶段（Think/Dev/Hunt）并指出违反的领域准则。
-45: - **高级架构确认**：对于全栈项目，必须确认 API 契约的端到端对齐情况。
+# Review: 自适应架构级质量验收
+
+**触发条件**：用户输入 `/r-review`。
+
+## 执行流水线
+
+### 0. 分级判定
+
+> 引用 `_shared/skill-common-steps.md` Step 0
+
+判定完成后，按等级分叉：
+
+---
+
+### 🟢 Micro 路径 (P0)
+
+**准入条件**: 极小变更，已通过自测。
+
+1. **快速审查**: 对照变更 Diff，确认无低级错误。
+2. **结论**: 直接输出 "验收通过"。无需产出 `assurance-sheet`。
+
+---
+
+### 🟡 Standard 路径 (P1)
+
+1. **证据链对账**: 关联最新的 `design-brief` 或 `dev-report`。
+2. **质量审计**: 检查代码一致性，对照 `anti-patterns.yaml` 进行红线扫描。
+3. **验收结论**: 给出 PASS/FAIL 结论。仅在失败时建议产出轻量反馈。
+
+---
+
+### 🔴 Critical 路径 (P2)
+
+1. **完整审计**: `ritsu_read_ctx` + 关联 `design-sheet` + `dev-report`。
+2. **深度架构审计**: 
+   - 提取专项优化与攻击向量规则。
+   - 反模式拦截。
+   - 架构一致性验证。
+3. **验收单 (Assurance Sheet) 产出**: 包含结论、风险矩阵、发布建议。
+4. **偏好学习 (Preference Learning)**: 从验收结论和反馈中提取项目级偏好（如：命名风格、库选用倾向），并调用 `ritsu_write_preference` 更新自适应记忆。
+5. **归档**: `emit_event(done)`。

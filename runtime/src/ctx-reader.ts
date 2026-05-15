@@ -5,13 +5,26 @@
  * P1-6 修复：无 WASM 依赖，无循环依赖。
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { getCtxPath } from "./ctx-path.js";
 
+let cachedEntries: Record<string, unknown>[] | null = null;
+let lastMtime: number = 0;
+let lastPath: string = "";
+
 export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
   const ctxPath = getCtxPath(projectRoot);
-  const entries: Record<string, unknown>[] = [];
+  
+  try {
+    const stats = existsSync(ctxPath) ? statSync(ctxPath) : null;
+    const currentMtime = stats?.mtimeMs ?? 0;
+
+    if (cachedEntries && lastPath === ctxPath && lastMtime === currentMtime) {
+      return cachedEntries;
+    }
+
+    const entries: Record<string, unknown>[] = [];
 
   // JSONL 格式（当前）
   if (existsSync(ctxPath)) {
@@ -50,7 +63,13 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
     }
   }
 
-  return entries;
+    lastMtime = currentMtime;
+    lastPath = ctxPath;
+    cachedEntries = entries;
+    return entries;
+  } catch (e) {
+    return [];
+  }
 }
 
 export function readRecentEntries(

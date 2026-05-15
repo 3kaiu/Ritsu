@@ -15,9 +15,8 @@ import {
 } from "./_utils.js";
 
 const CONTRACT_ARTIFACT_PRIORITY = [
-  { type: "handoff", prefix: "handoff-" },
-  { type: "think-ticket", prefix: "think-ticket-" },
-  { type: "intake-ticket", prefix: "intake-ticket-" },
+  { type: "design-sheet", prefix: "design-sheet-" },
+  { type: "design-brief", prefix: "design-brief-" },
 ] as const;
 
 function escapeRegExp(s: string): string {

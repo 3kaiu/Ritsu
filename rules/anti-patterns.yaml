@@ -1,4 +1,4 @@
-# Anti-Patterns: 全局底线约束 v3.8.0
+# Anti-Patterns: 全局底线约束 v5.0.0
 # 这些规则是不可跨越的底线，无论你当前正在执行哪个技能，都必须无条件遵守。
 # 每条规则有唯一 ID，AI 在输出中必须引用 ID 而非模糊描述。
 # violation 事件格式见 _shared/ctx-protocol.md violation 字段定义。
@@ -51,20 +51,18 @@ global:
     enforcement: "你的产出归属于用户，绝不带有 AI 机器人的身份痕迹"
     severity: FATAL
   - id: AP-10
-    name: State skip
-    pattern: "跳过前置技能直接执行后续技能，且未对跳步风险做出警告"
-    enforcement: "必须遵循 state-machine.yaml 中的流转协议"
-    severity: FATAL
+    name: State skip (Critical tasks)
+    pattern: "对于 Critical (P2) 级别任务，跳过 think 直接进入 dev。"
+    enforcement: "P2 任务必须遵循完整路径。Micro/Standard 级别允许直接路由。"
+    severity: ERROR
+
   - id: AP-11
     name: Domain assumption
     pattern: "未确认领域角色就硬编码前端/后端分支逻辑"
     enforcement: "必须先通过角色探针确认领域，再引用 domains/ 下对应的领域配置"
     severity: FATAL
-  - id: AP-12
-    name: Drift blindness
-    pattern: "AGENTS.md 超过 7 天未更新却仍然盲信其内容"
-    enforcement: "必须按 Context Loader 提示刷新基线"
-    severity: WARN
+
+  # AP-12 已移除
 
 review:
   - id: R-1

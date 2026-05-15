@@ -13,120 +13,12 @@ import {
   textResult,
   errorResult,
 } from "./_utils.js";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import {
+  parseCommand,
+  runCmdWithCwd,
+  detectStackFingerprints,
+} from "./_cmd-utils.js";
 
-// ─── 命令解析器 ──────────────────────────────────────────────
-// 将命令字符串解析为 binary + args，支持引号和转义。
-// 不经过 shell 解释，从根本上消除命令注入风险。
-
-interface ParsedCommand {
-  binary: string;
-  args: string[];
-}
-
-function parseCommand(cmd: string): ParsedCommand | null {
-  const tokens: string[] = [];
-  let i = 0;
-  const len = cmd.length;
-
-  while (i < len) {
-    while (i < len && /\s/.test(cmd[i])) i++;
-    if (i >= len) break;
-
-    let token = "";
-
-    if (cmd[i] === '"') {
-      i++;
-      while (i < len && cmd[i] !== '"') {
-        if (cmd[i] === "\\" && i + 1 < len) {
-          i++;
-          token += cmd[i];
-        } else {
-          token += cmd[i];
-        }
-        i++;
-      }
-      if (i < len) i++;
-    } else if (cmd[i] === "'") {
-      i++;
-      while (i < len && cmd[i] !== "'") {
-        token += cmd[i];
-        i++;
-      }
-      if (i < len) i++;
-    } else {
-      while (i < len && !/\s/.test(cmd[i])) {
-        token += cmd[i];
-        i++;
-      }
-    }
-
-    if (token.length > 0) tokens.push(token);
-  }
-
-  if (tokens.length === 0) return null;
-  return { binary: tokens[0], args: tokens.slice(1) };
-}
-
-// ─── 直接执行模式 ────────────────────────────────────────────
-
-async function runCmd(
-  parsed: ParsedCommand,
-  maxLines = 200,
-  timeoutMs = 30_000,
-  maxBufferMb = 10,
-): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(parsed.binary, parsed.args, {
-      cwd: getProjectRoot(),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    const maxBytes = maxBufferMb * 1024 * 1024;
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBytes) stdout += chunk.toString("utf-8");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBytes) stderr += chunk.toString("utf-8");
-    });
-
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      resolve({ ok: false, output: stdout || stderr || "timeout" });
-    }, timeoutMs);
-
-    child.on("close", (code: number | null) => {
-      clearTimeout(timer);
-      const raw = (code === 0 ? stdout : stderr || stdout).trim();
-      const lines = raw.split("\n");
-      const truncated = lines.length > maxLines;
-      const output = truncated
-        ? lines.slice(0, maxLines).join("\n") + "\n⚠️ 输出已截断"
-        : raw;
-      resolve({ ok: code === 0, output });
-    });
-
-    child.on("error", (err: Error) => {
-      clearTimeout(timer);
-      resolve({ ok: false, output: err.message });
-    });
-  });
-}
-
-function detectStackFingerprints(root: string): string[] {
-  const fingerprints: string[] = [];
-  if (existsSync(join(root, "package.json"))) fingerprints.push("nodejs");
-  if (existsSync(join(root, "go.mod"))) fingerprints.push("go");
-  if (existsSync(join(root, "requirements.txt")) || existsSync(join(root, "pyproject.toml"))) fingerprints.push("python");
-  if (existsSync(join(root, "pubspec.yaml"))) fingerprints.push("flutter");
-  if (existsSync(join(root, "pom.xml")) || existsSync(join(root, "build.gradle"))) fingerprints.push("java");
-  if (existsSync(join(root, "Cargo.toml"))) fingerprints.push("rust");
-  return fingerprints;
-}
 
 export async function ritsu_exec(
   params: Record<string, unknown>,
@@ -190,6 +82,6 @@ export async function ritsu_exec(
     }
   }
 
-  const r = await runCmd(parsed, maxLines, timeoutMs, maxBufferMb);
+  const r = await runCmdWithCwd(parsed, root, maxLines, timeoutMs, maxBufferMb);
   return textResult(JSON.stringify({ ok: r.ok, output: r.output }));
 }

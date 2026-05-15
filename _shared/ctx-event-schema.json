@@ -2,40 +2,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "ritsu-ctx-event",
   "title": "Ritsu Context Event",
-  "description": "v4.1.0 — Ritsu ctx JSONL 事件 Schema。显式阶段交付流，去中心化产物追踪。",
+  "description": "v5.0.0 — Ritsu ctx JSONL 事件 Schema。自适应分级交付流。",
   "type": "object",
   "required": ["ts", "correlation_id", "skill", "domain", "status"],
   "properties": {
     "ts": {
       "type": "string",
-      "pattern": "^\\d{8}-\\d{6}$",
-      "description": "YYYYMMDD-HHMMSS 格式时间戳"
+      "pattern": "^\\d{8}-\\d{6}$"
     },
     "correlation_id": {
       "type": "string",
-      "pattern": "^cid-\\d{8}-\\d+$",
-      "description": "任务链路关联 ID"
+      "pattern": "^cid-\\d{8}-\\d+$"
     },
     "skill": {
       "type": "string",
-      "enum": [
-        "init",
-        "think",
-        "dev",
-        "test",
-        "hunt",
-        "review",
-        "deploy",
-        "triage",
-        "read",
-        "optimize",
-        "refactor",
-        "document"
-      ]
+      "enum": ["init", "think", "dev", "test", "hunt", "review"]
     },
     "domain": {
       "type": "string",
       "enum": ["frontend", "backend", "fullstack", "infra", "data"]
+    },
+    "tier": {
+      "type": "string",
+      "enum": ["micro", "standard", "critical"]
     },
     "status": {
       "type": "string",
@@ -56,19 +45,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": [
-            "design-sheet",
-            "dev-report",
-            "assurance-sheet",
-            "handoff",
-            "diagnosis",
-            "optimize-report",
-            "ctx"
-          ]
-        },
-        "layer": {
-          "type": "string",
-          "enum": ["primary", "evidence", "system"]
+          "enum": ["design-sheet", "design-brief", "dev-report", "assurance-sheet", "diagnosis", "ctx"]
         },
         "size_bytes": {
           "type": "integer"

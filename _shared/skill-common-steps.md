@@ -1,38 +1,64 @@
-# Skill 公共步骤模板 v4.1.0
+# Skill 公共步骤模板 v5.0.0
 
 > 所有 `SKILL.md` 中重复出现的步骤，统一引用此模板。
-> 目标：提供一致的“上下文感知”与“交付闭环”骨架。
+> 目标：提供自适应的分级交付路径，平衡效率与治理。
 
 ---
 
-## Step 0: 现场恢复与对账
+## Step -1: 意图识别与自动路由 (Intent Routing)
 
-在执行实质性动作前，先通过工具对齐当前任务进度。
+当用户未使用 `/r-` 指令时，根据以下规则自动分发：
 
-### 0.1 现场对账
-调用 `ritsu_read_ctx`：
+| 用户意图 | 路由目标 | 触发等级 |
+|---|---|---|
+| 修改代码 / 改颜色 / 改文案 / 修 bug | → `dev` | Micro |
+| 实现新功能 / 重构 / 优化 | → `think` | Standard |
+| 架构迁移 / 底层组件变更 | → `think` | Critical |
+| 报错 / 排障 / 为什么不工作 | → `hunt` | Standard |
+| 解释代码 / 这是什么 / 分析 | → `freestyle` | — |
+| 快速问答 / 概念解释 | → `freestyle` | — |
+| Code Review / 审查代码 | → `review` | Standard |
+| 处理 Issue / PR | → `triage` | — |
+
+**注意**: 自动路由只是建议，AI 应在回复开头简短说明路由决策。
+
+---
+
+## Step 0: 分级判定与路径分发 (Tier Routing)
+
+在执行实质性动作前，**先判定任务等级，再决定走哪条路径**。
+
+### 0.1 任务等级自动判定
+
+根据以下信号自动判定，无需用户手动指定：
+
+| 信号 | Micro (P0) | Standard (P1) | Critical (P2) |
+|---|---|---|---|
+| 用户描述复杂度 | 单句、单文件、样式/文案调整 | 功能增改、多文件联动 | 架构变更、重构、性能优化 |
+| 预估变更行数 | < 20 LoC | 20-500 LoC | > 500 LoC 或跨多模块 |
+| 关键词 | "改一下"、"换成" | "实现"、"优化" | "架构"、"底层"、"迁移" |
+
+### 0.2 分级路径
+
+- **Micro (P0)**: 跳过 Step 0.3/Step 1/Step 2，直接执行核心操作 → 运行质量门禁 → 输出一句话结论。**无产物、无 ctx 事件。**
+- **Standard (P1)**: 执行轻量对账，使用 `design-brief` 替代 `design-sheet`。ctx 事件仅记录 `done`。
+- **Critical (P2)**: 完整流程。强制 `ritsu_read_ctx` 对账，产出完整 `design-sheet`，强制 `contract-validate`。
+
+### 0.3 现场对账 (仅 Standard/Critical)
+
+调用 `ritsu_read_ctx`（Critical 必选，Standard 可选）：
 - **断点识别**：查看 `breakpoint_summary` 和 `recommended_next_step`。
-- **产物关联**：自动加载最近的 `design-sheet` (设计源) 或 `dev-report` (实现源)。
-- **一致性校验**：通过 `reality_check` 确认磁盘产物是否与记录一致。
+- **产物关联**：自动加载最近的 `design-sheet` 或 `dev-report`。
 
-### 0.2 执行模式与分级选择
-根据任务规模和风险自动对齐：
+---
 
-| 级别 | 适用场景 | 产物要求 | 流程建议 |
-| --- | --- | --- | --- |
-| **Micro (P0)** | 变更行数 < 10, 无逻辑变动 | 无 Sheet, 仅 ctx | `/r-dev --quick` 跳过设计单 |
-| **Standard (P1)** | 常规需求、功能增改 | `design-sheet` + `dev-report` | 走标准闭环 |
-| **Critical (P2)** | 架构变更、基础组件修改 | 全套文档 + 强制 `contract-validate` | 深度链路 + 多轮 Review |
-
-- **断点识别**：查看 `breakpoint_summary` 和 `recommended_next_step`。
-
-## Step 1: 领域解析与 Started 标记
+## Step 1: 领域解析与 Started 标记 (仅 Standard/Critical)
 
 按以下优先级解析领域，输出 `[RITSU_CTX: domain={value}]`：
 1. 读取 `AGENTS.md` 的 `domain`。
-2. 调用 `ritsu_get_changed_files`，使用 `domain_hint`。
+2. 调用 `ritsu_get_changed_files`。
 
-领域确认后，调用 `ritsu_emit_event` 追加 started 事件。
+对于 **Critical (P2)** 任务，调用 `ritsu_emit_event` 追加 started 事件。
 
 ---
 
@@ -40,18 +66,17 @@
 
 ### 2.1 产物写入
 调用 `ritsu_write_artifact` 写入主产物。
-主产物必须遵循 `_shared/artifact-templates.md` 规范。
+- Standard: `design-brief` / `dev-report`
+- Critical: `design-sheet` / `dev-report` / `assurance-sheet`
 
 ### 2.2 事件追踪
-每次关键产物写入或阶段结束时，追加 `artifact_written` 或 `done` 事件。
+对于 Standard/Critical，在阶段结束时追加 `done` 事件。
 
 ---
 
 ## Step 3: 强制流转引导
 
-所有技能完成时，必须基于当前结论给出明确的“下一步”建议：
-- 示例：`《设计单》已就绪。建议运行 /r-dev 开始实现。`
-- 示例：`开发已完成。建议运行 /r-review 进行验收。`
+所有技能完成时，必须给出明确的“下一步”建议。
 
 ---
 
@@ -61,8 +86,6 @@
 
 ```markdown
 ## 律 (Ritsu) {skill_name} 交付摘要
-- 核心文件: {路径}
-- 关联溯源: {关联的设计单/回执路径}
 - 关键结论: {一句话描述核心产出}
 - 下一步建议: {明确的指令建议}
 ```

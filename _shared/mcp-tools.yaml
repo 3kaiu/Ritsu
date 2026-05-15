@@ -1,20 +1,8 @@
-# Ritsu MCP Tool Schema 声明 v3.8.0
-# 所有技能中的工具调用必须引用此文件中声明的工具名，禁止用自然语言描述工具调用行为。
-# AI 执行时应将此文件视为“可用工具菜单”，按 Schema 构造调用参数。
-# 运行时注册 MCP Server 时，从此文件编译为 JSON Schema。
-#
-# 当前产品语义已经收敛为 think / dev / test / hunt / review。
-# runtime 已打通主产物（design-sheet / dev-report / assurance-sheet）的核心读写、列表与检索路径；
-# legacy 产物（handoff / diagnosis / review-stamp / optimize-report）仍保留为过程证据或兼容镜像。
-# 因此本文件描述的是“当前运行时真实支持的工具”，并以主产物优先、显式工作流优先的消费语义为准。
-#
-# 结构化调用模板：LLM 必须按 call_template 构造参数，禁止自由推断。
-# call_template 是 input 的快捷视图（DRY），若两者冲突以 input 为准。
-# output_schema：定义工具返回值的 JSON Schema，供 UI 渲染 ToolCallCard 组件。
+# Ritsu MCP Tool Schema 声明 v5.0.0
 
 tools:
   - name: ritsu_emit_event
-    description: 向当月 ctx 文件追加一条结构化事件记录。写入前自动校验是否符合 ctx-event-schema.json。仅支持 4 种核心事件类型（started/done/failed/artifact_written），审批/步骤进度/熔断等通过 AI 自然语言输出
+    description: 向当月 ctx 文件追加一条结构化事件记录。仅 Critical (P2) 级别强制。
     call_template:
       tool: ritsu_emit_event
       params:
@@ -22,183 +10,56 @@ tools:
         step: "{N}/{M}"
         skill: "{skill_name}"
         domain: "{value}"
-      example:
-        event_type: "done"
-        step: "7/7"
-        skill: "dev"
-        domain: "frontend"
     input:
       event_type:
         type: enum
         values: [started, done, failed, artifact_written]
         required: true
-        description: "事件类型（精简为 4 种核心类型：started=会话恢复, done/failed=状态判定, artifact_written=产物追踪）"
       step:
         type: string
         required: false
-        description: "步骤进度，格式 N/M（started/done/artifact_written 时必填）"
       correlation_id:
         type: string
         required: false
-        description: "任务链路关联 ID（自动生成，格式 cid-{YYYYMMDD}-{seq}，同链路自动继承，通常无需手动指定）"
       skill:
         type: string
         required: false
-        description: "当前技能名。默认记录实际工作技能；读取旧历史时仍可能遇到 legacy alias，如 route=旧版 think、pipe=旧版编排入口"
       domain:
         type: string
         required: false
-        description: "当前领域"
       artifact:
         type: string
         required: false
-        description: "产物文件路径（artifact_written 时必填）"
       error:
         type: string
         required: false
-        description: "failed 时必填"
       artifact_meta:
         type: object
         required: false
-        description: "artifact_written 事件时必填。至少包含 type/size_bytes/summary；推荐同时补 canonical_type。若传入旧主产物名，运行时会将 type 归一为首选 alias，并在缺失时自动补 canonical_type 与 layer"
-    validation: "写入前校验事件是否符合 _shared/ctx-event-schema.json 的 if-then 条件"
-    concurrency_control: "原子追加锁"
     output_schema:
       type: object
       required: [written, line_count]
       properties:
-        written:
-          type: boolean
-          description: "是否写入成功"
-        line_count:
-          type: integer
-          description: "当前 ctx 文件总行数（写入后）"
-        correlation_id:
-          type: string
-          description: "事件关联 ID"
+        written: { type: boolean }
+        line_count: { type: integer }
 
   - name: ritsu_read_ctx
-    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete、last_completed、recent_entries，以及自动计算的 recovery_context（可操作恢复上下文）、reality_check（现实对账）、circuit_breaker_status（熔断状态）
+    description: 读取当月 ctx 文件的状态摘要。返回 last_incomplete、last_completed 等。
     call_template:
       tool: ritsu_read_ctx
       params: {}
     input: {}
     output_schema:
       type: object
-      required:
-        [
-          last_incomplete,
-          last_completed,
-          recent_entries,
-          recovery_context,
-          reality_check,
-          circuit_breaker_status,
-        ]
+      required: [last_incomplete, last_completed, recent_entries, recovery_context]
       properties:
-        last_incomplete:
-          type: object
-          description: "最后一条未完成事件（status=started 且无对应 done/failed）"
-          properties:
-            ts: { type: string }
-            correlation_id: { type: string }
-            skill: { type: string }
-            stage: &stage_field
-              type: string
-              description: "当前工作流语义。显式技能通常保持原名；legacy alias 会映射为接近的当前工作技能"
-            domain: { type: string }
-            status: { type: string }
-            step: { type: string }
-            artifact: { type: string }
-            error: { type: string }
-        last_completed:
-          type: object
-          description: "最后一条已完成事件（status=done）"
-          properties:
-            ts: { type: string }
-            correlation_id: { type: string }
-            skill: { type: string }
-            stage: *stage_field
-            domain: { type: string }
-            status: { type: string }
-            step: { type: string }
-            artifact: { type: string }
-            error: { type: string }
-        recent_entries:
-          type: array
-          description: "最近 10 条事件"
-          items: &recent_entry_item
-            type: object
-            properties:
-              ts: { type: string }
-              correlation_id: { type: string }
-              skill: { type: string }
-              stage: *stage_field
-              domain: { type: string }
-              status: { type: string }
-              step: { type: string }
-              artifact: { type: string }
-              error: { type: string }
-        recent_entries_pruned:
-          type: array
-          description: "剪枝后的最近事件（优先 done/artifact_written，failed 聚合到 failed_summary）"
-          items:
-            <<: *recent_entry_item
-        failed_summary:
-          type: object
-          description: "failed 事件摘要压缩（按 skill 聚合），用于节省 token"
-          properties:
-            total_failed:
-              type: integer
-              description: "failed 事件总数"
-            by_skill:
-              type: object
-              description: "按底层兼容 skill 值聚合的失败次数"
-        recovery_context:
-          type: object
-          description: "可操作恢复上下文（仅 last_incomplete 存在时非 null）"
-          properties:
-            skill: { type: string }
-            stage: &stage_field_explicit_workflow
-              type: string
-              description: "当前工作流语义。显式技能保持原名；legacy alias 会映射为接近的当前工作技能"
-            domain: { type: string }
-            step: { type: string }
-            correlation_id: { type: string }
-            last_artifact: { type: string }
-            resume_hint: { type: string }
-        reality_check:
-          type: object
-          description: "现实对账结果（检查 artifact 是否仍存在）"
-          properties:
-            desync_detected:
-              type: boolean
-              description: "最近完成事件引用的产物是否与磁盘状态失配"
-            missing_artifacts:
-              type: array
-              description: "磁盘上不存在的 artifact 相对路径列表"
-              items: { type: string }
-        circuit_breaker_status:
-          type: object
-          description: "熔断状态。当前底层字段仍可能返回旧值或技能名；工作流语义上应理解为回到 think、转入 hunt，或重新进入显式修复链路"
-          properties:
-            consecutive_fails:
-              type: integer
-              description: "最后一个 failed 所属 correlation_id 下，末尾连续 failed 的次数"
-            should_redirect:
-              type: string
-              description: "底层兼容 skill 值。达到熔断阈值时当前返回 think，否则为 null"
-            recommended_stage: &recommended_stage_field
-              type: string
-              description: "产品阶段语义上的建议回退/转向阶段。保留 should_redirect 作为底层兼容字段；未熔断时为 null"
-            last_failed_skill:
-              type: string
-              description: "最近一条 failed 事件的底层兼容 skill 值；若无 failed 则为 null"
-            last_failed_cid:
-              type: string
-              description: "最近一条 failed 事件的 correlation_id；若无 failed 则为 null"
+        last_incomplete: { type: object }
+        last_completed: { type: object }
+        recent_entries: { type: array }
+        recovery_context: { type: object }
 
   - name: ritsu_read_agents
-    description: 读取并解析项目根 AGENTS.md，返回结构化的 domain、ritsu_version、tech_fingerprints 以及 rules_overrides（项目级规则覆盖：disable/downgrade/add）
+    description: 读取并解析 AGENTS.md，返回 domain、version 等，并执行环境感知。
     call_template:
       tool: ritsu_read_agents
       params: {}
@@ -207,914 +68,245 @@ tools:
       type: object
       required: [path, domain]
       properties:
-        path:
-          type: string
-          description: "AGENTS.md 绝对路径"
-        ritsu_version:
-          type: string
-          description: "AGENTS.md 中的 ritsu-version（若存在）"
-        domain:
-          type: string
-          description: "AGENTS.md 中的 domain"
-        tech_fingerprints:
-          type: array
-          description: "项目嗅探到的技术栈特征（可选）"
-          items:
-            type: string
-        rules_overrides:
-          type: object
-          description: "项目级规则覆盖（可选）"
-          properties:
-            disable:
-              type: array
-              items: { type: string }
-            downgrade:
-              type: array
-              items:
-                type: object
-                properties:
-                  id: { type: string }
-                  severity: { type: string }
-            add:
-              type: array
-              items:
-                type: object
-                properties:
-                  id: { type: string }
-                  name: { type: string }
-                  scope: { type: string }
-                  rule: { type: string }
-
-
-  - name: ritsu_contract_validate
-    description: 契约测试（Contract Validation）。这是显式工作流下的一个特例：它校验的是“实施契约”，因此自动选择时优先读取最近的 handoff；若不存在再回退到 design-sheet（或使用显式指定路径）。随后抽取实施清单或契约文本中的关键标识符，并对比 git diff 计算覆盖率（coverage_ratio）。低于阈值返回 passed=false。
-    call_template:
-      tool: ritsu_contract_validate
-      params:
-        min_coverage: 0.8
-        cached: false
-      example:
-        min_coverage: 0.8
-        cached: false
-    input:
-      min_coverage:
-        type: number
-        required: false
-        description: "最低覆盖率阈值（0-1），默认 0.8"
-      cached:
-        type: boolean
-        required: false
-        description: "是否使用 git diff --cached（默认 false）"
-      artifact_path:
-        type: string
-        required: false
-        description: "显式指定契约产物路径（推荐）。为空则自动选择实施契约来源：最新 handoff；若无则回退到 design-sheet"
-      handoff_path:
-        type: string
-        required: false
-        description: "兼容旧调用的别名。语义等同 artifact_path"
-    output_schema:
-      type: object
-      required: [passed, coverage_ratio, expected_total, artifact_path]
-      properties:
-        passed: { type: boolean }
-        min_coverage: { type: number }
-        coverage_ratio: { type: number }
-        expected_total: { type: integer }
-        covered: { type: array, items: { type: string } }
-        missing: { type: array, items: { type: string } }
-        artifact_path:
-          type: string
-          description: "当前主字段。实际参与本次契约校验的产物路径。"
-        artifact_type:
-          type: string
-          description: "产物类型（如 design-sheet / dev-report / assurance-sheet；非主产物如 handoff 保持原名）。"
-        canonical_type:
-          type: string
-          description: "兼容字段。对应的 canonical 产物类型（如 intake-ticket / delivery-plan / delivery-report / assurance-report / release-advice 已废弃，仅用于读取旧记录）。"
-        detected_type:
-          type: string
-          description: "兼容调试字段。实际从文件名前缀识别到的产物类型；旧文件可能与 artifact_type 不同。"
-        handoff_path:
-          type: string
-          description: "兼容旧调用方的历史字段名。当前语义等同 artifact_path，不保证产物类型一定为 handoff。"
-        cached: { type: boolean }
-
-  - name: ritsu_build_kg
-    description: 构建 Project Knowledge Graph（TS/JS）。抽取模块依赖（import/require）与 symbol 定义/引用关系，写入 .ritsu/kg.json，供影响分析使用。
-    call_template:
-      tool: ritsu_build_kg
-      params:
-        max_files: 2000
-      example:
-        max_files: 2000
-    input:
-      max_files:
-        type: number
-        required: false
-        description: "最多扫描文件数（默认 2000，上限 5000）"
-    output_schema:
-      type: object
-      required: [written, path, files_total, symbols_total, edges_total]
-      properties:
-        written: { type: boolean }
         path: { type: string }
-        files_total: { type: integer }
-        symbols_total: { type: integer }
-        edges_total: { type: integer }
-        generated_at: { type: string }
-
-  - name: ritsu_query_kg
-    description: 查询 Project Knowledge Graph（影响分析）。支持 impact（反向依赖闭包）、deps（正向依赖闭包）、symbol（查符号的调用方）。
-    call_template:
-      tool: ritsu_query_kg
-      params:
-        mode: "impact"
-        target: "src/foo.ts"
-        depth: 3
-      example:
-        mode: "impact"
-        target: "src/foo.ts"
-        depth: 3
-    input:
-      mode:
-        type: enum
-        values: [impact, deps, symbol]
-        required: false
-        description: "查询模式（默认 impact）"
-      target:
-        type: string
-        required: false
-        description: "目标文件路径（相对项目根）"
-      depth:
-        type: number
-        required: false
-        description: "BFS 深度（默认 3，上限 10）"
-      top_n:
-        type: number
-        required: false
-        description: "返回的 impacted/deps 截断数量（默认 15，上限 50）"
-      symbol:
-        type: string
-        required: false
-        description: "当 mode=symbol 时必填"
-    output_schema:
-      type: object
-      properties:
-        mode: { type: string }
-        target: { type: string }
-        depth: { type: integer }
-        impacted: { type: array, items: { type: string } }
-        impacted_count: { type: integer }
-        deps: { type: array, items: { type: string } }
-        deps_count: { type: integer }
-        paths:
-          type: array
-          description: "可解释的最短链路列表"
-          items:
-            type: object
-            properties:
-              node: { type: string }
-              path: { type: array, items: { type: string } }
-        symbol: { type: string }
-        defined_in: { type: string }
-        callers: { type: array, items: { type: string } }
-        callers_count: { type: integer }
-        kg_generated_at: { type: string }
-
-  - name: ritsu_env_probe
-    description: 环境嗅探（Self-Healing Sandbox MVP）。检查 git/worktree 可用性、node 版本、.ritsu 临时目录可写性，以及 .env/.env.example 键缺失情况。仅做只读探测。
-    call_template:
-      tool: ritsu_env_probe
-      params: {}
-    input: {}
-    output_schema:
-      type: object
-      required: [project_root, tools, git, sandbox]
-      properties:
-        project_root: { type: string }
-        platform: { type: string }
-        arch: { type: string }
-        tools:
-          type: object
-          properties:
-            git:
-              type: object
-              properties:
-                ok: { type: boolean }
-                output: { type: string }
-            node:
-              type: object
-              properties:
-                ok: { type: boolean }
-                output: { type: string }
-        git:
-          type: object
-          properties:
-            is_inside_work_tree: { type: string }
-            worktree_list_ok: { type: boolean }
-            worktree_list: { type: string }
-        sandbox:
-          type: object
-          properties:
-            ritsu_dir: { type: string }
-            temp_dir: { type: string }
-            ritsu_dir_writable: { type: boolean }
-            temp_dir_writable: { type: boolean }
-        has_env_example: { type: boolean }
-        has_env: { type: boolean }
-        expected_env_keys: { type: array, items: { type: string } }
-        missing_env_keys: { type: array, items: { type: string } }
-
-  - name: ritsu_sandbox_prepare
-    description: 创建 Git worktree 沙盒（Self-Healing Sandbox MVP）。在 .ritsu/temp/{correlation_id} 下创建一个 detach worktree，用于隔离执行与自愈尝试。
-    call_template:
-      tool: ritsu_sandbox_prepare
-      params:
-        correlation_id: "{cid}"
-        base_ref: "HEAD"
-      example:
-        correlation_id: "cid-20260511-001"
-        base_ref: "HEAD"
-    input:
-      correlation_id:
-        type: string
-        required: true
-        description: "任务链路关联 ID，用作沙盒目录名"
-      base_ref:
-        type: string
-        required: false
-        description: "worktree 基线引用（默认 HEAD）"
-    output_schema:
-      type: object
-      required: [ok, sandbox_path, base_ref]
-      properties:
-        ok: { type: boolean }
-        sandbox_path: { type: string }
-        base_ref: { type: string }
-
-  - name: ritsu_sandbox_exec
-    description: 在 Git worktree 沙盒中执行命令（Self-Healing Sandbox MVP）。复用 ritsu_exec 的安全边界（白名单二进制 + shell 元字符拦截 + 危险参数/残余黑名单），且不经 shell 解释。
-    call_template:
-      tool: ritsu_sandbox_exec
-      params:
-        correlation_id: "{cid}"
-        command: "{命令}"
-      example:
-        correlation_id: "cid-20260511-001"
-        command: "git status --porcelain"
-    input:
-      correlation_id:
-        type: string
-        required: true
-        description: "任务链路关联 ID，对应 .ritsu/temp/{correlation_id}"
-      command:
-        type: string
-        required: true
-        description: "要执行的命令（单命令，不支持管道/重定向）"
-      max_output_lines:
-        type: integer
-        required: false
-        description: "最大输出行数（默认 200）"
-      timeout_ms:
-        type: integer
-        required: false
-        description: "超时毫秒数（默认 30000）"
-      max_buffer_mb:
-        type: integer
-        required: false
-        description: "最大输出缓冲 MB（默认 10）"
-    safety_boundary: "三层防护：shell 元字符阻断（管道/重定向/子shell）+ 白名单二进制 + 危险参数/用法黑名单"
-    output_schema:
-      type: object
-      required: [ok, output, cwd]
-      properties:
-        ok: { type: boolean }
-        output: { type: string }
-        cwd: { type: string }
-
-  - name: ritsu_sandbox_cleanup
-    description: 清理 Git worktree 沙盒（Self-Healing Sandbox MVP）。移除 .ritsu/temp/{correlation_id} worktree 并删除目录，幂等。
-    call_template:
-      tool: ritsu_sandbox_cleanup
-      params:
-        correlation_id: "{cid}"
-      example:
-        correlation_id: "cid-20260511-001"
-    input:
-      correlation_id:
-        type: string
-        required: true
-        description: "任务链路关联 ID，对应 .ritsu/temp/{correlation_id}"
-    output_schema:
-      type: object
-      required: [ok, removed, sandbox_path]
-      properties:
-        ok: { type: boolean }
-        removed: { type: boolean }
-        sandbox_path: { type: string }
-        warning: { type: string }
-
-  - name: ritsu_ts_check
-    description: TypeScript/JavaScript 编译上下文静态检查（工程友好）。在项目根目录运行 tsc --noEmit（不产出文件），返回结构化 diagnostics。用于替代 grep 的“存在性校验”，升级为编译器级签名/类型校验。
-    call_template:
-      tool: ritsu_ts_check
-      params:
-        tsconfig_path: "tsconfig.json"
-        max_diagnostics: 50
-        timeout_ms: 60000
-      example:
-        tsconfig_path: "tsconfig.json"
-        max_diagnostics: 50
-        timeout_ms: 60000
-    input:
-      tsconfig_path:
-        type: string
-        required: false
-        description: "tsconfig.json 路径（相对项目根，默认 tsconfig.json）"
-      max_diagnostics:
-        type: integer
-        required: false
-        description: "最多返回的诊断条数（默认 50，上限 200）"
-      timeout_ms:
-        type: integer
-        required: false
-        description: "超时毫秒数（默认 60000，上限 120000）"
-    output_schema:
-      type: object
-      required: [passed, diagnostics, diagnostics_count, tsconfig_path]
-      properties:
-        passed: { type: boolean }
-        tsconfig_path: { type: string }
-        diagnostics_count: { type: integer }
-        diagnostics:
-          type: array
-          items:
-            type: object
-            properties:
-              file: { type: string }
-              line: { type: integer }
-              col: { type: integer }
-              code: { type: string }
-              message: { type: string }
-        raw_output: { type: string }
-        truncated: { type: boolean }
-
-  - name: ritsu_ts_symbol_query
-    description: TypeScript/JavaScript 符号查询（工程友好，基于 TypeScript 编译器 API）。返回符号的定义位置、推导类型/签名，以及部分引用位置（带上下文片段）。用于将 AP-2 的签名级校验从 grep 升级为类型系统查询。
-    call_template:
-      tool: ritsu_ts_symbol_query
-      params:
-        symbol: "{identifier}"
-        tsconfig_path: "tsconfig.json"
-        max_definitions: 10
-        max_references: 20
-      example:
-        symbol: "ritsu_exec"
-        tsconfig_path: "tsconfig.json"
-        file_hint: "src/handlers/exec.ts"
-        max_definitions: 10
-        max_references: 20
-    input:
-      symbol:
-        type: string
-        required: true
-        description: "要查询的符号名（identifier），如 ritsu_exec / useFoo / SomeType"
-      tsconfig_path:
-        type: string
-        required: false
-        description: "tsconfig.json 路径（相对项目根，默认 tsconfig.json）"
-      file_hint:
-        type: string
-        required: false
-        description: "可选：将扫描范围限定到指定文件（相对项目根），用于降低噪声与加速"
-      max_definitions:
-        type: integer
-        required: false
-        description: "最多返回的定义条数（默认 10，上限 50）"
-      max_references:
-        type: integer
-        required: false
-        description: "最多返回的引用条数（默认 20，上限 200）"
-    output_schema:
-      type: object
-      required: [symbol, tsconfig_path, definitions, references]
-      properties:
-        symbol: { type: string }
-        tsconfig_path: { type: string }
-        file_hint: { type: string }
-        definitions_count: { type: integer }
-        references_count: { type: integer }
-        definitions:
-          type: array
-          items:
-            type: object
-            properties:
-              name: { type: string }
-              kind: { type: string }
-              signature: { type: string }
-              type: { type: string }
-              location:
-                type: object
-                properties:
-                  file: { type: string }
-                  line: { type: integer }
-                  col: { type: integer }
-        references:
-          type: array
-          items:
-            type: object
-            properties:
-              context: { type: string }
-              location:
-                type: object
-                properties:
-                  file: { type: string }
-                  line: { type: integer }
-                  col: { type: integer }
-
-  - name: ritsu_semantic_index_build
-    description: 构建/增量更新 .ritsu 语义索引（本地向量化记忆，Phase-1 MVP）。扫描主产物（design-sheet / dev-report / assurance-sheet）与过程证据（handoff / diagnosis / optimize-report），将内容分块并生成 embeddings，写入 .ritsu/semantic-index.json。
-    call_template:
-      tool: ritsu_semantic_index_build
-      params:
-        chunk_size: 1200
-        chunk_overlap: 200
-        max_files: 200
-      example:
-        chunk_size: 1200
-        chunk_overlap: 200
-        max_files: 200
-    input:
-      chunk_size:
-        type: integer
-        required: false
-        description: "分块字符数（默认 1200，上限 4000）"
-      chunk_overlap:
-        type: integer
-        required: false
-        description: "分块重叠字符数（默认 200，上限 1000）"
-      max_files:
-        type: integer
-        required: false
-        description: "最多扫描文件数（默认 200，上限 2000）"
-    output_schema:
-      type: object
-      required: [ok, index_path, embedder_model, entries_total, entries_added]
-      properties:
-        ok: { type: boolean }
-        index_path: { type: string }
-        embedder_model: { type: string }
-        generated_at: { type: string }
-        files_scanned: { type: integer }
-        entries_total: { type: integer }
-        entries_added: { type: integer }
-        entries_reused: { type: integer }
-        dim: { type: integer }
-
-  - name: ritsu_semantic_search
-    description: 在 .ritsu 语义索引中进行语义检索（本地向量化记忆，Phase-1 MVP）。返回 top-k 匹配片段、分数与文件路径，用于时空回溯与类似问题召回。
-    call_template:
-      tool: ritsu_semantic_search
-      params:
-        query: "{natural_language_query}"
-        top_k: 5
-        types: [design-sheet, dev-report, assurance-sheet, handoff, diagnosis]
-      example:
-        query: "CI 里 vitest 报错但本地不报"
-        top_k: 5
-        types: [dev-report, delivery-report, diagnosis]
-    input:
-      query:
-        type: string
-        required: true
-        description: "自然语言查询（必填）"
-      top_k:
-        type: integer
-        required: false
-        description: "返回匹配条数（默认 5，上限 50）"
-      types:
-        type: list
-        required: false
-        description: "产物类型过滤。主产物 design-sheet/dev-report/assurance-sheet；另支持 handoff/diagnosis/optimize-report。为空表示全部"
-      layers:
-        type: list
-        required: false
-        description: "产物层级过滤（primary/evidence/compatibility/system），为空表示全部"
-      chunk_size:
-        type: integer
-        required: false
-        description: "用于生成 snippet 的分块大小（默认 1200）"
-      chunk_overlap:
-        type: integer
-        required: false
-        description: "用于生成 snippet 的分块重叠（默认 200）"
-    output_schema:
-      type: object
-      required: [ok, query, matches]
-      properties:
-        ok: { type: boolean }
-        query: { type: string }
-        top_k: { type: integer }
-        index_path: { type: string }
-        embedder_model: { type: string }
-        total_index_entries: { type: integer }
-        matches:
-          type: array
-          items:
-            type: object
-            properties:
-              score: { type: number }
-              path: { type: string }
-              artifact_type:
-                type: string
-                description: "对外返回的首选产物类型别名。传入兼容旧名过滤时，结果也会统一归一到别名。"
-              canonical_type:
-                type: string
-                description: "对应的 canonical 产物类型。用于与历史旧名或底层 schema key 对账。"
-              artifact_layer: { type: string }
-              chunk_index: { type: integer }
-              heading: { type: string }
-              snippet: { type: string }
-
-  - name: ritsu_semantic_graph_rerank
-    description: Vectorized Graph RAG（MVP）：在语义索引的候选上叠加 KG 相关性重排。语义相似度为主，KG 关联（基于 .ritsu/kg.json 的最短链路深度）为辅，用于把“相似”且“与当前关注文件/模块相关”的历史记录排到更前。
-    call_template:
-      tool: ritsu_semantic_graph_rerank
-      params:
-        query: "{natural_language_query}"
-        top_k: 5
-        types: [dev-report, assurance-sheet]
-        focus_paths: ["{可选: 当前错误涉及的文件路径}"]
-        semantic_weight: 0.7
-        kg_weight: 0.3
-        kg_depth: 4
-      example:
-        query: "CI 与本地不一致，怀疑缓存污染"
-        top_k: 5
-        types: [dev-report, delivery-report, diagnosis]
-        focus_paths: ["src/app/app.tsx"]
-        semantic_weight: 0.7
-        kg_weight: 0.3
-        kg_depth: 4
-    input:
-      query:
-        type: string
-        required: true
-        description: "自然语言查询（必填）"
-      top_k:
-        type: integer
-        required: false
-        description: "返回匹配条数（默认 5，上限 50）"
-      types:
-        type: list
-        required: false
-        description: "产物类型过滤。主产物 design-sheet/dev-report/assurance-sheet；另支持 handoff/diagnosis/optimize-report。为空表示全部"
-      layers:
-        type: list
-        required: false
-        description: "产物层级过滤（primary/evidence/compatibility/system），为空表示全部"
-      focus_paths:
-        type: list
-        required: false
-        description: "当前关注的文件路径（相对项目根）。用于 KG 相关性计算（可为空）"
-      semantic_weight:
-        type: number
-        required: false
-        description: "语义相似度权重（默认 0.7）"
-      kg_weight:
-        type: number
-        required: false
-        description: "KG 相关性权重（默认 0.3）"
-      kg_depth:
-        type: integer
-        required: false
-        description: "KG BFS 最大深度（默认 4，上限 10）"
-      chunk_size:
-        type: integer
-        required: false
-        description: "用于生成 snippet 的分块大小（默认 1200）"
-      chunk_overlap:
-        type: integer
-        required: false
-        description: "用于生成 snippet 的分块重叠（默认 200）"
-    output_schema:
-      type: object
-      required: [ok, query, matches]
-      properties:
-        ok: { type: boolean }
-        query: { type: string }
-        top_k: { type: integer }
-        focus_paths:
-          type: array
-          items: { type: string }
-        index_path: { type: string }
-        kg_path: { type: string }
-        embedder_model: { type: string }
-        semantic_weight: { type: number }
-        kg_weight: { type: number }
-        kg_depth: { type: integer }
-        total_index_entries: { type: integer }
-        matches:
-          type: array
-          items:
-            type: object
-            properties:
-              score: { type: number }
-              semantic_score: { type: number }
-              kg_score: { type: number }
-              path: { type: string }
-              artifact_type:
-                type: string
-                description: "对外返回的首选产物类型别名。传入兼容旧名过滤时，结果也会统一归一到别名。"
-              canonical_type:
-                type: string
-                description: "对应的 canonical 产物类型。用于与历史旧名或底层 schema key 对账。"
-              artifact_layer: { type: string }
-              chunk_index: { type: integer }
-              heading: { type: string }
-              snippet: { type: string }
-              kg_best_path:
-                type: array
-                items: { type: string }
+        ritsu_version: { type: string }
+        domain: { type: string }
+        tech_fingerprints: { type: array }
 
   - name: ritsu_write_artifact
-    description: 写入产物文件到 .ritsu/ 目录。当前运行时支持主产物（design-sheet / dev-report / assurance-sheet）与过程证据（handoff / diagnosis / optimize-report），自动拦截含占位符的写入。所有产物统一 Markdown 格式
+    description: 写入产物文件到 .ritsu/ 目录。支持 design-sheet/design-brief/dev-report/assurance-sheet/diagnosis。
     call_template:
       tool: ritsu_write_artifact
       params:
-        type: "{design-sheet|dev-report|assurance-sheet|handoff|diagnosis|optimize-report}"
-        filename: "{文件名}"
-        content: "{内容}"
-      example:
-        type: "dev-report"
-        filename: "dev-report-20260511-auth.md"
-        content: |
-          # Dev Report
-
-          ## 交付摘要
-          - 模式: standard
-          - 任务目标: 登录态持久化与自动续期
-          - 实施结果: 已完成续期逻辑与状态持久化
-          - 验证结果: 单测通过，质量门禁通过
-
-          ## 变更与风险
-          - 主要产出: auth session 持久化代码与测试
-          - 已知风险: 旧 token 清理仍依赖定时任务
-          - 下一步: 进入 review
+        type: "{type}"
+        filename: "{filename}"
+        content: "{content}"
     input:
       type:
         type: enum
-        values: [design-sheet, dev-report, assurance-sheet, handoff, diagnosis, optimize-report]
+        values: [design-sheet, design-brief, dev-report, assurance-sheet, diagnosis]
         required: true
-        description: "当前运行时支持的产物类型"
-      filename:
-        type: string
-        required: true
-        description: "文件名（如 dev-report-20260511-auth.md；兼容旧名前缀）"
-      content:
-        type: string
-        required: true
-        description: "文件内容（Markdown 格式）。主产物优先遵循 _shared/artifact-templates.md；兼容旧名写入时也应满足同一模板要求"
-      artifact_meta:
-        type: object
-        required: false
-        description: "产物元数据（可传 summary；返回值会规范化补齐 type/canonical_type/layer/size_bytes）"
-    placeholder_check: "自动检测并拒绝写入含占位符模式的产物（ctx 类型豁免）：TODO/待定/暂不处理/后续补充（=AP-6）。若 artifact-schema.yaml 为该类型定义了 required_sections，运行时会校验章节与字段标签存在。幻觉路径和未验证标识符属于 AI 行为层约束，由 SKILL.md HC 规则执行，工具层不拦截"
+      filename: { type: string, required: true }
+      content: { type: string, required: true }
+      artifact_meta: { type: object, required: false }
     output_schema:
       type: object
       required: [path, size_bytes]
       properties:
-        path:
-          type: string
-          description: "写入文件绝对路径"
-        size_bytes:
-          type: integer
-          description: "文件大小"
-        artifact_meta:
-          type: object
-          description: "产物元数据。返回时至少包含 type/canonical_type/layer/size_bytes；若调用时提供 summary 会原样保留"
-    error_shape:
-      type: object
-      description: "当 isError=true 时，常见写入拒绝、底层原子写入失败与 artifact schema 校验失败都会返回该 JSON"
-      properties:
-        error:
-          type: object
-          properties:
-            type: { type: string }
-            message: { type: string }
-            violations:
-              type: array
-              items:
-                type: object
-                properties:
-                  code: { type: string }
-                  severity:
-                    type: string
-                    description: "当前固定为 error"
-                  path:
-                    type: string
-                    description: "定位 artifact 内失败层级，例如 artifact.sections.<section>.fields.<label>"
-                  artifact_type: { type: string }
-                  message: { type: string }
-                  expected:
-                    type: array
-                    items: { type: string }
-                  actual:
-                    type: array
-                    items: { type: string }
+        path: { type: string }
+        size_bytes: { type: integer }
 
   - name: ritsu_list_artifacts
-    description: 列出 .ritsu/ 目录下的产物文件。当前支持按主产物（design-sheet / dev-report / assurance-sheet）与过程证据（handoff / diagnosis / optimize-report / ctx）过滤
+    description: 列出 .ritsu/ 目录下的产物文件。
     call_template:
       tool: ritsu_list_artifacts
       params:
-        type: "{类型或all}"
-      example:
-        type: "dev-report"
+        type: "all"
     input:
-      type:
-        type: string
-        required: false
-        description: "产物类型过滤。可传 all；主产物 design-sheet/dev-report/assurance-sheet；另支持 handoff/diagnosis/optimize-report/ctx。默认 all"
+      type: { type: string, required: false }
     output_schema:
       type: object
       required: [files, total_count]
       properties:
-        files:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string }
-              modified: { type: string }
-              size_bytes: { type: integer }
-              artifact_type:
-                type: string
-                description: "对外返回的首选产物类型别名。"
-              canonical_type:
-                type: string
-                description: "对应的 canonical 产物类型。"
-              detected_type:
-                type: string
-                description: "实际从文件名前缀识别到的产物类型。"
-              artifact_layer: { type: string }
-        total_count:
-          type: integer
+        files: { type: array }
+        total_count: { type: integer }
 
   - name: ritsu_exec
-    description: 在项目根目录直接执行命令（不经 shell 解释）并返回结构化输出。只支持单命令执行，不支持管道/重定向/子shell。内置安全边界（白名单二进制 + 危险参数拦截 + shell 元字符阻断）和输出截断。需要管道时请多次调用
+    description: 在项目根目录执行单命令（内置安全边界）。
     call_template:
       tool: ritsu_exec
       params:
         command: "{命令}"
-      example:
-        command: "git diff --name-only"
     input:
-      command:
-        type: string
-        required: true
-        description: "要执行的命令（单命令，不支持管道/重定向）"
-      max_output_lines:
-        type: integer
-        required: false
-        description: "最大输出行数（默认 200）"
-      timeout_ms:
-        type: integer
-        required: false
-        description: "超时毫秒数（默认 30000）"
-    safety_boundary: "三层防护：shell 元字符阻断（管道/重定向/子shell）+ 白名单二进制 + 危险参数/用法黑名单"
+      command: { type: string, required: true }
+      max_output_lines: { type: integer, required: false }
+      timeout_ms: { type: integer, required: false }
     output_schema:
       type: object
       required: [ok, output]
       properties:
-        ok:
-          type: boolean
-          description: "命令是否成功（exit code 0）"
-        output:
-          type: string
-          description: "命令输出（截断后）"
+        ok: { type: boolean }
+        output: { type: string }
 
   - name: ritsu_get_changed_files
-    description: 获取 Git 工作区和暂存区的变更文件列表，自动推断领域。返回每个变更文件的路径、状态、扩展名，以及基于文件后缀的领域推断结果。替代 ritsu_exec("git diff --name-only") 的裸命令调用
+    description: 获取 Git 变更文件列表。
     call_template:
       tool: ritsu_get_changed_files
       params:
         staged: true
         unstaged: true
     input:
-      staged:
-        type: boolean
-        required: false
-        description: "是否包含暂存区变更（默认 true）"
-      unstaged:
-        type: boolean
-        required: false
-        description: "是否包含未暂存变更（默认 true）"
+      staged: { type: boolean, required: false }
+      unstaged: { type: boolean, required: false }
     output_schema:
       type: object
       required: [files, total, domain_hint]
       properties:
-        files:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string }
-              status: { type: string }
-              extension: { type: string }
-        total:
-          type: integer
-        domain_hint:
-          type: string
+        files: { type: array }
+        total: { type: integer }
+        domain_hint: { type: string }
 
   - name: ritsu_get_diff
-    description: 获取 Git diff 的结构化分析结果。包含文件级统计、新增标识符提取、完整 diff 文本。替代 ritsu_exec("git diff") 的裸命令调用，是 review 阶段以及兼容旧记录读取时的核心数据源
+    description: 获取 Git diff 结构化分析。
     call_template:
       tool: ritsu_get_diff
       params:
         cached: false
     input:
-      cached:
-        type: boolean
-        required: false
-        description: "是否查看暂存区 diff（默认 false）"
-      max_output_lines:
-        type: integer
-        required: false
-        description: "diff 文本最大行数（默认 500）"
+      cached: { type: boolean, required: false }
+      max_output_lines: { type: integer, required: false }
     output_schema:
       type: object
-      required: [files, total_files, new_identifiers, diff]
+      required: [files, total_files, diff]
       properties:
-        files:
-          type: array
-          items:
-            type: object
-            properties:
-              path: { type: string }
-              additions: { type: integer }
-              deletions: { type: integer }
-              patch_summary: { type: string }
-        total_files:
-          type: integer
-        new_identifiers:
-          type: array
-          items:
-            type: object
-            properties:
-              name: { type: string }
-              file: { type: string }
-              line: { type: integer }
-        diff:
-          type: string
-        truncated:
-          type: boolean
+        files: { type: array }
+        total_files: { type: integer }
+        diff: { type: string }
 
   - name: ritsu_run_quality_gates
-    description: 执行项目 Lint 和 Test 质量门禁，返回结构化结果。自动从 AGENTS.md 或 package.json 解析命令。测试失败时解析失败用例列表。替代 ritsu_exec("npm run lint") + ritsu_exec("npm test") 的裸命令调用
+    description: 执行项目质量门禁（Lint + Test）。
     call_template:
       tool: ritsu_run_quality_gates
       params:
         skip_lint: false
         skip_test: false
     input:
-      skip_lint:
-        type: boolean
-        required: false
-        description: "跳过 Lint 检查（默认 false）"
-      skip_test:
-        type: boolean
-        required: false
-        description: "跳过 Test 检查（默认 false）"
-      timeout_ms:
-        type: integer
-        required: false
-        description: "超时毫秒数（默认 60000）"
+      skip_lint: { type: boolean, required: false }
+      skip_test: { type: boolean, required: false }
+      timeout_ms: { type: integer, required: false }
     output_schema:
       type: object
       required: [passed, lint, test]
       properties:
-        passed:
-          type: boolean
-          description: "Lint + Test 是否全部通过"
-        lint:
-          type: object
-          properties:
-            passed: { type: boolean }
-            output: { type: string }
-        test:
-          type: object
-          properties:
-            passed: { type: boolean }
-            total: { type: integer }
-            failures:
-              type: array
-              items:
-                type: object
-                properties:
-                  suite: { type: string }
-                  test: { type: string }
-                  error: { type: string }
-                  file_hint: { type: string }
-            output: { type: string }
+        passed: { type: boolean }
+        lint: { type: object }
+        test: { type: object }
+
+  - name: ritsu_contract_validate
+    description: 契约测试。校验实施清单与变更的一致性。
+    call_template:
+      tool: ritsu_contract_validate
+      params:
+        min_coverage: 0.8
+    input:
+      min_coverage: { type: number, required: false }
+      cached: { type: boolean, required: false }
+      artifact_path: { type: string, required: false }
+    output_schema:
+      type: object
+      required: [passed, coverage_ratio, artifact_path]
+      properties:
+        passed: { type: boolean }
+        coverage_ratio: { type: number }
+        artifact_path: { type: string }
+
+  - name: ritsu_kg_query
+    description: 查询或更新项目知识图谱（Influence Analysis）。支持 impact/deps/symbol。
+    call_template:
+      tool: ritsu_kg_query
+      params:
+        action: "query"
+        mode: "impact"
+        target: "src/foo.ts"
+    input:
+      action:
+        type: enum
+        values: [query, update]
+        required: true
+      mode:
+        type: enum
+        values: [impact, deps, symbol]
+      target: { type: string }
+      depth: { type: integer }
+    output_schema:
+      type: object
+      properties:
+        impacted: { type: array, items: { type: string } }
+        deps: { type: array, items: { type: string } }
+        paths: { type: array, items: { type: object } }
+
+  - name: ritsu_ts_check
+    description: TypeScript/JavaScript 编译上下文静态检查。运行 tsc --noEmit。
+    call_template:
+      tool: ritsu_ts_check
+      params:
+        tsconfig_path: "tsconfig.json"
+    input:
+      tsconfig_path: { type: string, required: false }
+      max_diagnostics: { type: integer, required: false }
+    output_schema:
+      type: object
+      required: [passed, diagnostics]
+      properties:
+        passed: { type: boolean }
+        diagnostics: { type: array }
+
+
+  - name: ritsu_read_preferences
+    description: 读取项目级用户偏好（从历史 review 中学习到的规则）。
+    call_template:
+      tool: ritsu_read_preferences
+    input: {}
+    output_schema:
+      type: object
+      properties:
+        rules: { type: array }
+
+  - name: ritsu_write_preference
+    description: 写入或更新项目级用户偏好。
+    call_template:
+      tool: ritsu_write_preference
+      params:
+        rule: { pattern: "{pattern}", scope: "{scope}" }
+    input:
+      rule:
+        type: object
+        properties:
+          pattern: { type: string, required: true }
+          scope:
+            type: enum
+            values: [coding_style, library_choice, naming_convention, architecture]
+            required: true
+          source: { type: string }
+          auto_inject_to: { type: array }
+          confidence: { type: number }
+    output_schema:
+      type: object
+      properties:
+        ok: { type: boolean }
+        id: { type: string }
+        matches: { type: array }
+
+
+  - name: ritsu_semantic_index_build
+    description: 构建或更新项目的语义搜索索引。扫描所有产物并生成嵌入向量。
+    call_template:
+      tool: ritsu_semantic_index_build
+    input:
+      chunk_size: { type: integer, default: 1200 }
+      chunk_overlap: { type: integer, default: 200 }
+    output_schema:
+      type: object
+      properties:
+        ok: { type: boolean }
+        path: { type: string }
+        total_entries: { type: integer }
+
+  - name: ritsu_semantic_search
+    description: 在项目索引中进行语义检索。用于类似问题召回。
+    call_template:
+      tool: ritsu_semantic_search
+      params:
+        query: "{query}"
+        top_k: 5
+    input:
+      query: { type: string, required: true }
+      top_k: { type: integer, required: false }
+      types: { type: list, required: false }
+    output_schema:
+      type: object
+      required: [ok, query, matches]
+      properties:
+        ok: { type: boolean }
+        query: { type: string }
+        matches: { type: array }

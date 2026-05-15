@@ -1,50 +1,56 @@
 ---
 name: dev
-version: "4.1.0"
-description: "Ritsu 开发实现入口。根据已确认的《设计单 (Design Sheet)》完成代码实现与验证。"
-when_to_use: "/r-dev, 写代码, 开发, 修复 bug, 开始实现"
+version: "5.0.0"
+description: "Ritsu 开发实现入口。根据任务等级自动选择最优执行路径。"
+when_to_use: "/r-dev, 写代码, 开发, 修复 bug, 开始实现, 改一下, 调整"
 total_steps: 5
 ---
 
-# Dev: 高保真代码实现与交付
-11: 
-12: **触发条件**：用户输入 `/r-dev`。
-13: 
-14: ## 执行流水线
-15: 
-16: ### 1. 目标对账与技术栈感知 (Stack Perception)
-17: 
-18: > 引用 `_shared/skill-common-steps.md` Step 0
-19: 
-20: 自动关联最新的 **`design-sheet`**：
-21: - **技术栈感知**：识别项目指纹，自动切换至对应的资深专家人格（Persona）。
-22: - **纪律对齐**：根据技术栈加载对应的 `coding_disciplines` 和 `optimize_disciplines`。
-23: - 确认交付目标、范围和精准的实施清单。
-24: 
-25: ### 2. 地道化编码实现 (Idiomatic Implementation)
-26: 
-27: 严格服从 `design-sheet` 并执行领域纪律：
-28: - **高保真实现**：代码风格、工具库选择、异步模式必须与领域 YAML 定义 100% 对齐。
-29: - **HC-1 (引用安全)**：所有引用标识符前必须通过 grep/semantic 校验存在性。
-30: - **HC-2 (零占位符)**：严禁使用 `// TODO`、`...` 或任何逻辑占位符。
-31: - **HC-3 (范围控制)**：严禁擅自修改 `design-sheet` 之外的代码或扩大实施范围。
-32: 
-33: ### 3. 质量门禁 (Quality Gates)
-34: 
-35: 在交付前执行验证：
-36: - 运行 `ritsu_run_quality_gates` 或对应的本地构建/Lint 命令。
-37: - 如果失败，优先在 `dev` 阶段解决；若原因不明，建议转入 `hunt`。
-38: 
-39: ### 4. 交付回执 (Dev Report)
-40: 
-41: 产出 **`dev-report`**：
-42: - 记录实施结果、主要变更。
-43: - **纪律合规确认**：显式确认是否遵守了对应的技术栈专项纪律（如：已完成 Tailwind 迁移、已包裹事务）。
+# Dev: 自适应代码实现与交付
 
-### 5. 摘要与建议
+**触发条件**：用户输入 `/r-dev`，或自动路由判定为开发任务。
 
-> 引用 `_shared/skill-common-steps.md` Step 4（skill=dev）
+## 执行流水线
 
-**强制引导语**：
-- 在输出摘要后，明确告知用户开发已完成。
-- **示例**：“代码已实现并完成质量自测。建议运行 `/r-review` 进行最终验收。”
+### 0. 分级判定
+
+> 引用 `_shared/skill-common-steps.md` Step 0
+
+判定完成后，按等级分叉：
+
+---
+
+### 🟢 Micro 路径 (P0)
+
+**准入条件**: 变更 < 20 LoC，单文件，无逻辑架构变动。
+
+1. **直接编码**: 根据用户描述直接修改代码。遵循 HC-1 (引用安全) 和 HC-2 (零占位符)。
+2. **质量验证**: 运行 lint 或 type check。
+3. **一句话回复**: "已完成。修改了 `{文件}` 的 {N} 行。" — 结束，无产物，无 ctx。
+
+---
+
+### 🟡 Standard 路径 (P1)
+
+**准入条件**: 常规需求，多文件联动，有 design-brief 或 design-sheet。
+
+1. **目标对账**: 读取 `design-brief` 或 `design-sheet`，确认实施清单。
+2. **技术栈感知**: 识别项目指纹，加载对应领域纪律。
+3. **偏好加载**: 若 `.ritsu/preferences.yaml` 存在，读取并遵循项目偏好（如：优先使用 ahooks、组件拆分粒度等）。
+4. **编码实现**: 服从设计文档并执行领域纪律 (HC-1/HC-2/HC-3)。
+5. **质量门禁**: 运行 `ritsu_run_quality_gates`。
+6. **交付摘要**: 输出变更概要和下一步建议。产出轻量 `dev-report`。
+
+---
+
+### 🔴 Critical 路径 (P2)
+
+**准入条件**: 架构变更、基础组件修改、跨模块重构。
+
+1. **完整对账**: `ritsu_read_ctx` + 关联 `design-sheet` + `emit_event(started)`。
+2. **技术栈感知**: 识别项目指纹，自动切换资深专家人格。
+3. **偏好加载**: 读取 `.ritsu/preferences.yaml`。
+4. **高保真实现**: 严格服从 `design-sheet`，代码风格与领域 YAML 100% 对齐。
+5. **质量门禁**: `ritsu_run_quality_gates` + `ritsu_contract_validate`。
+6. **产物交付**: 产出完整 `dev-report` + `emit_event(done)` + 交付摘要。
+7. **强制引导**: "代码已实现。建议运行 `/r-review` 进行最终验收。"

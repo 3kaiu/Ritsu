@@ -7,6 +7,8 @@ import {
   MAX_TIMEOUT_MS_HARD_LIMIT,
 } from "../shared.js";
 import { getAllowedBinariesForProject } from "../shared.js";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 type ParsedCommand = {
   binary: string;
@@ -143,4 +145,15 @@ export async function runCmdWithCwd(
       resolvePromise({ ok: false, output: err.message });
     });
   });
+}
+
+export function detectStackFingerprints(root: string): string[] {
+  const fingerprints: string[] = [];
+  if (existsSync(join(root, "package.json"))) fingerprints.push("nodejs");
+  if (existsSync(join(root, "go.mod"))) fingerprints.push("go");
+  if (existsSync(join(root, "requirements.txt")) || existsSync(join(root, "pyproject.toml"))) fingerprints.push("python");
+  if (existsSync(join(root, "pubspec.yaml"))) fingerprints.push("flutter");
+  if (existsSync(join(root, "pom.xml")) || existsSync(join(root, "build.gradle"))) fingerprints.push("java");
+  if (existsSync(join(root, "Cargo.toml"))) fingerprints.push("rust");
+  return fingerprints;
 }

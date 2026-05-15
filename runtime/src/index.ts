@@ -29,7 +29,7 @@ async function main() {
   const schemaPath = resolve(__dirname, "../../_shared/ctx-event-schema.json");
   if (existsSync(schemaPath)) {
     const schemaContent = readFileSync(schemaPath, "utf-8");
-    const schemaVersionMatch = schemaContent.match(/v(3\.\d+\.\d+)/);
+    const schemaVersionMatch = schemaContent.match(/v(\d+\.\d+\.\d+)/);
     if (schemaVersionMatch && schemaVersionMatch[1] !== SERVER_VERSION) {
       console.warn(
         `[ritsu-mcp-server] ⚠️  version mismatch: package.json=${SERVER_VERSION} schema=${schemaVersionMatch[1]}`,

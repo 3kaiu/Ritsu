@@ -27,12 +27,9 @@ import {
 const RITSU_DIR = ".ritsu";
 const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
   "design-sheet": "design_sheet",
+  "design-brief": "design_brief",
   "dev-report": "delivery_report",
   "assurance-sheet": "assurance_sheet",
-  handoff: "handoff",
-  diagnosis: "diagnosis",
-  "review-stamp": "review_stamp",
-  "optimize-report": "optimize_report",
 };
 
 type ArtifactSchemaSection = {

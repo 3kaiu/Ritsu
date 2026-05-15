@@ -1,4 +1,4 @@
-# 律 (Ritsu) v4.1.0
+# 律 (Ritsu) v5.0.0
 
 Ritsu 是一套工业级、面向工程交付的 AI 协作标准。它通过**显式阶段 (Explicit Staging)** 与**动态上下文对账 (Context Sync)**，将 AI 的生产力锁定在确定性的交付轨道上。
 
@@ -49,7 +49,7 @@ npx skills add 3kaiu/Ritsu -a claude-code -g -y
 Ritsu/
 ├── skills/     # 显式阶段入口 (think/dev/test/hunt/review)
 ├── runtime/    # MCP 工具执行层 (事件流驱动，无 Flow 依赖)
-├── _shared/    # 统一协议 (Schema v4.1、产物模板、分级规范)
+├── _shared/    # 统一协议 (Schema v5.0、产物模板、分级规范)
 ├── rules/      # 全局工程红线 (anti-patterns.yaml)
 └── domains/    # 领域适配规则 (frontend/backend/fullstack/infra)
 ```

@@ -1,7 +1,7 @@
 {
   "name": "ritsu-mcp-server",
-  "version": "4.1.0",
-  "ritsu_protocol_version": "4.1.0",
+  "version": "5.0.0",
+  "ritsu_protocol_version": "5.0.0",
   "description": "Ritsu MCP Server SDK — 结构化 I/O 原语，供 AI 技能调用",
   "type": "module",
   "main": "dist/index.js",
@@ -22,9 +22,11 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@xenova/transformers": "^2.17.2",
     "ajv": "8.x",
+    "fast-glob": "^3.3.3",
     "js-yaml": "^4.1.0",
     "proper-lockfile": "^4.1.2",
-    "typescript": "^5.8.0"
+    "typescript": "^5.8.0",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

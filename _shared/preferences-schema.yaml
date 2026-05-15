@@ -1,0 +1,14 @@
+# Ritsu 用户偏好 Schema v5.0.0
+# AI 从 review 反馈中自动提取的项目级偏好规则
+
+schema:
+  path: ".ritsu/preferences.yaml"
+  structure:
+    rules:
+      - id: string  # 自动生成 pref-{N}
+        source: string  # 提取来源（如 assurance-sheet 路径）
+        pattern: string  # 偏好描述
+        scope: enum [coding_style, library_choice, naming_convention, architecture]
+        auto_inject_to: list [think, dev, review]  # 自动注入的阶段
+        confidence: number  # 0-1
+        created_at: string

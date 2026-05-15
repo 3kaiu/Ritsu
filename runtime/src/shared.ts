@@ -42,6 +42,7 @@ export interface ArtifactDefinition {
  */
 export const ARTIFACT_REGISTRY: ArtifactDefinition[] = [
   { type: "design-sheet", prefix: "design-sheet-", layer: "primary" },
+  { type: "design-brief", prefix: "design-brief-", layer: "primary" },
   { type: "dev-report", prefix: "dev-report-", layer: "primary" },
   { type: "assurance-sheet", prefix: "assurance-sheet-", layer: "primary" },
   { type: "handoff", prefix: "handoff-", layer: "evidence" },

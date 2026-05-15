@@ -1,12 +1,15 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import fg from "fast-glob";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { cosineSimilarity, getEmbedder } from "./_semantic-embed.js";
 import {
   getCanonicalArtifactType,
   getPreferredArtifactType,
   isArtifactTypeInSameFamily,
+  detectArtifactTypeFromFileName,
+  getArtifactLayer,
 } from "../shared.js";
 
 type IndexEntry = {
@@ -76,6 +79,77 @@ function getSnippetByOffset(path: string, start: number, end: number): string {
   return content.slice(s, e).replace(/\s+/g, " ").trim();
 }
 
+export async function ritsu_semantic_index_build(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const root = getProjectRoot();
+  const chunkSize = Math.min(Number(params.chunk_size ?? 1200), 4000);
+  const overlap = Math.min(Number(params.chunk_overlap ?? 200), 1000);
+
+  const ritsuDir = resolve(root, ".ritsu");
+  if (!existsSync(ritsuDir)) mkdirSync(ritsuDir, { recursive: true });
+
+  const embedder = await getEmbedder();
+  const entries: IndexEntry[] = [];
+
+  // Find all .md files in .ritsu/
+  const files = await fg(["**/*.md"], { cwd: ritsuDir, absolute: true });
+
+  for (const abs of files) {
+    const content = readFileSync(abs, "utf-8");
+    if (!content.trim()) continue;
+
+    const fileName = abs.split("/").pop() ?? "";
+    const type = detectArtifactTypeFromFileName(fileName) || "unknown";
+    const layer = getArtifactLayer(type);
+
+    // Simple chunking logic
+    const step = Math.max(1, chunkSize - overlap);
+    for (let i = 0; i * step < content.length; i++) {
+      const start = i * step;
+      const end = Math.min(content.length, start + chunkSize);
+      const chunk = content.slice(start, end);
+      
+      const embedding = await embedder.embed(chunk);
+      
+      entries.push({
+        id: `${fileName}#${i}`,
+        artifact_type: type,
+        canonical_type: getCanonicalArtifactType(type),
+        artifact_layer: layer,
+        path: `.ritsu/${fileName}`,
+        chunk_index: i,
+        chunk_start: start,
+        chunk_end: end,
+        content_hash: "",
+        embedding,
+        created_at: new Date().toISOString(),
+      });
+
+      if (end >= content.length) break;
+    }
+  }
+
+  const index: SemanticIndexFile = {
+    version: 1,
+    embedder_model: embedder.model_id,
+    dim: entries[0]?.embedding.length ?? 0,
+    entries,
+  };
+
+  const indexPath = resolve(ritsuDir, "semantic-index.json");
+  writeFileSync(indexPath, JSON.stringify(index), "utf-8");
+
+  return textResult(
+    JSON.stringify({
+      ok: true,
+      path: indexPath,
+      total_entries: entries.length,
+      model: embedder.model_id,
+    }),
+  );
+}
+
 export async function ritsu_semantic_search(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
@@ -133,7 +207,6 @@ export async function ritsu_semantic_search(
     const canonicalType =
       e.canonical_type ?? getCanonicalArtifactType(e.artifact_type);
     
-    // Use Float32Array optimized cosine similarity
     const score = cosineSimilarity(q, e.embedding);
     
     matches.push({
