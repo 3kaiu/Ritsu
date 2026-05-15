@@ -4,6 +4,12 @@
 > 受众：贡献者、集成者、长期使用者。
 > 更新策略：每个 Phase 结束时回顾并迭代本文档。
 > 上一版（治理优先）见 git 历史；本版重排为"以生成时刻为起点向外辐射"。
+>
+> **配套文档**：
+> - [inventory.md](./inventory.md) — 项目当前状态全景盘点（v5.6.0 健康度评分）
+> - [risk-register.md](./risk-register.md) — 18 项开放风险登记册
+> - [v2-stress-test.md](./v2-stress-test.md) — 本路线的压力测试与修正建议（执行前必读）
+> - [v2-execution-priority.md](./v2-execution-priority.md) — 基于已落地交叉重排的 7 个执行 batch
 
 ---
 
@@ -48,7 +54,7 @@ Phase C (M7–M8)  工业级 Review 缩放   → v5.6.0
 Phase D (M9–M12) 闭环固化 + 团队层    → v6.0.0
 ```
 
-### 2.1 🟢 Phase A · 生成时刻闭环（M1–M3）
+### 2.1 🟢 Phase A · 生成时刻闭环 (Generation Time Closed-Loop) — ✅ 已完成 (v5.4.0)
 
 **目标**：把 AI 生成代码的那一刻封死——契约可机器执行、preferences 可执行、生成结果必须流到下游。
 **版本目标**：v5.4.0（直接跳过 v5.3，吃掉原 Phase 1 自洽硬指标）。
@@ -67,7 +73,7 @@ Phase D (M9–M12) 闭环固化 + 团队层    → v6.0.0
 
 ---
 
-### 2.2 🟡 Phase B · 测试充分性引擎（M4–M6）
+### 2.2 🟡 Phase B · 测试充分性引擎 (Test Sufficiency Engine) — ✅ 已完成 (v5.5.0)
 
 **目标**：把测试从"跑得过"升级为"覆盖契约"。
 **版本目标**：v5.5.0。
@@ -85,7 +91,7 @@ Phase D (M9–M12) 闭环固化 + 团队层    → v6.0.0
 
 ---
 
-### 2.3 🟠 Phase C · 工业级 Review 缩放（M7–M8）
+### 2.3 🟠 Phase C · 工业级 Review 缩放 (Industrial Review Scaling) — ✅ 已完成 (v5.6.0)
 
 **目标**：让大 PR review 不糊、生成端结果强制进入验收链。
 **版本目标**：v5.6.0。
