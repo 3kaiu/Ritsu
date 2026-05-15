@@ -1,56 +1,109 @@
-# 律 (Ritsu) v5.0.0
+<div align="center">
 
-Ritsu 是一套工业级、面向工程交付的 AI 协作标准。它通过**显式阶段 (Explicit Staging)** 与**动态上下文对账 (Context Sync)**，将 AI 的生产力锁定在确定性的交付轨道上。
+![Ritsu Banner](/Users/edy/.gemini/antigravity/brain/0f136db5-40de-4c8a-96df-7c9bceac80c9/ritsu_banner_1778825867784.png)
 
-## 核心理念：确定性 > 自动化
+# 律 (Ritsu) — 工业级 AI 协作标准
+**Deterministic AI Engineering Lifecycle for High-Stakes Delivery**
 
-在工业级交付中，AI 的“全自动黑盒编排”往往意味着不可控。Ritsu 选择了另一条道路：
+[![CI/CD](https://github.com/3kaiu/Ritsu/actions/workflows/ci.yml/badge.svg)](https://github.com/3kaiu/Ritsu/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/3kaiu/Ritsu/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/3kaiu/Ritsu)
+[![Version](https://img.shields.io/badge/version-5.2.0-blue.svg)](AGENTS.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-green.svg)](package.json)
 
-1.  **阶段显式 (Explicit Staging)**：任务被严格拆分为 `think` (分析), `dev` (开发), `test` (测试), `hunt` (诊断), `review` (验收)。每一阶段都有明确的准入标准和产物契约。
-2.  **分级交付 (Tiered Delivery)**：针对不同风险的任务自动适配流程：
-    - **Micro (P0)**: 修改 < 10 LoC。秒级响应，跳过设计单，直接交付。
-    - **Standard (P1)**: 常规需求。强制产出 `design-sheet`，确保方案经过 AI 内部博弈。
-    - **Critical (P2)**: 架构级变更。强制执行契约校验 (`contract-validate`) 与多维红蓝对抗 Review。
-3.  **产物收敛 (Artifact Consolidation)**：废弃碎片化的文档，所有技术决策收敛于 `design-sheet`，交付结论收敛于 `assurance-sheet`。
-4.  **智能流转 (Context Auto-Sync)**：通过事件流实时计算“任务断点”，实现“断点续传”式的开发体验，无需人为干预上下文对账。
+[快速开始](#-快速开始) • [核心理念](#-核心理念) • [指令集](#-指令参考) • [CLI 工具](#-cli-工具) • [贡献指南](CONTRIBUTING.md)
+
+</div>
 
 ---
 
-## 快速开始
+## ⚡ 核心理念：确定性 > 自动化
 
-### 1. 安装与初始化
+在生产级工程中，AI 的“盲目自动化”是最大的技术风险。**Ritsu** 建立了一套严丝合缝的工程契约，将 AI 的生产力牢牢锁定在确定性的轨道上。
 
+### 🏗️ 四大支柱
+- 🛡️ **显式阶段 (Explicit Staging)**: 严格拆分 `Analyze` → `Implement` → `Verify` → `Review`，每步皆有契约。
+- 📊 **分级交付 (Tiered Delivery)**: 根据任务风险（P0-P2）动态调整工程深度，平衡速度与安全。
+- 🔄 **智能流转 (Stateful Continuity)**: 实时计算“任务断点”，支持复杂工程的“断点续传”。
+- 🧩 **领域适配 (Domain Adaptive)**: 自动感知前端、后端、全栈等不同领域的工程规约与红线。
+
+---
+
+## 🛠️ 快速开始
+
+### 1. 安装
 ```bash
 npx skills add 3kaiu/Ritsu -a claude-code -g -y
+```
+
+### 2. 初始化项目
+在项目根目录运行指令，生成项目基线：
+```bash
 /r-init
 ```
 
-### 2. 标准交付指令
+---
 
-| 指令 | 适用场景 | 核心产物 |
-| --- | --- | --- |
-| `/r-think` | 需求审核、技术方案设计、技术契约确认 | **`design-sheet.md`** |
-| `/r-dev` | 代码实现、Bug 修复、质量门禁校验 | **`dev-report.md`** |
-| `/r-review` | 最终交付验收、发布风险评估、反馈回流 | **`assurance-sheet.md`** |
-| `/r-hunt` | 根因诊断、技术取证、修复建议 | 诊断报告 |
+## 🧭 指令参考
+
+Ritsu 提供了一套完整的工程流水线指令，覆盖从需求分析到最终验收的全生命周期。
+
+| 指令 | 角色 | 核心任务 | 关键产出 |
+| :--- | :--- | :--- | :--- |
+| **`/r-think`** | 架构师 | 需求对账、方案博弈、技术契约确认 | `design-sheet.md` |
+| **`/r-dev`** | 开发者 | 原子化实现、防御式编程、质量门禁自测 | `dev-report.md` |
+| **`/r-review`** | 审计师 | 红蓝对抗评审、安全漏洞扫描、发布风险评估 | `assurance-sheet.md` |
+| **`/r-hunt`** | 诊断专家 | 根因取证、MECE 假设验证、锁定根因 | `diagnosis.md` |
 
 ---
 
-## 核心机制：失败回流 (Rejection Feedback)
+## 🎛️ CLI 工具
 
-如果 `/r-review` 判定失败，AI 会在 `assurance-sheet` 中生成结构化的**修正补丁**。当你再次运行 `/r-dev` 时，系统会自动对账该补丁，确保之前发现的问题被强制修复，杜绝无效重试。
+内置高性能 CLI 工具，用于实时监测工程状态与健康度。
 
----
+```bash
+# 🔍 项目健康自检
+ritsu doctor
 
-## 仓库结构
+# 📜 导出月度任务摘要 (Markdown)
+ritsu export --out DELIVERY_REPORT.md
 
-```text
-Ritsu/
-├── skills/     # 显式阶段入口 (think/dev/test/hunt/review)
-├── runtime/    # MCP 工具执行层 (事件流驱动，无 Flow 依赖)
-├── _shared/    # 统一协议 (Schema v5.0、产物模板、分级规范)
-├── rules/      # 全局工程红线 (anti-patterns.yaml)
-└── domains/    # 领域适配规则 (frontend/backend/fullstack/infra)
+# 🐱 查看最近任务流水
+ritsu cat --recent 10
 ```
 
-Ritsu 的目标是让 AI 的动作**可观测、可对账、可信任**。
+---
+
+## 📦 仓库架构
+
+```mermaid
+graph TD
+    A[Skills 层] --> B[Runtime 层]
+    B --> C[Shared 层]
+    C --> D[Protocol v5.2]
+    C --> E[Templates]
+    B --> F[Context Store]
+    G[Domains 层] -.-> B
+    H[Rules 层] -.-> B
+```
+
+- **`skills/`**: 各工程阶段的显式入口。
+- **`runtime/`**: 基于 Node.js 的 MCP 服务层，驱动事件流与工具调用。
+- **`_shared/`**: 统一的产物 Schema 与协作协议。
+- **`rules/`**: 全局工程红线与反模式库。
+
+---
+
+## 🤝 参与贡献
+
+我们欢迎任何形式的贡献！在开始之前，请务必阅读我们的 [贡献指南](CONTRIBUTING.md)。
+
+## 📄 许可证
+
+本项目基于 **MIT License** 协议开源。详情见 [LICENSE](LICENSE)。
+
+---
+
+<div align="center">
+Built with ❤️ by Antigravity AI Engineering Team
+</div>

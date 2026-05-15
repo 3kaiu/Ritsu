@@ -39,12 +39,13 @@ function convertFieldToZod(field: YamlInputField): z.ZodTypeAny {
       }
       break;
     case "list":
-    case "array":
+    case "array": {
       const itemType = field.items
         ? convertFieldToZod(field.items as YamlInputField)
         : z.string();
       type = z.array(itemType);
       break;
+    }
     case "object":
       if (field.properties) {
         type = convertInputToZod(field.properties as Record<string, YamlInputField>);

@@ -7,7 +7,7 @@
  */
 
 import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
-import { lock, unlock, check as checkLock } from "proper-lockfile";
+import { lock, check as checkLock } from "proper-lockfile";
 import { getCtxPath, ensureCtxFile } from "./ctx-path.js";
 import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
 

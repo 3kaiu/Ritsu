@@ -1,7 +1,7 @@
 {
   "name": "ritsu-mcp-server",
-  "version": "5.0.0",
-  "ritsu_protocol_version": "5.0.0",
+  "version": "5.2.0",
+  "ritsu_protocol_version": "5.2.0",
   "description": "Ritsu MCP Server SDK — 结构化 I/O 原语，供 AI 技能调用",
   "type": "module",
   "main": "dist/index.js",
@@ -13,11 +13,21 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "lint": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix && prettier --write \"src/**/*.ts\"",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "version:check": "node -e \"const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('./package.json','utf8')); const pv=pkg.ritsu_protocol_version; const schema=fs.readFileSync('../_shared/ctx-event-schema.json','utf8'); const sv=JSON.parse(schema).description.match(/v(\\d+\\.\\d+\\.\\d+)/)?.[1]; if(pv!==sv){console.error('Protocol version mismatch: runtime expects '+pv+' but schema defines '+sv);process.exit(1)} console.log('Protocol aligned: '+pv)\""
+    "version:check": "node ./version-check.js"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/3kaiu/Ritsu.git"
+  },
+  "bugs": {
+    "url": "https://github.com/3kaiu/Ritsu/issues"
+  },
+  "homepage": "https://github.com/3kaiu/Ritsu#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "ajv": "8.x",
@@ -28,9 +38,20 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/npm": "^12.0.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.0",
     "@types/proper-lockfile": "^4.1.4",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "@vitest/coverage-v8": "^4.1.6",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.5.3",
+    "semantic-release": "^24.2.9",
     "vitest": "^4.1.5"
   },
   "engines": {

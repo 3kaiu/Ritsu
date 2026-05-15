@@ -280,7 +280,7 @@ function computeNextStepAndBreakpoint(
   root: string,
   lastIncomplete: Record<string, unknown> | null,
   lastCompleted: Record<string, unknown> | null,
-  allEntries: Record<string, unknown>[],
+  _allEntries: Record<string, unknown>[],
 ): { recommended_next_step: string | null; breakpoint_summary: string | null } {
   if (lastIncomplete) {
     const skill = String(lastIncomplete.skill ?? "");
@@ -387,7 +387,8 @@ export async function ritsu_read_ctx(
 
   data.reality_check = checkRealityDesync(root, lastCompleted);
 
-  data.circuit_breaker_status = computeCircuitBreaker(allEntries);
+  const cbStatus = computeCircuitBreaker(allEntries);
+  data.circuit_breaker_status = cbStatus;
 
   const nextStep = computeNextStepAndBreakpoint(
     root,
@@ -397,9 +398,9 @@ export async function ritsu_read_ctx(
   );
 
   // 优先级：熔断重定向 > 断点恢复 > 阶段建议
-  if (data.circuit_breaker_status.should_redirect) {
-    data.recommended_next_step = `/r-${data.circuit_breaker_status.should_redirect}`;
-    data.breakpoint_summary = `检测到连续失败，建议回流至 ${data.circuit_breaker_status.should_redirect} 阶段重新分析。`;
+  if (cbStatus.should_redirect) {
+    data.recommended_next_step = `/r-${cbStatus.should_redirect}`;
+    data.breakpoint_summary = `检测到连续失败，建议回流至 ${cbStatus.should_redirect} 阶段重新分析。`;
   } else {
     data.recommended_next_step = nextStep.recommended_next_step;
     data.breakpoint_summary = nextStep.breakpoint_summary;

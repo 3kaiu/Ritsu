@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { spawn } from "node:child_process";
+// node:child_process import removed
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { runGit } from "./_git-utils.js";
 

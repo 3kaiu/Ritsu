@@ -7,7 +7,7 @@
  */
 
 import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
-import { resolve, dirname } from "node:path";
+// removed unused resolve, dirname
 import { getCtxPath } from "./ctx-path.js";
 
 let cachedEntries: Record<string, unknown>[] | null = null;
@@ -58,7 +58,9 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
       if (lastLine) {
         try {
           entries.push(JSON.parse(lastLine));
-        } catch {}
+        } catch {
+          // ignore invalid json
+        }
       }
     }
 

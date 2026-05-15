@@ -2,7 +2,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { getProjectRoot, textResult, errorResult, warnResult } from "./_utils.js";
+import { getProjectRoot, textResult } from "./_utils.js";
 
 interface TestFailure {
   suite: string;
@@ -43,7 +43,8 @@ function runCommand(
     }, timeoutMs);
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ ok: code === 0, output: (code === 0 ? stdout : stderr || stdout).trim() });
+      const combined = (stdout + "\n" + stderr).trim();
+      resolve({ ok: code === 0, output: combined });
     });
     child.on("error", (err) => {
       clearTimeout(timer);
@@ -67,7 +68,7 @@ function parseTestFailures(output: string): TestFailure[] {
       continue;
     }
 
-    const failMatch = line.match(/[✕✗×]\s+(.+?)(?:\s+\d+m?s)?$/);
+    const failMatch = line.match(/[✕✗×]\s+(.+?)(?:\s+\d+m?s)?/);
     if (failMatch && currentSuite) {
       failures.push({
         suite: currentSuite,

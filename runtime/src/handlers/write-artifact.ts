@@ -467,7 +467,9 @@ export async function ritsu_write_artifact(
   } catch (e: any) {
     try {
       rmSync(tmpPath, { force: true });
-    } catch {}
+    } catch {
+      // ignore cleanup errors
+    }
     return artifactWriteErrorResult(`atomic write failed: ${e.message}`, [
       {
         code: "atomic_write_failed",

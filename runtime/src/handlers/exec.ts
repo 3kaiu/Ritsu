@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { spawn } from "node:child_process";
+// node:child_process import removed (unused)
 import {
   getAllowedBinariesForProject,
   DANGEROUS_ARGS,

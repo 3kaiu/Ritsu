@@ -11,6 +11,11 @@ export default defineConfig({
   test: {
     include: ["tests/**/*.test.ts"],
     passWithNoTests: false,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      exclude: ["tests/**", "dist/**", "node_modules/**"],
+    },
     typecheck: {
       enabled: false,
     },

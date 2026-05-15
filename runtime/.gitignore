@@ -2,7 +2,4 @@ node_modules/
 dist/
 .ritsu/
 
-# Rust WASM build artifacts (CI builds these, not committed)
-core/target/
-core/pkg/
-pkg/
+# WASM residue removed
