@@ -30,7 +30,11 @@ jobs:
 
       - name: Run Ritsu Doctor
         run: cd runtime && node dist/cli.js doctor
+        env:
+          RITSU_PROJECT_ROOT: ${{ github.workspace }}
 
       - name: Run Triple Verification
         run: cd runtime && node dist/cli.js trace --check-triple
         continue-on-error: true
+        env:
+          RITSU_PROJECT_ROOT: ${{ github.workspace }}
