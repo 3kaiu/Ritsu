@@ -14,6 +14,8 @@ describe("ritsu sync", () => {
 
     // init git repo
     execSync("git init", { cwd: testRoot, stdio: "ignore" });
+    execSync("git config user.email 'test@ritsu.dev'", { cwd: testRoot, stdio: "ignore" });
+    execSync("git config user.name 'Ritsu Test'", { cwd: testRoot, stdio: "ignore" });
     // create initial commit to avoid empty repo issues
     writeFileSync(join(testRoot, "README.md"), "# Test Repo");
     execSync("git add README.md", { cwd: testRoot, stdio: "ignore" });

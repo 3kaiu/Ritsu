@@ -313,8 +313,8 @@ async function runDoctor(args: string[] = []) {
   // 2. Check .ritsu directory
   const ritsuDir = resolve(root, ".ritsu");
   if (!existsSync(ritsuDir)) {
-    console.log(color("✖ .ritsu/ directory missing", "red"));
-    errors++;
+    console.log(color("⚠ .ritsu/ directory missing (will be created on first run)", "yellow"));
+    warnings++;
   } else {
     console.log(color("✔ .ritsu/ directory found", "green"));
     
