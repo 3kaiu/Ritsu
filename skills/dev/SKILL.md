@@ -1,6 +1,6 @@
 ---
 name: dev
-version: "5.6.0"
+version: "6.1.0"
 description: "Ritsu 开发实现入口。根据任务等级自动选择最优执行路径。"
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug, 开始实现, 改一下, 调整"
 total_steps: 5

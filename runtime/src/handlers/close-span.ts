@@ -75,7 +75,7 @@ export async function ritsu_close_span(
           stdio: "ignore",
         });
         child.unref();
-      } catch {}
+      } catch { /* fire-and-forget sync */ }
     }
   }
 

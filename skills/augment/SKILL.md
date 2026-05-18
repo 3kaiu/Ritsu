@@ -1,6 +1,6 @@
 ---
 name: augment
-version: "5.6.0"
+version: "6.1.0"
 description: "Ritsu 补测引擎。分析设计契约与覆盖率缺口，智能补全测试用例。"
 when_to_use: "/r-augment, 补测试, 提高覆盖率"
 total_steps: 4

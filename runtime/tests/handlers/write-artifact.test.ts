@@ -80,7 +80,7 @@ describe("ritsu_write_artifact", () => {
     const params = {
       type: "design-sheet",
       filename,
-      content: "## 1. 任务识别 (Intake)\n- 任务类型: 新功能\n- 当前目标: test\n- 风险等级: standard\n## 2. 方案与边界 (Plan)\n- 交付目标: test\n- 纳入范围: test\n- 不纳入范围: test\n## 3. 技术契约 (Contract)\n- API / 接口契约: test\n- 数据模型: test\n- 组件契约: test\n## 4. 决策理由 (Decision Rationale)\n- 关键决策: test\n- 被拒绝方案: test\n## 5. 代价与风险 (Metrics & Risks)\n- 回滚步骤: test\n## 6. 实施清单 (Execution)\n- 实施步骤:\n  - [ ] `index.ts`: test\n- 验证计划: test",
+      content: "## 1. 任务识别 (Intake)\n- 任务类型: 新功能\n- 当前目标: test\n- 风险等级: standard\n## 2. 方案与边界 (Plan)\n- 交付目标: test\n- 纳入范围: test\n- 不纳入范围: test\n## 3. 技术契约 (Contract)\n- API / 接口契约: test\n- 数据模型: test\n- 组件契约: test\n## 4. 决策理由 (Decision Rationale)\n- 关键决策: test\n- 被拒绝方案: test\n## 5. 代价与风险 (Metrics & Risks)\n- 回滚步骤: test\n## 6. 实施清单 (Execution)\n- 实施步骤:\n  - [ ] `index.ts`: test\n- verification_plan:\n  - contracts: lint + unit test\n- 验证计划: test",
     };
 
     const result = await ritsu_write_artifact(params);

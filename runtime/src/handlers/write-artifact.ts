@@ -25,11 +25,11 @@ import {
   jsonErrorResult,
 } from "./_utils.js";
 import { evaluatePolicies } from "../policy/index.js";
-import { getCtxPath } from "../ctx-path.js";
+import { ensureCtxFile } from "../ctx-path.js";
 
 async function emitViolation(ruleId: string, severity: string, message: string, evidence?: string) {
   const root = getProjectRoot();
-  const ctxPath = getCtxPath(root);
+  const ctxPath = ensureCtxFile(root);
   const event = {
     ts: new Date().toISOString().replace(/[-:]/g, "").slice(0, 8) + "-" + new Date().toISOString().slice(11, 19).replace(/:/g, ""),
     status: "violation_detected",

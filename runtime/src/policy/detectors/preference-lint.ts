@@ -2,7 +2,6 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import yaml from "js-yaml";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
-import { getProjectRoot } from "../../handlers/_utils.js"; // wait, check utils exists
 
 export class PreferenceLintDetector implements DetectorPlugin {
   type = "preference_lint" as const;

@@ -1,5 +1,5 @@
 /**
- * 工具 Handler 注册表 v5.6.0
+ * 工具 Handler 注册表 v6.1.0
  */
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";

@@ -1,4 +1,4 @@
-import type { PolicyCheckContext, PolicyRule, PolicyViolation, DetectorPlugin } from "./types.js";
+import type { PolicyCheckContext, PolicyViolation, DetectorPlugin } from "./types.js";
 import { loadPolicies } from "./loader.js";
 import { RegexDetector } from "./detectors/regex.js";
 

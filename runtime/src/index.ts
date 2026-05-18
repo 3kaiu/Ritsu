@@ -53,7 +53,7 @@ async function main() {
           content: [{ type: "text" as const, text: "handler not implemented" }],
         }));
 
-    const wrappedHandler = async (params: any, extra?: any) => {
+    const wrappedHandler = async (params: any, _extra?: any) => {
       const result = await rawHandler(params);
       const isProd = process.env.NODE_ENV === 'production';
       const strictMode = process.env.RITSU_STRICT_OUTPUT ?? (isProd ? 'warn' : '1');

@@ -2,7 +2,7 @@
 # Created by Antigravity AI Engineering Framework
 
 <!-- Ritsu Configuration Block -->
-ritsu-version: 5.6.0
+ritsu-version: 6.1.0
 domain: fullstack
 tech_fingerprints:
   - nodejs

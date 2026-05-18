@@ -217,7 +217,6 @@ async function runDoctorHealth() {
   const events = parseJsonl(ctxFile);
   const totalEvents = events.length;
   const violations = events.filter(e => e.status === "violation_detected").length;
-  const artifactWritten = events.filter(e => e.status === "artifact_written").length;
 
   // Metric 1: Interception Rate
   const interceptRate = totalEvents > 0 ? (violations / totalEvents * 100).toFixed(1) : "0.0";
@@ -474,13 +473,13 @@ async function runTrace(traceId: string | null, openFlag: boolean = false, check
     const traces: Record<string, boolean> = {}; // trace_id -> isClosed
     for (const e of events) {
       if (e.trace_id) {
-        if (!traces.hasOwnProperty(e.trace_id)) traces[e.trace_id] = false;
+        if (!Object.hasOwn(traces, e.trace_id)) traces[e.trace_id] = false;
         if (e.span_kind === "root" && (e.status === "done" || e.status === "failed")) {
           traces[e.trace_id] = true;
         }
       }
     }
-    const openTraces = Object.entries(traces).filter(([id, closed]) => !closed).map(([id]) => id);
+    const openTraces = Object.entries(traces).filter(([_id, closed]) => !closed).map(([id]) => id);
     if (openTraces.length === 0) {
       console.log(color("No open traces found.", "green"));
       return;

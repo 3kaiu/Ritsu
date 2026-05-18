@@ -76,7 +76,7 @@ export async function ritsu_join_trace(
     }
   }
 
-  let coordinationIssues: string[] = [];
+  const coordinationIssues: string[] = [];
   if (coordinationSheet) {
     const spanMatches = coordinationSheet.matchAll(/\| (span-[0-9a-f]{8,}) \|/g);
     for (const match of spanMatches) {

@@ -37,7 +37,7 @@ export function minePreferences(days: number): string | null {
         } else if (obj.status === "violation_detected") {
           violations.push(obj);
         }
-      } catch {}
+      } catch { /* ignore malformed lines */ }
     }
   }
 

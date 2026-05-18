@@ -1,4 +1,4 @@
-# Domain: Frontend (前端) v5.6.0
+# Domain: Frontend (前端) v6.1.0
 # 继承 _base.yaml 全部内容。支持多平台倾向性（React/Flutter/Mobile）。
 
 extends: _base

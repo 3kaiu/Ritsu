@@ -106,7 +106,7 @@ export function syncPush(): boolean {
     if (existsSync(tmpIndex)) {
       try {
         rmSync(tmpIndex, { force: true });
-      } catch {}
+      } catch { /* ignore cleanup errors */ }
     }
   }
 }

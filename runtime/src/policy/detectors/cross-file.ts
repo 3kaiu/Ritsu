@@ -9,7 +9,7 @@ const projectRoot = path.resolve(__dirname, "../../../../");
 export class CrossFileDetector implements DetectorPlugin {
   type = "cross_file" as const;
 
-  detect(rule: PolicyRule, ctx: PolicyCheckContext): PolicyViolation[] {
+  detect(rule: PolicyRule, _ctx: PolicyCheckContext): PolicyViolation[] {
     const violations: PolicyViolation[] = [];
     
     // Only check if it's the right rule (or we can just run it generally for cross_file)
