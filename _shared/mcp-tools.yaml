@@ -6,14 +6,14 @@ tools:
     call_template:
       tool: ritsu_emit_event
       params:
-        event_type: "{started|done|failed|artifact_written}"
+        event_type: "{started|done|failed|artifact_written|violation_detected}"
         step: "{N}/{M}"
         skill: "{skill_name}"
         domain: "{value}"
     input:
       event_type:
         type: enum
-        values: [started, done, failed, artifact_written]
+        values: [started, done, failed, artifact_written, violation_detected]
         required: true
       step:
         type: string
@@ -43,6 +43,9 @@ tools:
         type: string
         required: false
       artifact_meta:
+        type: object
+        required: false
+      violation:
         type: object
         required: false
     output_schema:
@@ -198,10 +201,18 @@ tools:
       params:
         skip_lint: false
         skip_test: false
+        trace_id: "{trace_id}"
+        span_id: "{span_id}"
     input:
       skip_lint: { type: boolean, required: false }
       skip_test: { type: boolean, required: false }
       timeout_ms: { type: integer, required: false }
+      correlation_id: { type: string, required: false }
+      trace_id: { type: string, required: false }
+      span_id: { type: string, required: false }
+      parent_span_id: { type: string, required: false }
+      skill: { type: string, required: false }
+      domain: { type: string, required: false }
     output_schema:
       type: object
       required: [passed, lint, test]
@@ -225,12 +236,17 @@ tools:
     call_template:
       tool: ritsu_write_preference
       params:
-        rule: { pattern: "{pattern}", scope: "{scope}" }
+        rule:
+          match_regex: "{regex}"
+          scope: "{scope}"
     input:
       rule:
         type: object
         properties:
-          pattern: { type: string, required: true }
+          match_regex: { type: string }
+          forbid_lib: { type: string }
+          require_call: { type: string }
+          pattern: { type: string }
           scope:
             type: enum
             values: [coding_style, library_choice, naming_convention, architecture]
@@ -409,4 +425,3 @@ tools:
         valid: { type: boolean }
         violation_count: { type: integer }
         details: { type: array }
-

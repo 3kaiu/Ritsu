@@ -41,7 +41,7 @@
     },
     "skill": {
       "type": "string",
-      "enum": ["init", "think", "dev", "hunt", "review"]
+      "enum": ["init", "think", "dev", "hunt", "review", "augment"]
     },
     "domain": {
       "type": "string",
@@ -121,6 +121,10 @@
     {
       "if": { "properties": { "status": { "const": "failed" } } },
       "then": { "required": ["error"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "violation_detected" } } },
+      "then": { "required": ["violation"] }
     }
   ]
 }

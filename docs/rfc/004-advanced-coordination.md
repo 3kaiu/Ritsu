@@ -6,7 +6,7 @@
 | **Author** | 3kaiu |
 | **Created** | 2026-05-15 |
 | **Target Version** | v6.2.0 |
-| **Builds On** | [RFC-001](./001-multi-agent-trace.md) v6.0.0 + [RFC-002](./002-cross-agent-collaboration.md) v6.1.0 |
+| **Builds On** | [RFC-001](./001-multi-agent-trace.md) v6.0.0 + [RFC-002](./003-multi-agent-collaboration.md) v6.1.0 |
 | **Phase** | Phase F (Post v6.1, ~10 weeks) |
 
 ---
@@ -523,7 +523,7 @@ $ ritsu doctor --metrics --format json | jq .detector_hits
 ## 13. 引用
 
 - [RFC-001 Multi-Agent Trace Protocol](./001-multi-agent-trace.md)
-- [RFC-002 Cross-Agent Collaboration Protocol](./002-cross-agent-collaboration.md)
+- [RFC-002 Cross-Agent Collaboration Protocol](./003-multi-agent-collaboration.md)
 - [W3C Trace Context Specification](https://www.w3.org/TR/trace-context/)
 - [OpenTelemetry Trace JSON Encoding](https://opentelemetry.io/docs/specs/otel/protocol/otlp/)
 - [Jaeger Thrift Spec](https://github.com/jaegertracing/jaeger-idl)

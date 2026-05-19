@@ -68,4 +68,117 @@ describe("Policy Engine", () => {
     
     expect(result.passed).toBe(true);
   });
+
+  it("should skip detectors whose target does not match the action", () => {
+    (loadPolicies as any).mockReturnValue([
+      {
+        id: "AP-ARTIFACT",
+        name: "Artifact Only",
+        severity: "fatal",
+        detector: {
+          type: "regex",
+          target: "artifact_content",
+          patterns: ["TODO"],
+        },
+      },
+      {
+        id: "AP-DIFF",
+        name: "Diff Only",
+        severity: "fatal",
+        detector: {
+          type: "regex",
+          target: "diff",
+          patterns: ["TODO"],
+        },
+      },
+    ]);
+
+    const diffResult = evaluatePolicies({
+      action: "commit_diff",
+      content: "TODO in artifact text",
+    });
+    const artifactResult = evaluatePolicies({
+      action: "write_artifact",
+      content: "TODO in artifact text",
+    });
+
+    expect(diffResult.violations.map((violation) => violation.rule_id)).toEqual(["AP-DIFF"]);
+    expect(artifactResult.violations.map((violation) => violation.rule_id)).toEqual([
+      "AP-ARTIFACT",
+    ]);
+  });
+
+  it("should honor target_file exemptions using path suffix matching", () => {
+    (loadPolicies as any).mockReturnValue([
+      {
+        id: "AP-TEST",
+        name: "Test Rule",
+        severity: "fatal",
+        detector: {
+          type: "regex",
+          target: "artifact_content",
+          patterns: ["TODO"],
+        },
+        exemption: [{ when: { target_file: "AGENTS.md" } }],
+      },
+    ]);
+
+    const result = evaluatePolicies({
+      action: "write_artifact",
+      target: "docs/AGENTS.md",
+      content: "TODO item",
+    });
+
+    expect(result.passed).toBe(true);
+    expect(result.violations).toHaveLength(0);
+  });
+
+  it("should throw when a detector type is not registered", () => {
+    (loadPolicies as any).mockReturnValue([
+      {
+        id: "AP-UNKNOWN",
+        name: "Unknown Detector",
+        severity: "fatal",
+        detector: {
+          type: "missing",
+          target: "artifact_content",
+        },
+      },
+    ]);
+
+    expect(() =>
+      evaluatePolicies({
+        action: "write_artifact",
+        content: "hello",
+      }),
+    ).toThrow("Detector type 'missing' is not registered");
+  });
+
+  it("should block AST unknown identifiers for artifact writes", () => {
+    (loadPolicies as any).mockReturnValue([
+      {
+        id: "R-1",
+        name: "Unknown identifiers",
+        severity: "hard_stop",
+        detector: {
+          type: "ast",
+          check_identifiers: true,
+        },
+      },
+    ]);
+
+    const result = evaluatePolicies({
+      action: "write_artifact",
+      target: "src/example.ts",
+      content: "export const answer = missingSymbol + 1;",
+    });
+
+    expect(result.passed).toBe(false);
+    expect(result.violations).toHaveLength(1);
+    expect(result.violations[0]).toMatchObject({
+      rule_id: "R-1",
+      severity: "hard_stop",
+      evidence: "missingSymbol",
+    });
+  });
 });

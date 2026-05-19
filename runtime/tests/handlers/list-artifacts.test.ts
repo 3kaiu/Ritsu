@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { ritsu_list_artifacts } from "../../src/handlers/list-artifacts.js";
 import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
@@ -22,6 +22,17 @@ describe("ritsu_list_artifacts", () => {
     const data = JSON.parse(result.content[0].text as string);
     expect(data.files).toHaveLength(0);
     expect(data.total_count).toBe(0);
+  });
+
+  it("returns a warning payload when the .ritsu directory is missing", async () => {
+    rmSync(resolve(root, ".ritsu"), { recursive: true, force: true });
+
+    const result = await ritsu_list_artifacts({ type: "all" });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.files).toEqual([]);
+    expect(data.total_count).toBe(0);
+    expect(data._warning).toBe(".ritsu directory does not exist yet");
   });
 
   it("lists all artifacts when type is 'all'", async () => {

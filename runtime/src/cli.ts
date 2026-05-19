@@ -6,10 +6,11 @@ import { pathToFileURL, fileURLToPath } from "node:url";
 import { syncPush, syncPull } from "./sync.js";
 import { minePreferences, promotePreference } from "./miner.js";
 import { legacyCidToTraceId } from "./correlation.js";
+import { detectProjectRoot } from "./project-root.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-type CtxEvent = {
+export type CtxEvent = {
   ts: string;
   correlation_id: string;
   trace_id?: string;
@@ -21,6 +22,13 @@ type CtxEvent = {
   status: "started" | "done" | "failed" | "artifact_written" | "violation_detected";
   step?: string;
   artifact?: string;
+  artifact_meta?: {
+    type?: string;
+    canonical_type?: string;
+    layer?: string;
+    size_bytes?: number;
+    summary?: string;
+  };
   error?: string;
   cost?: {
     tokens_in?: number;
@@ -34,6 +42,35 @@ type CtxEvent = {
     evidence?: string;
     blocked?: boolean;
   };
+};
+
+type ArtifactWrittenCtxEvent = CtxEvent & {
+  status: "artifact_written";
+  artifact_meta?: NonNullable<CtxEvent["artifact_meta"]>;
+};
+
+export type TraceSpanNode = {
+  id: string;
+  parent?: string;
+  events: CtxEvent[];
+  children?: TraceSpanNode[];
+};
+
+export type RuntimeMetadata = {
+  packageVersion: string | null;
+  protocolVersion: string | null;
+};
+
+export type TaskSummary = {
+  skill: string;
+  domain: string;
+  startTs: string;
+  endTs?: string;
+  status: "in_progress" | "completed" | "failed";
+  artifacts: string[];
+  error?: string;
+  totalTokensIn: number;
+  totalTokensOut: number;
 };
 
 const COLORS = {
@@ -76,10 +113,14 @@ export function usage(): string {
 }
 
 function getProjectRoot(): string {
-  return process.env.RITSU_PROJECT_ROOT ?? process.cwd();
+  return detectProjectRoot();
 }
 
-function findLatestCtxFile(root: string): string | null {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function findLatestCtxFile(root: string): string | null {
   const dir = resolve(root, ".ritsu");
   if (!existsSync(dir)) return null;
 
@@ -91,7 +132,7 @@ function findLatestCtxFile(root: string): string | null {
   return resolve(dir, files[files.length - 1]);
 }
 
-function parseJsonl(path: string): CtxEvent[] {
+export function parseJsonl(path: string): CtxEvent[] {
   const raw = readFileSync(path, "utf-8");
   const events: CtxEvent[] = [];
   for (const line of raw.split(/\r?\n/)) {
@@ -126,6 +167,67 @@ function parseJsonl(path: string): CtxEvent[] {
   return events;
 }
 
+export function parseLooseJsonl(path: string): Array<Record<string, unknown>> {
+  const raw = readFileSync(path, "utf-8");
+  const rows: Array<Record<string, unknown>> = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    try {
+      const parsed = JSON.parse(line) as unknown;
+      if (isRecord(parsed)) {
+        rows.push(parsed);
+      }
+    } catch {
+      // ignore bad lines
+    }
+  }
+  return rows;
+}
+
+export function readCoveragePct(root: string): string {
+  const qgFile = resolve(root, ".ritsu/last-quality-gate.json");
+  if (!existsSync(qgFile)) return "0.0";
+
+  try {
+    const qg = JSON.parse(readFileSync(qgFile, "utf-8"));
+    const value =
+      qg.coverage?.summary?.lines?.pct ??
+      qg.coverage?.total?.lines?.pct ??
+      "0.0";
+    return String(value);
+  } catch {
+    return "0.0";
+  }
+}
+
+export function readRuntimeMetadataFromPackageJson(
+  pkgPath: string,
+): RuntimeMetadata {
+  if (!existsSync(pkgPath)) {
+    return { packageVersion: null, protocolVersion: null };
+  }
+
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8")) as unknown;
+    if (!isRecord(pkg)) {
+      return { packageVersion: null, protocolVersion: null };
+    }
+    return {
+      packageVersion: typeof pkg.version === "string" ? pkg.version : null,
+      protocolVersion:
+        typeof pkg.ritsu_protocol_version === "string"
+          ? pkg.ritsu_protocol_version
+          : null,
+    };
+  } catch {
+    return { packageVersion: null, protocolVersion: null };
+  }
+}
+
+function readRuntimeMetadata(): RuntimeMetadata {
+  return readRuntimeMetadataFromPackageJson(resolve(__dirname, "../package.json"));
+}
+
 function statusColor(status: CtxEvent["status"]): keyof typeof COLORS {
   switch (status) {
     case "started":
@@ -139,6 +241,166 @@ function statusColor(status: CtxEvent["status"]): keyof typeof COLORS {
     default:
       return "gray";
   }
+}
+
+function isArtifactWrittenEvent(event: CtxEvent): event is ArtifactWrittenCtxEvent {
+  return event.status === "artifact_written";
+}
+
+export function getArtifactTypes(events: CtxEvent[]): Set<string> {
+  return new Set(
+    events
+      .filter(isArtifactWrittenEvent)
+      .map((event) => event.artifact_meta?.type)
+      .filter((type): type is string => typeof type === "string" && type.length > 0),
+  );
+}
+
+export function getLatestTraceId(events: CtxEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].trace_id) {
+      return events[i].trace_id ?? null;
+    }
+  }
+  return null;
+}
+
+export function normalizeTraceId(traceId: string): string {
+  if (!traceId.startsWith("cid-")) return traceId;
+
+  const match = traceId.match(/^cid-(\d{8})-(.+)$/);
+  if (!match) return traceId;
+
+  const hex = match[2].padStart(16, "0");
+  return `trace-${match[1]}-${hex}`;
+}
+
+export function getTraceEvents(events: CtxEvent[], traceId: string): CtxEvent[] {
+  return events.filter(
+    (event) =>
+      event.trace_id === traceId ||
+      (event.correlation_id &&
+        legacyCidToTraceId(event.correlation_id) === traceId),
+  );
+}
+
+export function getOpenTraceIds(events: CtxEvent[]): string[] {
+  const traces: Record<string, boolean> = {};
+
+  for (const event of events) {
+    if (!event.trace_id) continue;
+
+    if (!Object.hasOwn(traces, event.trace_id)) {
+      traces[event.trace_id] = false;
+    }
+    if (
+      event.span_kind === "root" &&
+      (event.status === "done" || event.status === "failed")
+    ) {
+      traces[event.trace_id] = true;
+    }
+  }
+
+  return Object.entries(traces)
+    .filter(([_id, closed]) => !closed)
+    .map(([id]) => id);
+}
+
+export function countTripleVerifiedTraces(events: CtxEvent[]): {
+  traceIds: string[];
+  triplePassed: number;
+} {
+  const traceIds = [
+    ...new Set(
+      events
+        .map((event) => event.trace_id)
+        .filter(
+          (traceId): traceId is string =>
+            typeof traceId === "string" && traceId.length > 0,
+        ),
+    ),
+  ];
+
+  let triplePassed = 0;
+  for (const traceId of traceIds) {
+    const types = getArtifactTypes(getTraceEvents(events, traceId));
+    if (
+      (types.has("design-sheet") || types.has("design-brief")) &&
+      types.has("dev-report") &&
+      types.has("assurance-sheet")
+    ) {
+      triplePassed++;
+    }
+  }
+
+  return { traceIds, triplePassed };
+}
+
+export function buildTraceSpanForest(traceEvents: CtxEvent[]): TraceSpanNode[] {
+  const spans: Record<string, TraceSpanNode> = {};
+
+  for (const event of traceEvents) {
+    const spanId = event.span_id ?? "unknown";
+    if (!spans[spanId]) {
+      spans[spanId] = {
+        id: spanId,
+        parent: event.parent_span_id,
+        events: [],
+      };
+    }
+    spans[spanId].events.push(event);
+  }
+
+  const rootSpans: TraceSpanNode[] = [];
+  for (const span of Object.values(spans)) {
+    if (span.parent && spans[span.parent]) {
+      const parent = spans[span.parent];
+      if (!parent.children) {
+        parent.children = [];
+      }
+      parent.children.push(span);
+    } else {
+      rootSpans.push(span);
+    }
+  }
+
+  return rootSpans;
+}
+
+export function summarizeTasks(events: CtxEvent[]): Record<string, TaskSummary> {
+  const tasks: Record<string, TaskSummary> = {};
+
+  for (const event of events) {
+    if (!tasks[event.correlation_id]) {
+      tasks[event.correlation_id] = {
+        skill: event.skill,
+        domain: event.domain,
+        startTs: event.ts,
+        status: "in_progress",
+        artifacts: [],
+        totalTokensIn: 0,
+        totalTokensOut: 0,
+      };
+    }
+
+    if (event.cost) {
+      tasks[event.correlation_id].totalTokensIn += event.cost.tokens_in ?? 0;
+      tasks[event.correlation_id].totalTokensOut += event.cost.tokens_out ?? 0;
+    }
+
+    if (event.status === "done") {
+      tasks[event.correlation_id].status = "completed";
+      tasks[event.correlation_id].endTs = event.ts;
+    } else if (event.status === "failed") {
+      tasks[event.correlation_id].status = "failed";
+      tasks[event.correlation_id].endTs = event.ts;
+      tasks[event.correlation_id].error = event.error;
+    } else if (event.status === "artifact_written" && event.artifact) {
+      tasks[event.correlation_id].artifacts.push(event.artifact);
+    }
+  }
+
+  return tasks;
 }
 
 export function formatSkill(skill: string): string {
@@ -164,15 +426,7 @@ export function formatEvent(e: CtxEvent): string {
   return `${ts} ${cid}  ${skill} ${domain}  ${status}${details ? ` ${details}` : ""}`;
 }
 
-function joinTrace(root: string, traceId: string) {
-  const ctxFile = findLatestCtxFile(root);
-  if (!ctxFile) return { events: [] };
-  const events = parseJsonl(ctxFile);
-  const traceEvents = events.filter(e => e.trace_id === traceId || legacyCidToTraceId(e.correlation_id) === traceId);
-  return { events: traceEvents };
-}
-
-async function runHotRules(since: string | null = null) {
+export async function runHotRules(since: string | null = null) {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, ".ritsu");
   if (!existsSync(ritsuDir)) return;
@@ -186,7 +440,7 @@ async function runHotRules(since: string | null = null) {
     const events = parseJsonl(resolve(ritsuDir, f));
     for (const e of events) {
       if (e.status === "violation_detected" && e.violation?.rule_id) {
-        if (e.ts.slice(0, 10).replace(/-/g, "") >= limitDate) {
+        if (e.ts.slice(0, 8) >= limitDate) {
           counts[e.violation.rule_id] = (counts[e.violation.rule_id] || 0) + 1;
         }
       }
@@ -204,7 +458,7 @@ async function runHotRules(since: string | null = null) {
   }
 }
 
-async function runDoctorHealth() {
+export async function runDoctorHealth() {
   const root = getProjectRoot();
   console.log(color("Ritsu Health Dashboard — Objective Metrics", "cyan"));
 
@@ -227,29 +481,19 @@ async function runDoctorHealth() {
   console.log(`- Preference Promotion Rate: ${color(`${promoted}`, "yellow")} rules promoted this month`);
 
   // Metric 3: Coverage Trend
-  const qgFile = resolve(root, ".ritsu/last-quality-gate.json");
-  let currentCoverage = "0.0";
-  if (existsSync(qgFile)) {
-    const qg = JSON.parse(readFileSync(qgFile, "utf-8"));
-    currentCoverage = qg.coverage?.total?.lines?.pct ?? "0.0";
-  }
+  const currentCoverage = readCoveragePct(root);
   console.log(`- Current Test Coverage:      ${color(`${currentCoverage}%`, "green")}`);
 
   // Metric 4: Triple Verification Rate
-  const traces = [...new Set(events.map(e => e.trace_id).filter(Boolean))];
-  let triplePassed = 0;
-  for (const tid of traces) {
-    const tree = joinTrace(root, tid as string);
-    const types = new Set(tree.events.filter((e: any) => e.status === "artifact_written").map((e: any) => (e as any).artifact_meta?.type));
-    if ((types.has("design-sheet") || types.has("design-brief")) && types.has("dev-report") && types.has("assurance-sheet")) {
-      triplePassed++;
-    }
-  }
+  const { traceIds: traces, triplePassed } = countTripleVerifiedTraces(events);
   const tripleRate = traces.length > 0 ? (triplePassed / traces.length * 100).toFixed(1) : "0.0";
   console.log(`- Triple Verification Rate:   ${color(`${tripleRate}%`, "cyan")} (${triplePassed}/${traces.length} traces)`);
 
   // Snapshotting
   const snapshotFile = resolve(root, ".ritsu/health-snapshots.jsonl");
+  const previousSnapshots = existsSync(snapshotFile)
+    ? parseLooseJsonl(snapshotFile)
+    : [];
   const snapshot = {
     ts: new Date().toISOString(),
     interceptRate,
@@ -261,19 +505,20 @@ async function runDoctorHealth() {
   appendFileSync(snapshotFile, JSON.stringify(snapshot) + "\n");
   console.log(color(`\n✔ Health snapshot saved to .ritsu/health-snapshots.jsonl`, "dim"));
 
-  const snapshots = existsSync(snapshotFile) ? parseJsonl(snapshotFile) : [];
-  
-  if (snapshots.length > 0) {
-    const prev = snapshots[snapshots.length - 1] as any;
-    if (prev.currentCoverage) {
-      const diff = (parseFloat(currentCoverage) - parseFloat(prev.currentCoverage)).toFixed(1);
+  if (previousSnapshots.length > 0) {
+    const prev = previousSnapshots[previousSnapshots.length - 1];
+    const prevCoverage = prev?.currentCoverage;
+    if (typeof prevCoverage === "string" || typeof prevCoverage === "number") {
+      const diff = (
+        parseFloat(currentCoverage) - parseFloat(String(prevCoverage))
+      ).toFixed(1);
       const trend = parseFloat(diff) >= 0 ? color(`+${diff}%`, "green") : color(`${diff}%`, "red");
       console.log(`Trend: Coverage moved ${trend} since last check.`);
     }
   }
 }
 
-async function runDoctor(args: string[] = []) {
+export async function runDoctor(args: string[] = []) {
   const root = getProjectRoot();
   console.log(color("Ritsu Doctor — Running Health Check...", "cyan"));
   console.log(color(`Project Root: ${root}`, "dim"));
@@ -298,6 +543,7 @@ async function runDoctor(args: string[] = []) {
 
   // 1. Check AGENTS.md
   const agentsPath = resolve(root, "AGENTS.md");
+  let agentsVersion: string | null = null;
   if (!existsSync(agentsPath)) {
     console.log(color("✖ AGENTS.md missing in root", "red"));
     errors++;
@@ -306,6 +552,7 @@ async function runDoctor(args: string[] = []) {
     const content = readFileSync(agentsPath, "utf-8");
     const vMatch = content.match(/ritsu-version:\s*(\d+\.\d+\.\d+)/);
     const domainMatch = content.match(/domain:\s*(\w+)/);
+    agentsVersion = vMatch ? vMatch[1] : null;
     console.log(color(`  - version: ${vMatch ? vMatch[1] : "unknown"}`, "dim"));
     console.log(color(`  - domain: ${domainMatch ? domainMatch[1] : "unknown"}`, "dim"));
   }
@@ -345,15 +592,48 @@ async function runDoctor(args: string[] = []) {
   // 4. Version consistency check (runtime vs schema)
   const pkgPath = resolve(__dirname, "../package.json");
   if (existsSync(pkgPath)) {
-    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-    console.log(color(`✔ Runtime version: ${pkg.version}`, "green"));
+    const runtimeMeta = readRuntimeMetadata();
+    if (runtimeMeta.packageVersion) {
+      console.log(color(`✔ Runtime version: ${runtimeMeta.packageVersion}`, "green"));
+    }
+    if (runtimeMeta.protocolVersion) {
+      console.log(color(`  - protocol version: ${runtimeMeta.protocolVersion}`, "dim"));
+    }
+
+    if (
+      runtimeMeta.packageVersion &&
+      runtimeMeta.protocolVersion &&
+      runtimeMeta.packageVersion !== runtimeMeta.protocolVersion
+    ) {
+      console.log(
+        color(
+          `✖ runtime/package.json version mismatch: ${runtimeMeta.packageVersion} != ${runtimeMeta.protocolVersion}`,
+          "red",
+        ),
+      );
+      errors++;
+    }
+
+    if (
+      agentsVersion &&
+      runtimeMeta.protocolVersion &&
+      agentsVersion !== runtimeMeta.protocolVersion
+    ) {
+      console.log(
+        color(
+          `✖ AGENTS.md ritsu-version mismatch: ${agentsVersion} != ${runtimeMeta.protocolVersion}`,
+          "red",
+        ),
+      );
+      errors++;
+    }
   }
 
   console.log("\n" + color(`Summary: ${errors} Errors, ${warnings} Warnings`, errors > 0 ? "red" : (warnings > 0 ? "yellow" : "green")));
   if (errors > 0) process.exit(1);
 }
 
-async function runExport(outPath: string | null) {
+export async function runExport(outPath: string | null) {
   const root = getProjectRoot();
   const ctxFile = findLatestCtxFile(root);
   if (!ctxFile) {
@@ -362,37 +642,7 @@ async function runExport(outPath: string | null) {
   }
 
   const events = parseJsonl(ctxFile);
-  const tasks: Record<string, { skill: string, domain: string, startTs: string, endTs?: string, status: string, artifacts: string[], error?: string, totalTokensIn: number, totalTokensOut: number }> = {};
-
-  for (const e of events) {
-    if (!tasks[e.correlation_id]) {
-      tasks[e.correlation_id] = {
-        skill: e.skill,
-        domain: e.domain,
-        startTs: e.ts,
-        status: "in_progress",
-        artifacts: [],
-        totalTokensIn: 0,
-        totalTokensOut: 0
-      };
-    }
-    
-    if (e.cost) {
-      tasks[e.correlation_id].totalTokensIn += e.cost.tokens_in ?? 0;
-      tasks[e.correlation_id].totalTokensOut += e.cost.tokens_out ?? 0;
-    }
-    
-    if (e.status === "done") {
-      tasks[e.correlation_id].status = "completed";
-      tasks[e.correlation_id].endTs = e.ts;
-    } else if (e.status === "failed") {
-      tasks[e.correlation_id].status = "failed";
-      tasks[e.correlation_id].endTs = e.ts;
-      tasks[e.correlation_id].error = e.error;
-    } else if (e.status === "artifact_written" && e.artifact) {
-      tasks[e.correlation_id].artifacts.push(e.artifact);
-    }
-  }
+  const tasks = summarizeTasks(events);
 
   const lines = [
     `# Ritsu Task Export — ${new Date().toISOString().slice(0, 10)}`,
@@ -420,7 +670,7 @@ async function runExport(outPath: string | null) {
   }
 }
 
-async function runTrace(traceId: string | null, openFlag: boolean = false, checkTriple: boolean = false) {
+export async function runTrace(traceId: string | null, openFlag: boolean = false, checkTriple: boolean = false) {
   const root = getProjectRoot();
   const ctxFile = findLatestCtxFile(root);
   if (!ctxFile) {
@@ -431,23 +681,14 @@ async function runTrace(traceId: string | null, openFlag: boolean = false, check
   if (checkTriple) {
     console.log(color("Ritsu Triple Verification — Checking latest Trace...", "cyan"));
     const events = parseJsonl(ctxFile);
-    // Find the latest trace_id mentioned in the events
-    let lastTraceId: string | null = null;
-    for (let i = events.length - 1; i >= 0; i--) {
-      if (events[i].trace_id) {
-        lastTraceId = events[i].trace_id ?? null;
-        break;
-      }
-    }
+    const lastTraceId = getLatestTraceId(events);
     
     if (!lastTraceId) {
       console.error(color("✖ No traces found in the latest context file.", "red"));
       process.exit(1);
     }
 
-    const spanTree = joinTrace(root, lastTraceId as string);
-    const artifacts = spanTree.events.filter((e: any) => e.status === "artifact_written");
-    const types = new Set(artifacts.map((e: any) => (e as any).artifact_meta?.type));
+    const types = getArtifactTypes(getTraceEvents(events, lastTraceId));
 
     const hasDesign = types.has("design-sheet") || types.has("design-brief");
     const hasDev = types.has("dev-report");
@@ -470,16 +711,7 @@ async function runTrace(traceId: string | null, openFlag: boolean = false, check
   const events = parseJsonl(ctxFile);
 
   if (openFlag) {
-    const traces: Record<string, boolean> = {}; // trace_id -> isClosed
-    for (const e of events) {
-      if (e.trace_id) {
-        if (!Object.hasOwn(traces, e.trace_id)) traces[e.trace_id] = false;
-        if (e.span_kind === "root" && (e.status === "done" || e.status === "failed")) {
-          traces[e.trace_id] = true;
-        }
-      }
-    }
-    const openTraces = Object.entries(traces).filter(([_id, closed]) => !closed).map(([id]) => id);
+    const openTraces = getOpenTraceIds(events);
     if (openTraces.length === 0) {
       console.log(color("No open traces found.", "green"));
       return;
@@ -499,16 +731,9 @@ async function runTrace(traceId: string | null, openFlag: boolean = false, check
   }
 
   // Handle legacy CID input
-  let targetTraceId = traceId;
-  if (traceId.startsWith("cid-")) {
-    const match = traceId.match(/^cid-(\d{8})-(.+)$/);
-    if (match) {
-      const hex = match[2].padStart(16, "0");
-      targetTraceId = `trace-${match[1]}-${hex}`;
-    }
-  }
+  const targetTraceId = normalizeTraceId(traceId);
 
-  const traceEvents = events.filter((e) => e.trace_id === targetTraceId);
+  const traceEvents = getTraceEvents(events, targetTraceId);
   if (traceEvents.length === 0) {
     console.error(color(`Trace not found: ${targetTraceId}`, "yellow"));
     process.exit(2);
@@ -516,17 +741,9 @@ async function runTrace(traceId: string | null, openFlag: boolean = false, check
 
   console.log(color(`Trace ID: ${targetTraceId}`, "blue"));
   
-  // Build span tree
-  const spans: Record<string, { id: string; parent?: string; events: CtxEvent[] }> = {};
-  for (const e of traceEvents) {
-    const sid = e.span_id ?? "unknown";
-    if (!spans[sid]) spans[sid] = { id: sid, parent: e.parent_span_id, events: [] };
-    spans[sid].events.push(e);
-  }
-
-  const rootSpans = Object.values(spans).filter(s => !s.parent || !spans[s.parent]);
+  const rootSpans = buildTraceSpanForest(traceEvents);
   
-  function printSpan(span: any, indent: string) {
+  function printSpan(span: TraceSpanNode, indent: string) {
     const sorted = span.events.sort((a: CtxEvent, b: CtxEvent) => a.ts.localeCompare(b.ts));
     const startE = sorted.find((e: CtxEvent) => e.status === "started") || sorted[0];
     const endE = sorted.slice().reverse().find((e: CtxEvent) => e.status === "done" || e.status === "failed");
@@ -543,7 +760,7 @@ async function runTrace(traceId: string | null, openFlag: boolean = false, check
       console.log(`${indent}│  └─ ${color("artifacts:", "dim")} ${artifacts.join(", ")}`);
     }
 
-    const children = Object.values(spans).filter((s: any) => s.parent === span.id);
+    const children = span.children ?? [];
     for (const child of children) {
       printSpan(child, indent + "│  ");
     }
@@ -611,7 +828,7 @@ async function runMine(args: string[]) {
   console.log(usage());
 }
 
-function main() {
+export function main() {
   const args = process.argv.slice(2);
   const helpRequested = args.length === 0 || args.includes("-h") || args.includes("--help");
 

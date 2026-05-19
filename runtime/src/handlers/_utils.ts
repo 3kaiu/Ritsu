@@ -1,7 +1,8 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { detectProjectRoot } from "../project-root.js";
 
 export function getProjectRoot(): string {
-  return process.env.RITSU_PROJECT_ROOT ?? process.cwd();
+  return detectProjectRoot();
 }
 
 export function ts(): string {

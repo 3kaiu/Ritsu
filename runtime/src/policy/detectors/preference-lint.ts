@@ -2,21 +2,51 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import yaml from "js-yaml";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
+import { getProjectRoot } from "../../handlers/_utils.js";
+
+interface PreferenceRuleDoc {
+  id: string;
+  match_regex?: string;
+  forbid_lib?: string;
+  require_call?: string;
+}
+
+interface PreferencesDoc {
+  rules?: PreferenceRuleDoc[];
+  preferences?: PreferenceRuleDoc[];
+}
+
+function isPreferenceRule(value: unknown): value is PreferenceRuleDoc {
+  if (typeof value !== "object" || value === null) return false;
+  const rule = value as Record<string, unknown>;
+  return (
+    typeof rule.id === "string" &&
+    (rule.match_regex === undefined || typeof rule.match_regex === "string") &&
+    (rule.forbid_lib === undefined || typeof rule.forbid_lib === "string") &&
+    (rule.require_call === undefined || typeof rule.require_call === "string")
+  );
+}
 
 export class PreferenceLintDetector implements DetectorPlugin {
   type = "preference_lint" as const;
 
   detect(rule: PolicyRule, ctx: PolicyCheckContext): PolicyViolation[] {
     const violations: PolicyViolation[] = [];
-    const root = process.env.RITSU_PROJECT_ROOT ?? process.cwd();
+    const root = getProjectRoot();
     const prefPath = resolve(root, ".ritsu/preferences.yaml");
 
     if (!existsSync(prefPath)) return violations;
 
     try {
       const raw = readFileSync(prefPath, "utf-8");
-      const doc = yaml.load(raw) as any;
-      const prefRules = doc?.rules || [];
+      const doc = yaml.load(raw) as PreferencesDoc | null;
+      const prefRules = (
+        Array.isArray(doc?.rules)
+          ? doc.rules
+          : Array.isArray(doc?.preferences)
+            ? doc.preferences
+            : []
+      ).filter(isPreferenceRule);
 
       const content = ctx.content || "";
 
@@ -30,7 +60,7 @@ export class PreferenceLintDetector implements DetectorPlugin {
               severity: "warn", // preferences are typically warnings
               message: `Preference match: ${pref.id}`,
               evidence: pref.match_regex,
-              suggestion: `Follow project preference defined in ${pref.id}`
+              suggestion: `Follow project preference defined in ${pref.id}`,
             });
           }
         }
@@ -43,7 +73,7 @@ export class PreferenceLintDetector implements DetectorPlugin {
               severity: "warn",
               message: `Forbidden library '${pref.forbid_lib}' detected.`,
               evidence: pref.forbid_lib,
-              suggestion: `Use project preferred alternatives.`
+              suggestion: `Use project preferred alternatives.`,
             });
           }
         }
@@ -56,12 +86,12 @@ export class PreferenceLintDetector implements DetectorPlugin {
               severity: "warn",
               message: `Required call '${pref.require_call}' missing.`,
               evidence: pref.require_call,
-              suggestion: `Add the required call to follow project patterns.`
+              suggestion: `Add the required call to follow project patterns.`,
             });
           }
         }
       }
-    } catch (e) {
+    } catch {
       // ignore parse errors
     }
 

@@ -122,6 +122,11 @@
 ## 交付摘要
 - 实施结果: {完成/部分完成/失败}
 - 验证结果: {通过/部分通过/失败}
+- 质量门禁对账 (Quality Gates):
+  - 总状态: {passed|failed|partially_skipped}
+  - Lint: {passed|failed|skipped}
+  - Test: {passed|failed|skipped}
+  - 覆盖率 (Lines): {87.5%|n/a}
 
 ## 变更明细
 - 主要产出: {代码/测试/文档}

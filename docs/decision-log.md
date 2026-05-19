@@ -47,7 +47,7 @@
 - 最小集（仅跨进程 + 签名，~4 周）—— 不够实用
 - 全集（中集 + 预算 + 能力协商，~14 周）—— 能力协商接近"agent 编排框架"反指标
 **理由**：中集是"真多 agent 并行能跑起来的最小粒度"；能力协商/预算等留 v6.2 评估。
-**影响**：[RFC-002](./rfc/002-cross-agent-collaboration.md) 起草完成；ROADMAP 加 Phase E；execution-priority 加 Batch 8。
+**影响**：[RFC-002](./rfc/003-multi-agent-collaboration.md) 起草完成；ROADMAP 加 Phase E；execution-priority 加 Batch 8。
 **拍板**：3kaiu
 
 ---
@@ -63,7 +63,7 @@
 | 起草 RFC-003（v6.2 议题：能力协商 / 预算 / OTel exporter / ed25519 等推延项） | **接受** | 把 RFC-001/002 punt 到 v6.2+ 的所有项整合 |
 
 **上下文**：用户问 "继续 3 → 2"——即先 RFC-003 再 execution-priority 整合。
-**影响**：[RFC-003](./rfc/003-advanced-coordination.md) 起草完成；ROADMAP 加 Phase F；execution-priority 同时加 Batch 8 (RFC-002) + Batch 9 (RFC-003)。
+**影响**：[RFC-003](./rfc/004-advanced-coordination.md) 起草完成；ROADMAP 加 Phase F；execution-priority 同时加 Batch 8 (RFC-002) + Batch 9 (RFC-003)。
 **拍板**：3kaiu
 
 ---

@@ -158,7 +158,7 @@ v2 ROADMAP 假设所有任务都从零开始——但盘点发现：
 
 ### Batch 8 · 跨 Agent 协作协议（M13-M14, 2 个月）
 
-**目标**：实现 [RFC-002](./rfc/002-cross-agent-collaboration.md) 中集——跨进程 + 签名 + lease + task claim。
+**目标**：实现 [RFC-002](./rfc/003-multi-agent-collaboration.md) 中集——跨进程 + 签名 + lease + task claim。
 **对应**：[ROADMAP](./ROADMAP.md) Phase E。
 
 | 顺序 | 任务 | 来源 RFC-002 | 工作量 | 收益 |
@@ -183,7 +183,7 @@ v2 ROADMAP 假设所有任务都从零开始——但盘点发现：
 
 ### Batch 9 · 高阶协调与可观测（M15-M17, 2.5 个月）
 
-**目标**：实现 [RFC-003](./rfc/003-advanced-coordination.md) 6 项——capability + budget + OTel + ed25519 + dir-lease + metrics。
+**目标**：实现 [RFC-003](./rfc/004-advanced-coordination.md) 6 项——capability + budget + OTel + ed25519 + dir-lease + metrics。
 **对应**：[ROADMAP](./ROADMAP.md) Phase F。
 
 | 顺序 | 任务 | 来源 RFC-003 | 工作量 | 收益 |

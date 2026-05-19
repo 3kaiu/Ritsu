@@ -13,8 +13,8 @@
 >
 > **RFC 索引**：
 > - [RFC-001](./rfc/001-multi-agent-trace.md) — Multi-Agent Trace Protocol (v6.0)
-> - [RFC-002](./rfc/002-cross-agent-collaboration.md) — Cross-Agent Collaboration Protocol (v6.1)
-> - [RFC-003](./rfc/003-advanced-coordination.md) — Advanced Coordination & Observability (v6.2)
+> - [RFC-002](./rfc/003-multi-agent-collaboration.md) — Cross-Agent Collaboration Protocol (v6.1)
+> - [RFC-003](./rfc/004-advanced-coordination.md) — Advanced Coordination & Observability (v6.2)
 
 ---
 
@@ -135,7 +135,7 @@ Phase F  (~10 weeks)高阶协调与可观测（v6.2）    → v6.2.0   ← see R
 **目标**：把 RFC-001 的"事件账本"升级为多 agent 协作的"调度基底"——跨进程可串联、事件可信、并行不冲突、任务可机器领取。
 **版本目标**：v6.1.0。
 **Scope**：中集（用户决策）—— 跨进程传播 + HMAC 签名 + file-lease + coordination-sheet 机器可读 + task claim 协议。**显式不做**网络协议、OAuth、agent 编排框架、能力协商、预算跟踪。
-**完整规范**：[RFC-002](./rfc/002-cross-agent-collaboration.md)
+**完整规范**：[RFC-002](./rfc/003-multi-agent-collaboration.md)
 
 | ID | 任务 | 关键文件 |
 | --- | --- | --- |
@@ -161,7 +161,7 @@ Phase F  (~10 weeks)高阶协调与可观测（v6.2）    → v6.2.0   ← see R
 **目标**：在 v6.1 多 agent 可执行协作的基础上，让协作**可优化、可观测、可对外集成**——不增加新人学习曲线。
 **版本目标**：v6.2.0。
 **Scope**：6 项——Capability Registry + Budget Tracking + OTel TRACEPARENT 双向 + ed25519 升级（团队层非对称信任）+ Directory-level lease + `doctor --metrics`。**显式不做**实时调度器、付费/计费、OTel collector 自身、Prometheus 替代品、服务化注册中心。
-**完整规范**：[RFC-003](./rfc/003-advanced-coordination.md)
+**完整规范**：[RFC-003](./rfc/004-advanced-coordination.md)
 
 | ID | 任务 | 关键文件 |
 | --- | --- | --- |
@@ -190,7 +190,7 @@ Phase E 启动期间收集的后续候选已沉淀，详见 [decision-log.md](./
 | --- | --- | --- |
 | RFC-002 路线压力测试 | 暂缓（设计成熟度足够） | — |
 | RFC-002 拆解整合 execution-priority | 接受 | Batch 8 见 [v2-execution-priority.md](./v2-execution-priority.md) |
-| RFC-003 v6.2 议题起草 | 接受 | [RFC-003](./rfc/003-advanced-coordination.md) + Batch 9 |
+| RFC-003 v6.2 议题起草 | 接受 | [RFC-003](./rfc/004-advanced-coordination.md) + Batch 9 |
 
 ---
 

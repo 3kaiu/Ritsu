@@ -3,12 +3,26 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { getProjectRoot, textResult } from "./_utils.js";
+import { ensureRitsuDir } from "../ctx-path.js";
+import {
+  buildQualityGateSnapshot,
+  captureQualityGateWorktreeState,
+  extractQualityGateExecutionContext,
+  type CoverageByFile,
+  type CoverageMetric,
+  type CoverageStats,
+} from "../quality-gates.js";
 
 interface TestFailure {
   suite: string;
   test: string;
   error: string;
   file_hint: string;
+}
+
+interface CommandSpec {
+  cmd: string;
+  cwd: string;
 }
 
 interface QualityGateResult {
@@ -19,8 +33,54 @@ interface QualityGateResult {
     output: string;
   };
   coverage?: {
-    summary: any;
-    per_file: Record<string, any>;
+    summary: CoverageStats;
+    per_file: CoverageByFile;
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCoverageMetric(value: unknown): value is CoverageMetric {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.total === "number" &&
+    typeof value.covered === "number" &&
+    (value.skipped === undefined || typeof value.skipped === "number") &&
+    typeof value.pct === "number"
+  );
+}
+
+function isCoverageStats(value: unknown): value is CoverageStats {
+  if (!isRecord(value)) return false;
+  return (
+    (value.lines === undefined || isCoverageMetric(value.lines)) &&
+    (value.statements === undefined || isCoverageMetric(value.statements)) &&
+    (value.functions === undefined || isCoverageMetric(value.functions)) &&
+    (value.branches === undefined || isCoverageMetric(value.branches)) &&
+    (value.branchesTrue === undefined || isCoverageMetric(value.branchesTrue))
+  );
+}
+
+function parseCoverageSummary(content: string): {
+  summary: CoverageStats;
+  per_file: CoverageByFile;
+} | null {
+  const parsed = JSON.parse(content) as unknown;
+  if (!isRecord(parsed) || !isCoverageStats(parsed.total)) {
+    return null;
+  }
+
+  const perFile: CoverageByFile = {};
+  for (const [file, stats] of Object.entries(parsed)) {
+    if (file === "total" || !isCoverageStats(stats)) continue;
+    perFile[file] = stats;
+  }
+
+  return {
+    summary: parsed.total,
+    per_file: perFile,
   };
 }
 
@@ -101,33 +161,94 @@ function parseTestFailures(output: string): TestFailure[] {
   return failures.slice(0, 20);
 }
 
-function parseAgentsMd(root: string): { lint_cmd: string; test_cmd: string } {
+function detectPackageCommand(
+  packageRoot: string,
+): { lint?: CommandSpec; test?: CommandSpec } {
+  const pkgPath = resolve(packageRoot, "package.json");
+  if (!existsSync(pkgPath)) return {};
+
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+    const scripts = pkg.scripts ?? {};
+    return {
+      lint: scripts.lint ? { cmd: "npm run lint", cwd: packageRoot } : undefined,
+      test: scripts["test:coverage"]
+        ? { cmd: "npm run test:coverage", cwd: packageRoot }
+        : scripts.test
+          ? { cmd: "npm run test", cwd: packageRoot }
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function parseAgentsMd(root: string): {
+  lint_cmd?: CommandSpec;
+  test_cmd?: CommandSpec;
+} {
   const agentsPath = resolve(root, "AGENTS.md");
-  let lint_cmd = "";
-  let test_cmd = "";
+  let lint_cmd: CommandSpec | undefined;
+  let test_cmd: CommandSpec | undefined;
 
   if (existsSync(agentsPath)) {
     const content = readFileSync(agentsPath, "utf-8");
     const lintMatch = content.match(/lint[_-]?cmd\s*[:=]\s*`?([^`\n]+)`?/i);
     const testMatch = content.match(/test[_-]?cmd\s*[:=]\s*`?([^`\n]+)`?/i);
-    if (lintMatch) lint_cmd = lintMatch[1].trim();
-    if (testMatch) test_cmd = testMatch[1].trim();
+    if (lintMatch) lint_cmd = { cmd: lintMatch[1].trim(), cwd: root };
+    if (testMatch) test_cmd = { cmd: testMatch[1].trim(), cwd: root };
   }
 
-  // Auto-detect from package.json if AGENTS.md has no commands
-  const pkgPath = resolve(root, "package.json");
-  if (existsSync(pkgPath)) {
-    try {
-      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
-      const scripts = pkg.scripts ?? {};
-      if (!lint_cmd && scripts.lint) lint_cmd = `npm run lint`;
-      if (!test_cmd && scripts.test) test_cmd = `npm run test`;
-    } catch {
-      // ignore
+  const candidates = [root, resolve(root, "runtime")];
+  for (const candidate of candidates) {
+    const detected = detectPackageCommand(candidate);
+    if (!lint_cmd && detected.lint) {
+      lint_cmd = detected.lint;
+    }
+    if (!test_cmd && detected.test) {
+      test_cmd = detected.test;
     }
   }
 
   return { lint_cmd, test_cmd };
+}
+
+function parseCommand(command: CommandSpec): {
+  binary: string;
+  args: string[];
+  cwd: string;
+} {
+  const parts = command.cmd.split(/\s+/).filter(Boolean);
+  return {
+    binary: parts[0],
+    args: parts.slice(1),
+    cwd: command.cwd,
+  };
+}
+
+function getCommandSearchRoots(command: CommandSpec | undefined): string[] {
+  if (!command) return [];
+
+  const roots = [command.cwd];
+  const parts = command.cmd.split(/\s+/).filter(Boolean);
+  const prefixIdx = parts.findIndex((part) => part === "--prefix");
+  if (prefixIdx !== -1 && parts[prefixIdx + 1]) {
+    roots.push(resolve(command.cwd, parts[prefixIdx + 1]));
+  }
+  return roots;
+}
+
+function findCoverageSummaryPath(searchRoots: string[]): string | null {
+  const seen = new Set<string>();
+  for (const root of searchRoots) {
+    const coveragePath = resolve(root, "coverage/coverage-summary.json");
+    if (seen.has(coveragePath)) continue;
+    seen.add(coveragePath);
+    if (existsSync(coveragePath)) {
+      return coveragePath;
+    }
+  }
+  return null;
 }
 
 export async function ritsu_run_quality_gates(
@@ -138,6 +259,7 @@ export async function ritsu_run_quality_gates(
   const skipTest = params.skip_test === true;
   const strict = params.strict === true;
   const timeoutMs = Math.min(Number(params.timeout_ms ?? 60_000), 120_000);
+  const executionContext = extractQualityGateExecutionContext(params);
 
   const { lint_cmd, test_cmd } = parseAgentsMd(root);
 
@@ -148,8 +270,13 @@ export async function ritsu_run_quality_gates(
 
   // Lint
   if (!skipLint && lint_cmd) {
-    const parts = lint_cmd.split(/\s+/);
-    const r = await runCommand(parts[0], parts.slice(1), root, timeoutMs);
+    const command = parseCommand(lint_cmd);
+    const r = await runCommand(
+      command.binary,
+      command.args,
+      command.cwd,
+      timeoutMs,
+    );
     result.lint = { status: r.ok ? "passed" : "failed", output: r.output.slice(0, 2000) };
   } else if (!skipLint && !lint_cmd) {
     result.lint = { status: strict ? "failed" : "skipped", output: "no lint command found" };
@@ -157,8 +284,13 @@ export async function ritsu_run_quality_gates(
 
   // Test
   if (!skipTest && test_cmd) {
-    const parts = test_cmd.split(/\s+/);
-    const r = await runCommand(parts[0], parts.slice(1), root, timeoutMs);
+    const command = parseCommand(test_cmd);
+    const r = await runCommand(
+      command.binary,
+      command.args,
+      command.cwd,
+      timeoutMs,
+    );
     const failures = parseTestFailures(r.output);
     const passed = r.ok && failures.length === 0;
     result.test = {
@@ -174,22 +306,29 @@ export async function ritsu_run_quality_gates(
   const anyFailed = result.lint.status === "failed" || result.test.status === "failed";
 
   // Check for coverage
-  const coveragePath = resolve(root, "coverage/coverage-summary.json");
-  if (existsSync(coveragePath)) {
+  const coveragePath = findCoverageSummaryPath([
+    ...getCommandSearchRoots(test_cmd),
+    ...getCommandSearchRoots(lint_cmd),
+    root,
+    resolve(root, "runtime"),
+  ]);
+  if (coveragePath) {
     try {
-      const covData = JSON.parse(readFileSync(coveragePath, "utf-8"));
-      const perFile: Record<string, any> = {};
-      for (const [file, stats] of Object.entries(covData)) {
-        if (file !== "total") {
+      const coverage = parseCoverageSummary(readFileSync(coveragePath, "utf-8"));
+      if (coverage) {
+        const perFile: CoverageByFile = {};
+        for (const [file, stats] of Object.entries(coverage.per_file)) {
           // Normalize paths
-          const relPath = file.replace(root + "/", "");
+          const relPath = file.startsWith(root + "/")
+            ? file.replace(root + "/", "")
+            : file;
           perFile[relPath] = stats;
         }
+        result.coverage = {
+          summary: coverage.summary,
+          per_file: perFile,
+        };
       }
-      result.coverage = {
-        summary: covData.total,
-        per_file: perFile,
-      };
     } catch {
       // ignore
     }
@@ -198,6 +337,8 @@ export async function ritsu_run_quality_gates(
   const jsonOutput = JSON.stringify({
     passed: allPassed && !anyFailed,
     status: anyFailed ? "failed" : (allPassed ? "passed" : "partially_skipped"),
+    context:
+      Object.keys(executionContext).length > 0 ? executionContext : undefined,
     lint: result.lint,
     test: result.test,
     coverage: result.coverage,
@@ -206,12 +347,19 @@ export async function ritsu_run_quality_gates(
 
   // Save for detectors to consume
   try {
+    ensureRitsuDir(root);
     const lastGatePath = resolve(root, ".ritsu/last-quality-gate.json");
-    writeFileSync(lastGatePath, JSON.stringify(result));
+    const worktreeResult = await captureQualityGateWorktreeState(root);
+    const persisted = buildQualityGateSnapshot({
+      context: executionContext,
+      worktree: worktreeResult.ok ? worktreeResult.worktree : undefined,
+      ...result,
+      strict,
+    });
+    writeFileSync(lastGatePath, JSON.stringify(persisted));
   } catch {
     // ignore
   }
 
   return textResult(jsonOutput);
 }
-

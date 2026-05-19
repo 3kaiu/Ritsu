@@ -45,4 +45,48 @@ tech_fingerprints:
     expect(data.tech_fingerprints).toContain("nodejs");
     expect(data.rules_overrides.disable).toContain("AP-8");
   });
+
+  it("falls back to best-effort parsing when the Ritsu block is missing", async () => {
+    writeFileSync(
+      resolve(root, "AGENTS.md"),
+      [
+        "# Project Baseline",
+        "ritsu-version: 6.1.0",
+        "domain: backend",
+        "规则覆盖:",
+        "  rules_overrides:",
+        "    disable: [AP-8]",
+        "This line stops the YAML-like section",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await ritsu_read_agents({});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data._warning).toContain("Ritsu Configuration Block not found");
+    expect(data.domain).toBe("backend");
+    expect(data.ritsu_version).toBe("6.1.0");
+    expect(data.rules_overrides.disable).toContain("AP-8");
+  });
+
+  it("treats non-object Ritsu blocks as empty configuration", async () => {
+    writeFileSync(
+      resolve(root, "AGENTS.md"),
+      [
+        "<!-- Ritsu Configuration Block -->",
+        "just-a-string",
+        "<!-- End Ritsu Block -->",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const result = await ritsu_read_agents({});
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.ritsu_version).toBe("");
+    expect(data.domain).toBe("");
+    expect(data.tech_fingerprints).toEqual([]);
+    expect(data.rules_overrides).toBeUndefined();
+  });
 });

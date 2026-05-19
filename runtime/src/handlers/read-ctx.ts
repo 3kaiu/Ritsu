@@ -39,11 +39,7 @@ function computeSummary(
 
   const skillsUsed: Record<string, number> = {};
   const domains: Record<string, number> = {};
-  let tasksTotal = 0;
-  let tasksDone = 0;
-  let tasksFailed = 0;
-
-  const seenCids = new Set<string>();
+  const taskTerminalStatus = new Map<string, "done" | "failed" | null>();
 
   for (const e of entries) {
     const skill = String(e.skill ?? "unknown");
@@ -52,12 +48,24 @@ function computeSummary(
     domains[domain] = (domains[domain] ?? 0) + 1;
 
     const cid = String(e.correlation_id ?? "");
-    if (cid && !seenCids.has(cid)) {
-      seenCids.add(cid);
-      tasksTotal++;
-      if (e.status === "done") tasksDone++;
-      if (e.status === "failed") tasksFailed++;
+    if (cid) {
+      if (!taskTerminalStatus.has(cid)) {
+        taskTerminalStatus.set(cid, null);
+      }
+
+      if (e.status === "done" || e.status === "failed") {
+        taskTerminalStatus.set(cid, e.status);
+      }
     }
+  }
+
+  const tasksTotal = taskTerminalStatus.size;
+  let tasksDone = 0;
+  let tasksFailed = 0;
+
+  for (const status of taskTerminalStatus.values()) {
+    if (status === "done") tasksDone++;
+    if (status === "failed") tasksFailed++;
   }
 
   const month = new Date().toISOString().slice(0, 7);
@@ -154,13 +162,33 @@ function summarizeFailedEntries(
 function checkRealityDesync(
   root: string,
   lastCompleted: Record<string, unknown> | null,
+  entries: Record<string, unknown>[],
 ): { desync_detected: boolean; missing_artifacts: string[] } {
   const missing: string[] = [];
   if (!lastCompleted)
     return { desync_detected: false, missing_artifacts: missing };
 
-  const artifact = String(lastCompleted.artifact ?? "");
-  if (artifact && artifact !== "null") {
+  const artifacts = new Set<string>();
+  const addArtifact = (value: unknown) => {
+    const artifact = String(value ?? "");
+    if (artifact && artifact !== "null") {
+      artifacts.add(artifact);
+    }
+  };
+
+  addArtifact(lastCompleted.artifact);
+
+  const cid = String(lastCompleted.correlation_id ?? "");
+  if (cid) {
+    for (const entry of entries) {
+      if (String(entry.correlation_id ?? "") !== cid) continue;
+      if (entry.status === "artifact_written") {
+        addArtifact(entry.artifact);
+      }
+    }
+  }
+
+  for (const artifact of artifacts) {
     const fullPath = resolve(root, artifact);
     if (!existsSync(fullPath)) {
       missing.push(artifact);
@@ -384,7 +412,7 @@ export async function ritsu_read_ctx(
     allEntries,
   );
 
-  data.reality_check = checkRealityDesync(root, lastCompleted);
+  data.reality_check = checkRealityDesync(root, lastCompleted, allEntries);
 
   const cbStatus = computeCircuitBreaker(allEntries);
   data.circuit_breaker_status = cbStatus;

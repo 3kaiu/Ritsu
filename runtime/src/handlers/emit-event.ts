@@ -2,11 +2,17 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
 import { validateEvent } from "../event-validator.js";
 import {
+  readQualityGateSnapshot,
+  validateQualityGateSnapshotContext,
+  validateQualityGateSnapshotWorktree,
+} from "../quality-gates.js";
+import {
   getArtifactLayer,
   getCanonicalArtifactType,
   getPreferredArtifactType,
 } from "../shared.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
+import { emitViolationEvent } from "../violation-events.js";
 
 export async function ritsu_emit_event(
   params: Record<string, unknown>,
@@ -22,6 +28,12 @@ export async function ritsu_emit_event(
     !Array.isArray(params.artifact_meta)
       ? (params.artifact_meta as Record<string, unknown>)
       : undefined;
+  const rawViolation =
+    params.violation &&
+    typeof params.violation === "object" &&
+    !Array.isArray(params.violation)
+      ? (params.violation as Record<string, unknown>)
+      : undefined;
 
   if (!eventType) return errorResult("event_type is required");
 
@@ -33,10 +45,10 @@ export async function ritsu_emit_event(
     ...(correlationId ? { correlation_id: correlationId } : {}),
     ...(traceId ? { trace_id: traceId } : {}),
     ...(spanId ? { span_id: spanId } : {}),
-    skill: String(params.skill ?? "unknown"),
-    domain: String(params.domain ?? "unknown"),
     status: eventType,
   };
+  if (params.skill) event.skill = String(params.skill);
+  if (params.domain) event.domain = String(params.domain);
 
   if (params.agent) event.agent = params.agent;
 
@@ -45,6 +57,9 @@ export async function ritsu_emit_event(
   if (params.error) event.error = String(params.error);
   if (params.cost && typeof params.cost === "object") {
     event.cost = params.cost;
+  }
+  if (rawViolation) {
+    event.violation = rawViolation;
   }
   if (rawArtifactMeta) {
     const rawArtifactType =
@@ -67,14 +82,60 @@ export async function ritsu_emit_event(
     };
   }
 
-  // Schema 校验（不含 correlation_id 时跳过，因为锁内才生成）
-  if (correlationId) {
-    const validation = validateEvent(event);
-    if (!validation.valid) {
-      return errorResult(
-        `event validation failed: ${validation.errors?.join(", ")}`,
-      );
+  if (eventType === "done" && event.skill === "dev") {
+    const qualityGateState = readQualityGateSnapshot(root);
+    if (!qualityGateState.ok) {
+      const message = `quality gates must be run before emit_event(done) for dev: ${qualityGateState.message}`;
+      await emitViolationEvent(root, "AP-5", "fatal", message, qualityGateState.path);
+      return errorResult(message);
     }
+    const contextValidation = validateQualityGateSnapshotContext(
+      qualityGateState.snapshot,
+      {
+        correlation_id: correlationId || undefined,
+        trace_id: traceId,
+        span_id: spanId,
+        skill: typeof event.skill === "string" ? event.skill : undefined,
+        domain: typeof event.domain === "string" ? event.domain : undefined,
+      },
+    );
+    if (!contextValidation.ok) {
+      await emitViolationEvent(
+        root,
+        "AP-5",
+        "fatal",
+        contextValidation.message,
+        contextValidation.actual.join("; "),
+      );
+      return errorResult(contextValidation.message);
+    }
+    const worktreeValidation = await validateQualityGateSnapshotWorktree(
+      root,
+      qualityGateState.snapshot,
+    );
+    if (!worktreeValidation.ok) {
+      await emitViolationEvent(
+        root,
+        "AP-5",
+        "fatal",
+        worktreeValidation.message,
+        worktreeValidation.actual.join("; "),
+      );
+      return errorResult(worktreeValidation.message);
+    }
+    if (qualityGateState.snapshot.status !== "passed") {
+      const message = `quality gates must pass before emit_event(done) for dev; current status: ${qualityGateState.snapshot.status}`;
+      await emitViolationEvent(root, "AP-5", "fatal", message);
+      return errorResult(message);
+    }
+  }
+
+  // Schema 校验必须在写入前完成；correlation_id 缺失不影响 schema 判定。
+  const validation = validateEvent(event);
+  if (!validation.valid) {
+    return errorResult(
+      `event validation failed: ${validation.errors?.join(", ")}`,
+    );
   }
 
   // 原子写入 — correlation_id 生成和追加在同一个异步锁内完成

@@ -62,7 +62,7 @@ export async function ritsu_close_span(
   await appendEvent(root, event);
 
   // Batch 8.3: Release all file leases for this span
-  releaseAllForSpan(root, spanId);
+  await releaseAllForSpan(root, spanId);
 
   // Auto-sync on root span close
   // ritsu_close_span is called. If parent_span_id isn't provided or explicitly tracked, we trigger sync anyway since this is asynchronous and non-blocking.

@@ -7,7 +7,6 @@ import {
   writeFileSync,
   renameSync,
   rmSync,
-  appendFileSync,
 } from "node:fs";
 import { resolve, join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -19,28 +18,36 @@ import {
   getArtifactLayer,
   ARTIFACT_REGISTRY,
 } from "../shared.js";
+import type { ArtifactType } from "../shared.js";
 import {
   getProjectRoot,
   textResult,
   jsonErrorResult,
+  ts,
 } from "./_utils.js";
 import { evaluatePolicies } from "../policy/index.js";
-import { ensureCtxFile } from "../ctx-path.js";
+import { appendEvent } from "../ctx-writer.js";
+import { validateEvent } from "../event-validator.js";
+import {
+  extractQualityGateExecutionContext,
+  normalizeQualityGateStatusToken,
+  parseQualityGatePct,
+  readQualityGateSnapshot,
+  validateQualityGateSnapshotContext,
+  validateQualityGateSnapshotWorktree,
+} from "../quality-gates.js";
+import { emitViolationEvent } from "../violation-events.js";
 
-async function emitViolation(ruleId: string, severity: string, message: string, evidence?: string) {
-  const root = getProjectRoot();
-  const ctxPath = ensureCtxFile(root);
-  const event = {
-    ts: new Date().toISOString().replace(/[-:]/g, "").slice(0, 8) + "-" + new Date().toISOString().slice(11, 19).replace(/:/g, ""),
-    status: "violation_detected",
-    violation: {
-      rule_id: ruleId,
-      severity,
-      evidence: evidence || message,
-      blocked: true
-    }
-  };
-  appendFileSync(ctxPath, JSON.stringify(event) + "\n");
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isArtifactType(value: string): value is ArtifactType {
+  return ARTIFACT_VALID_TYPES.some((artifactType) => artifactType === value);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 const RITSU_DIR = ".ritsu";
@@ -54,8 +61,13 @@ const ARTIFACT_SCHEMA_KEY_MAP: Record<string, string> = {
 
 type ArtifactSchemaSection = {
   title?: string;
-  fields?: Array<{ label?: string }>;
-  conditional_fields?: Array<{ fields?: Array<{ label?: string }> }>;
+  fields?: ArtifactSchemaField[];
+  conditional_fields?: Array<{ fields?: ArtifactSchemaField[] }>;
+};
+
+type ArtifactSchemaField = {
+  label?: string;
+  sub_fields?: ArtifactSchemaField[];
 };
 
 export type ArtifactContentValidationIssueCode =
@@ -84,12 +96,20 @@ export type ArtifactValidationViolation = {
 
 export type ArtifactWriteViolationCode =
   | "missing_required_fields"
+  | "policy_violation"
   | "placeholder_content"
   | "invalid_artifact_type"
   | "filename_prefix_mismatch"
   | "path_traversal"
   | "file_exists"
-  | "atomic_write_failed";
+  | "artifact_event_invalid"
+  | "atomic_write_failed"
+  | "quality_gates_missing_snapshot"
+  | "quality_gates_invalid_snapshot"
+  | "quality_gates_report_incomplete"
+  | "quality_gates_result_mismatch"
+  | "quality_gates_context_mismatch"
+  | "quality_gates_worktree_mismatch";
 
 export type ArtifactWriteViolation = {
   code: ArtifactWriteViolationCode;
@@ -118,6 +138,101 @@ export type ArtifactErrorPayload = {
 
 let cachedArtifactSchemas: Record<string, { required_sections?: ArtifactSchemaSection[] }> | null =
   null;
+
+function buildArtifactSummary(content: string): string {
+  const firstMeaningfulLine = content
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith("#"));
+
+  const summary = firstMeaningfulLine ?? "artifact written";
+  return summary.slice(0, 160);
+}
+
+function collectFieldLabels(fields: ArtifactSchemaField[] | undefined): string[] {
+  if (!Array.isArray(fields)) return [];
+
+  const labels: string[] = [];
+  for (const field of fields) {
+    const label = typeof field?.label === "string" ? field.label.trim() : "";
+    if (label) labels.push(label);
+    labels.push(...collectFieldLabels(field?.sub_fields));
+  }
+  return labels;
+}
+
+function pickContextValue(
+  params: Record<string, unknown>,
+  key: string,
+): unknown {
+  if (params[key] !== undefined) {
+    return params[key];
+  }
+  const context =
+    params.context &&
+    typeof params.context === "object" &&
+    !Array.isArray(params.context)
+      ? (params.context as Record<string, unknown>)
+      : undefined;
+  return context?.[key];
+}
+
+function buildArtifactWrittenEvent(
+  params: Record<string, unknown>,
+  filename: string,
+  artifactMeta: Record<string, unknown>,
+): Record<string, unknown> {
+  const event: Record<string, unknown> = {
+    ts: ts(),
+    status: "artifact_written",
+    artifact: filename,
+    artifact_meta: artifactMeta,
+  };
+
+  const skill = pickContextValue(params, "skill");
+  const domain = pickContextValue(params, "domain");
+  const correlationId = pickContextValue(params, "correlation_id");
+  const traceId = pickContextValue(params, "trace_id");
+  const spanId = pickContextValue(params, "span_id");
+  const parentSpanId = pickContextValue(params, "parent_span_id");
+  const agent = pickContextValue(params, "agent");
+
+  if (typeof skill === "string" && skill) event.skill = skill;
+  if (typeof domain === "string" && domain) event.domain = domain;
+  if (typeof correlationId === "string" && correlationId) {
+    event.correlation_id = correlationId;
+  }
+  if (typeof traceId === "string" && traceId) event.trace_id = traceId;
+  if (typeof spanId === "string" && spanId) event.span_id = spanId;
+  if (typeof parentSpanId === "string" && parentSpanId) {
+    event.parent_span_id = parentSpanId;
+  }
+  if (agent && typeof agent === "object" && !Array.isArray(agent)) {
+    event.agent = agent;
+  }
+
+  return event;
+}
+
+function validateArtifactWrittenEvent(
+  event: Record<string, unknown>,
+): { ok: true } | { ok: false; message: string } {
+  const validation = validateEvent(event);
+  if (!validation.valid) {
+    return {
+      ok: false,
+      message: validation.errors?.join(", ") ?? "event validation failed",
+    };
+  }
+  return { ok: true };
+}
+
+async function appendArtifactWrittenEvent(
+  event: Record<string, unknown>,
+): Promise<void> {
+  const root = getProjectRoot();
+  await appendEvent(root, event);
+}
 
 function getArtifactSchemas(): Record<
   string,
@@ -184,6 +299,177 @@ function extractMarkerLabel(marker: string): string {
   return marker.slice(0, colonIdx).trim();
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractLabeledValue(content: string, label: string): string | null {
+  const pattern = new RegExp(
+    `^[\\t >-]*${escapeRegex(label)}\\s*:\\s*(.+)$`,
+    "mi",
+  );
+  const match = content.match(pattern);
+  return match?.[1]?.trim() ?? null;
+}
+
+async function validateDevReportQualityGates(
+  root: string,
+  content: string,
+  currentContext: ReturnType<typeof extractQualityGateExecutionContext>,
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      code:
+        | "quality_gates_missing_snapshot"
+        | "quality_gates_invalid_snapshot"
+        | "quality_gates_report_incomplete"
+        | "quality_gates_result_mismatch"
+        | "quality_gates_context_mismatch"
+        | "quality_gates_worktree_mismatch";
+      message: string;
+      expected?: string[];
+      actual?: string[];
+    }
+> {
+  const snapshotResult = readQualityGateSnapshot(root);
+  if (!snapshotResult.ok) {
+    return {
+      ok: false,
+      code:
+        snapshotResult.reason === "missing"
+          ? "quality_gates_missing_snapshot"
+          : "quality_gates_invalid_snapshot",
+      message: snapshotResult.message,
+      expected: ["run ritsu_run_quality_gates before writing dev-report"],
+      actual: [snapshotResult.path],
+    };
+  }
+
+  const { snapshot } = snapshotResult;
+  const contextValidation = validateQualityGateSnapshotContext(
+    snapshot,
+    currentContext,
+  );
+  if (!contextValidation.ok) {
+    return {
+      ok: false,
+      code: "quality_gates_context_mismatch",
+      message: contextValidation.message,
+      expected: contextValidation.expected,
+      actual: contextValidation.actual,
+    };
+  }
+
+  const worktreeValidation = await validateQualityGateSnapshotWorktree(
+    root,
+    snapshot,
+  );
+  if (!worktreeValidation.ok) {
+    return {
+      ok: false,
+      code: "quality_gates_worktree_mismatch",
+      message: worktreeValidation.message,
+      expected: worktreeValidation.expected,
+      actual: worktreeValidation.actual,
+    };
+  }
+
+  const expectedLines = [
+    `总状态: ${snapshot.status}`,
+    `Lint: ${snapshot.lint.status}`,
+    `Test: ${snapshot.test.status}`,
+  ];
+  const actualLines: string[] = [];
+
+  const reportStatus = extractLabeledValue(content, "总状态");
+  const lintStatus = extractLabeledValue(content, "Lint");
+  const testStatus = extractLabeledValue(content, "Test");
+
+  const missingLabels = [
+    ...(reportStatus ? [] : ["总状态"]),
+    ...(lintStatus ? [] : ["Lint"]),
+    ...(testStatus ? [] : ["Test"]),
+  ];
+  if (missingLabels.length > 0) {
+    return {
+      ok: false,
+      code: "quality_gates_report_incomplete",
+      message: `dev-report must include structured quality gate fields: ${missingLabels.join(", ")}`,
+      expected: expectedLines,
+      actual: missingLabels,
+    };
+  }
+
+  const reportStatusValue = reportStatus ?? "";
+  const lintStatusValue = lintStatus ?? "";
+  const testStatusValue = testStatus ?? "";
+
+  actualLines.push(`总状态: ${reportStatusValue}`);
+  actualLines.push(`Lint: ${lintStatusValue}`);
+  actualLines.push(`Test: ${testStatusValue}`);
+
+  if (normalizeQualityGateStatusToken(reportStatusValue) !== snapshot.status) {
+    return {
+      ok: false,
+      code: "quality_gates_result_mismatch",
+      message: "dev-report quality gate overall status does not match the latest snapshot",
+      expected: [`总状态: ${snapshot.status}`],
+      actual: [`总状态: ${reportStatusValue}`],
+    };
+  }
+  if (normalizeQualityGateStatusToken(lintStatusValue) !== snapshot.lint.status) {
+    return {
+      ok: false,
+      code: "quality_gates_result_mismatch",
+      message: "dev-report lint status does not match the latest quality gate snapshot",
+      expected: [`Lint: ${snapshot.lint.status}`],
+      actual: [`Lint: ${lintStatusValue}`],
+    };
+  }
+  if (normalizeQualityGateStatusToken(testStatusValue) !== snapshot.test.status) {
+    return {
+      ok: false,
+      code: "quality_gates_result_mismatch",
+      message: "dev-report test status does not match the latest quality gate snapshot",
+      expected: [`Test: ${snapshot.test.status}`],
+      actual: [`Test: ${testStatusValue}`],
+    };
+  }
+
+  const expectedCoveragePct = snapshot.coverage?.summary.lines?.pct;
+  if (typeof expectedCoveragePct === "number") {
+    const coverageValue = extractLabeledValue(content, "覆盖率 (Lines)");
+    if (!coverageValue) {
+      return {
+        ok: false,
+        code: "quality_gates_report_incomplete",
+        message:
+          "dev-report must include '覆盖率 (Lines)' when the latest quality gate captured coverage",
+        expected: [`覆盖率 (Lines): ${expectedCoveragePct}%`],
+        actual: actualLines,
+      };
+    }
+
+    const actualCoveragePct = parseQualityGatePct(coverageValue);
+    actualLines.push(`覆盖率 (Lines): ${coverageValue}`);
+    if (
+      actualCoveragePct === null ||
+      Math.abs(actualCoveragePct - expectedCoveragePct) > 0.01
+    ) {
+      return {
+        ok: false,
+        code: "quality_gates_result_mismatch",
+        message: "dev-report line coverage does not match the latest quality gate snapshot",
+        expected: [`覆盖率 (Lines): ${expectedCoveragePct}%`],
+        actual: [`覆盖率 (Lines): ${coverageValue}`],
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
 export function collectArtifactMarkerActuals(
   content: string,
   marker: string,
@@ -240,17 +526,13 @@ export function collectArtifactContentIssuesDetailed(
     }
 
     const labels = [
-      ...(Array.isArray(section.fields) ? section.fields : []),
+      ...collectFieldLabels(section.fields),
       ...((Array.isArray(section.conditional_fields)
         ? section.conditional_fields.flatMap((group) =>
-            Array.isArray(group.fields) ? group.fields : [],
+            collectFieldLabels(group.fields),
           )
-        : []) as Array<{ label?: string }>),
-    ]
-      .map((field) =>
-        typeof field?.label === "string" ? field.label.trim() : "",
-      )
-      .filter(Boolean);
+        : []) as string[]),
+    ];
 
     for (const label of labels) {
       if (!body.includes(label)) {
@@ -367,9 +649,21 @@ export async function ritsu_write_artifact(
   const type = String(params.type ?? "");
   const filename = String(params.filename ?? "");
   const content = String(params.content ?? "");
-  const artifactMeta = params.artifact_meta as
-    | Record<string, unknown>
-    | undefined;
+  const artifactMeta = isRecord(params.artifact_meta)
+    ? params.artifact_meta
+    : undefined;
+  const summary = buildArtifactSummary(content);
+  const normalizedArtifactMeta = {
+    ...(artifactMeta ?? {}),
+    type,
+    canonical_type: getCanonicalArtifactType(type),
+    layer: getArtifactLayer(type),
+    size_bytes: Buffer.byteLength(content, "utf-8"),
+    summary:
+      typeof artifactMeta?.summary === "string" && artifactMeta.summary.trim()
+        ? artifactMeta.summary.trim()
+        : summary,
+  };
 
   if (!type || !filename || !content) {
     return artifactWriteErrorResult("type, filename, content are required", [
@@ -388,24 +682,33 @@ export async function ritsu_write_artifact(
     ]);
   }
 
+  const root = getProjectRoot();
+
   // 政策引擎拦截
+  const skill = pickContextValue(params, "skill");
   const policyResult = evaluatePolicies({
     action: "write_artifact",
     target: filename,
     content: content,
-    context: { skill: (params.context as any)?.skill },
+    context: typeof skill === "string" ? { skill } : undefined,
   });
 
   if (!policyResult.passed) {
     const topViolation = policyResult.violations.find((v) => v.severity === "fatal" || v.severity === "hard_stop") || policyResult.violations[0];
     
     // C4a: Emit violation event
-    await emitViolation(topViolation.rule_id, topViolation.severity, topViolation.message, topViolation.evidence);
+    await emitViolationEvent(
+      root,
+      topViolation.rule_id,
+      topViolation.severity,
+      topViolation.message,
+      topViolation.evidence,
+    );
 
     const violations = policyResult.violations
       .filter((v) => v.severity === "fatal" || v.severity === "hard_stop")
       .map((v) => ({
-        code: "policy_violation" as any,
+        code: "policy_violation" as const,
         severity: "error" as const,
         path: "content",
         message: `[${v.rule_id}] ${v.message}`,
@@ -421,7 +724,7 @@ export async function ritsu_write_artifact(
   }
 
   // 产物类型校验
-  if (!ARTIFACT_VALID_TYPES.includes(type as any)) {
+  if (!isArtifactType(type)) {
     return artifactWriteErrorResult(
       `invalid artifact type: ${type}. Valid: ${ARTIFACT_VALID_TYPES.join(", ")}`,
       [
@@ -483,7 +786,7 @@ export async function ritsu_write_artifact(
   const validationIssues = collectArtifactContentIssuesDetailed(type, content);
   if (validationIssues.length > 0) {
     // Also emit violation for schema failure
-    await emitViolation("AP-Schema", "error", validationIssues[0].message);
+    await emitViolationEvent(root, "AP-Schema", "error", validationIssues[0].message);
 
     const violations = buildArtifactValidationViolations(validationIssues);
     return jsonErrorResult(
@@ -495,7 +798,37 @@ export async function ritsu_write_artifact(
     );
   }
 
-  const root = getProjectRoot();
+  if (type === "dev-report") {
+    const qualityGateValidation = await validateDevReportQualityGates(
+      root,
+      content,
+      extractQualityGateExecutionContext(params),
+    );
+    if (!qualityGateValidation.ok) {
+      await emitViolationEvent(
+        root,
+        "AP-5",
+        "fatal",
+        qualityGateValidation.message,
+        (qualityGateValidation.actual ?? [qualityGateValidation.message]).join("; "),
+      );
+      return artifactWriteErrorResult(
+        qualityGateValidation.message,
+        [
+          {
+            code: qualityGateValidation.code,
+            severity: "error",
+            path: "content",
+            message: qualityGateValidation.message,
+            artifact_type: type,
+            expected: qualityGateValidation.expected,
+            actual: qualityGateValidation.actual,
+          },
+        ],
+      );
+    }
+  }
+
   const dir = resolve(root, RITSU_DIR);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
@@ -522,36 +855,53 @@ export async function ritsu_write_artifact(
     }
   }
 
+  const artifactWrittenEvent = buildArtifactWrittenEvent(
+    params,
+    filename,
+    normalizedArtifactMeta,
+  );
+  const artifactEventValidation = validateArtifactWrittenEvent(
+    artifactWrittenEvent,
+  );
+  if (!artifactEventValidation.ok) {
+    return artifactWriteErrorResult("artifact event validation failed", [
+      {
+        code: "artifact_event_invalid",
+        severity: "error",
+        path: "artifact_meta",
+        message: `artifact event validation failed: ${artifactEventValidation.message}`,
+        artifact_type: type,
+      },
+    ]);
+  }
+
   // 原子写入 — write-to-temp + rename，防止崩溃时产生撕裂文件
   const tmpPath = join(dir, `.tmp-${randomUUID()}`);
   try {
     writeFileSync(tmpPath, content, "utf-8");
     renameSync(tmpPath, mdPath);
-  } catch (e: any) {
+  } catch (error: unknown) {
+    const message = getErrorMessage(error);
     try {
       rmSync(tmpPath, { force: true });
     } catch {
       // ignore cleanup errors
     }
-    return artifactWriteErrorResult(`atomic write failed: ${e.message}`, [
+    return artifactWriteErrorResult(`atomic write failed: ${message}`, [
       {
         code: "atomic_write_failed",
         severity: "error",
         path: "filesystem",
-        message: `atomic write failed: ${e.message}`,
+        message: `atomic write failed: ${message}`,
         artifact_type: type,
-        actual: [e?.message ?? "unknown error"],
+        actual: [message],
       },
     ]);
   }
   const sizeBytes = statSync(mdPath).size;
-  const normalizedArtifactMeta = {
-    ...(artifactMeta ?? {}),
-    type,
-    canonical_type: getCanonicalArtifactType(type),
-    layer: getArtifactLayer(type),
-    size_bytes: sizeBytes,
-  };
+  normalizedArtifactMeta.size_bytes = sizeBytes;
+  artifactWrittenEvent.artifact_meta = normalizedArtifactMeta;
+  await appendArtifactWrittenEvent(artifactWrittenEvent);
 
   return textResult(
     JSON.stringify({

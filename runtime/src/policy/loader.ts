@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import yaml from "js-yaml";
-import type { PolicyRule, Severity } from "./types.js";
+import type { DetectorConfig, ExemptionConfig, PolicyRule, Severity } from "./types.js";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 
@@ -16,6 +16,122 @@ interface RulesOverrides {
   downgrade?: Array<{ id: string; severity: Severity }>;
 }
 
+interface AntiPatternsDoc {
+  global?: PolicyRule[];
+  review?: PolicyRule[];
+}
+
+interface AgentsOverridesDoc {
+  rules_overrides?: RulesOverrides;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function normalizeSeverity(value: unknown): Severity | null {
+  if (typeof value !== "string") return null;
+
+  switch (value.toLowerCase()) {
+    case "fatal":
+      return "fatal";
+    case "error":
+      return "error";
+    case "warn":
+      return "warn";
+    case "hard_stop":
+      return "hard_stop";
+    default:
+      return null;
+  }
+}
+
+function isDowngradeOverride(
+  value: unknown,
+): value is { id: string; severity: Severity } {
+  if (!isRecord(value)) return false;
+  const override = value;
+  return (
+    typeof override.id === "string" &&
+    normalizeSeverity(override.severity) !== null
+  );
+}
+
+function normalizeExemptions(value: unknown): ExemptionConfig[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+
+  const exemptions: ExemptionConfig[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry) || !isRecord(entry.when)) continue;
+
+    const skill =
+      typeof entry.when.skill === "string" ? entry.when.skill : undefined;
+    const targetFile =
+      typeof entry.when.target_file === "string"
+        ? entry.when.target_file
+        : undefined;
+    if (!skill && !targetFile) continue;
+
+    exemptions.push({
+      when: {
+        skill,
+        target_file: targetFile,
+      },
+    });
+  }
+
+  return exemptions.length > 0 ? exemptions : undefined;
+}
+
+function normalizeDetector(value: unknown): DetectorConfig | undefined {
+  if (!isRecord(value) || typeof value.type !== "string") {
+    return undefined;
+  }
+
+  return {
+    ...value,
+    type: value.type as DetectorConfig["type"],
+    target:
+      value.target === "artifact_content" || value.target === "diff"
+        ? value.target
+        : undefined,
+  };
+}
+
+function normalizePolicyRule(value: unknown): PolicyRule | null {
+  if (!isRecord(value)) return null;
+
+  const severity = normalizeSeverity(value.severity);
+  if (
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    !severity
+  ) {
+    return null;
+  }
+
+  const detector = normalizeDetector(value.detector);
+  const detectorRecord = isRecord(value.detector) ? value.detector : undefined;
+  const directExemption = normalizeExemptions(value.exemption);
+  const detectorExemption = normalizeExemptions(detectorRecord?.exemption);
+
+  return {
+    id: value.id,
+    name: value.name,
+    severity,
+    detector,
+    exemption: directExemption ?? detectorExemption,
+  };
+}
+
+function normalizeRules(value: unknown): PolicyRule[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((entry) => normalizePolicyRule(entry))
+    .filter((entry): entry is PolicyRule => entry !== null);
+}
+
 export function loadPolicies(): PolicyRule[] {
   const root = getProjectRootLocal();
   
@@ -24,10 +140,10 @@ export function loadPolicies(): PolicyRule[] {
   let rules: PolicyRule[] = [];
   if (existsSync(apPath)) {
     const raw = readFileSync(apPath, "utf-8");
-    const doc = yaml.load(raw) as any;
+    const doc = yaml.load(raw) as AntiPatternsDoc | null;
     if (doc) {
-      if (Array.isArray(doc.global)) rules.push(...doc.global);
-      if (Array.isArray(doc.review)) rules.push(...doc.review);
+      rules.push(...normalizeRules(doc.global));
+      rules.push(...normalizeRules(doc.review));
     }
   }
 
@@ -38,16 +154,29 @@ export function loadPolicies(): PolicyRule[] {
     const overrideMatch = agentsContent.match(/rules_overrides:\s*\n([\s\S]*?)<!-- End Ritsu Block -->/);
     if (overrideMatch) {
       try {
-        const overridesDoc = yaml.load(`rules_overrides:\n${overrideMatch[1]}`) as { rules_overrides: RulesOverrides };
+        const overridesDoc = yaml.load(
+          `rules_overrides:\n${overrideMatch[1]}`,
+        ) as AgentsOverridesDoc | null;
         const overrides = overridesDoc?.rules_overrides;
         
         if (overrides) {
-          if (Array.isArray(overrides.disable)) {
-            rules = rules.filter(r => !overrides.disable!.includes(r.id));
+          const disabledIds = Array.isArray(overrides.disable)
+            ? overrides.disable.filter((id): id is string => typeof id === "string")
+            : [];
+          if (disabledIds.length > 0) {
+            rules = rules.filter((rule) => !disabledIds.includes(rule.id));
           }
-          if (Array.isArray(overrides.downgrade)) {
-            for (const dg of overrides.downgrade) {
-              const rule = rules.find(r => r.id === dg.id);
+          const downgrades = Array.isArray(overrides.downgrade)
+            ? overrides.downgrade
+                .filter(isDowngradeOverride)
+                .map((override) => ({
+                  id: override.id,
+                  severity: normalizeSeverity(override.severity) ?? "warn",
+                }))
+            : [];
+          if (downgrades.length > 0) {
+            for (const dg of downgrades) {
+              const rule = rules.find((candidate) => candidate.id === dg.id);
               if (rule) {
                 rule.severity = dg.severity;
               }

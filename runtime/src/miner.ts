@@ -1,14 +1,131 @@
 import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
+import yaml from "js-yaml";
 import { getProjectRoot } from "./handlers/_utils.js";
 
 const RITSU_DIR = ".ritsu";
 
 type ArtifactEvent = {
   ts: string;
+  ts_ms: number;
   artifact: string;
 };
+
+type ViolationEvent = {
+  rule_id?: string;
+  skill?: string;
+  message?: string;
+  evidence?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseEventTimestamp(value: string): number | null {
+  const trimmed = value.trim();
+  const ritsuTs = trimmed.match(
+    /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/,
+  );
+  if (ritsuTs) {
+    const [, yyyy, mm, dd, hh, mi, ss] = ritsuTs;
+    const parsed = Date.UTC(
+      Number(yyyy),
+      Number(mm) - 1,
+      Number(dd),
+      Number(hh),
+      Number(mi),
+      Number(ss),
+    );
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function normalizeViolationEvent(event: Record<string, unknown>): ViolationEvent {
+  const nestedViolation = isRecord(event.violation) ? event.violation : undefined;
+
+  return {
+    rule_id:
+      typeof nestedViolation?.rule_id === "string"
+        ? nestedViolation.rule_id
+        : typeof event.rule_id === "string"
+          ? event.rule_id
+          : undefined,
+    skill: typeof event.skill === "string" ? event.skill : undefined,
+    message:
+      typeof event.message === "string"
+        ? event.message
+        : typeof event.error === "string"
+          ? event.error
+          : undefined,
+    evidence:
+      typeof nestedViolation?.evidence === "string"
+        ? nestedViolation.evidence
+        : typeof event.evidence === "string"
+          ? event.evidence
+          : undefined,
+  };
+}
+
+type PreferenceRule = Record<string, unknown> & {
+  id: string;
+};
+
+type PreferencesDoc = {
+  rules?: PreferenceRule[];
+  preferences?: PreferenceRule[];
+};
+
+function isPreferenceRule(value: unknown): value is PreferenceRule {
+  return isRecord(value) && typeof value.id === "string" && value.id.trim().length > 0;
+}
+
+function normalizePreferenceRules(doc: unknown): PreferenceRule[] {
+  if (Array.isArray(doc)) {
+    return doc.filter(isPreferenceRule);
+  }
+
+  if (!isRecord(doc)) return [];
+
+  const typedDoc = doc as PreferencesDoc;
+  const rules = Array.isArray(typedDoc.rules)
+    ? typedDoc.rules
+    : Array.isArray(typedDoc.preferences)
+      ? typedDoc.preferences
+      : [];
+
+  return rules.filter(isPreferenceRule);
+}
+
+function hasCanonicalRulesRoot(doc: unknown): boolean {
+  return isRecord(doc) && Array.isArray((doc as PreferencesDoc).rules);
+}
+
+function extractPreferenceRuleFromSheet(
+  content: string,
+  prefId: string,
+): PreferenceRule | null {
+  const yamlBlocks = content.matchAll(/```ya?ml\s*([\s\S]*?)```/g);
+
+  for (const match of yamlBlocks) {
+    const snippet = match[1]?.trim();
+    if (!snippet) continue;
+
+    try {
+      const parsed = yaml.load(snippet);
+      const rule = normalizePreferenceRules(parsed).find((entry) => entry.id === prefId);
+      if (rule) return { ...rule };
+    } catch {
+      // Ignore malformed YAML blocks and keep scanning older sheets.
+    }
+  }
+
+  return null;
+}
 
 export function minePreferences(days: number): string | null {
   const root = getProjectRoot();
@@ -16,45 +133,56 @@ export function minePreferences(days: number): string | null {
 
   if (!existsSync(ritsuDir)) return null;
 
-  const files = readdirSync(ritsuDir).filter((f) => f.startsWith("ctx-") && f.endsWith(".jsonl"));
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const files = readdirSync(ritsuDir).filter(
+    (f) => f.startsWith("ctx-") && f.endsWith(".jsonl"),
+  );
+  const cutoffMs = Date.now() - days * 24 * 3600 * 1000;
 
   const artifactEvents: ArtifactEvent[] = [];
-  const violations: any[] = [];
+  const violations: ViolationEvent[] = [];
 
   for (const f of files) {
     const lines = readFileSync(join(ritsuDir, f), "utf-8").split(/\r?\n/);
     for (const line of lines) {
       if (!line.trim()) continue;
       try {
-        const obj = JSON.parse(line);
-        const eventDate = new Date(obj.ts);
-        if (eventDate < cutoffDate) continue;
+        const obj = JSON.parse(line) as unknown;
+        if (!isRecord(obj)) continue;
+        if (typeof obj.ts !== "string") continue;
+        const eventTs = parseEventTimestamp(obj.ts);
+        if (eventTs === null || eventTs < cutoffMs) continue;
 
-        if (obj.status === "artifact_written" && obj.artifact) {
-          artifactEvents.push({ ts: obj.ts, artifact: obj.artifact });
+        if (
+          obj.status === "artifact_written" &&
+          typeof obj.artifact === "string"
+        ) {
+          artifactEvents.push({
+            ts: obj.ts,
+            ts_ms: eventTs,
+            artifact: obj.artifact,
+          });
         } else if (obj.status === "violation_detected") {
-          violations.push(obj);
+          violations.push(normalizeViolationEvent(obj));
         }
       } catch { /* ignore malformed lines */ }
     }
   }
 
   // Keep only the latest write event for each artifact
-  const latestWrites = new Map<string, string>();
+  const latestWrites = new Map<string, ArtifactEvent>();
   for (const e of artifactEvents) {
     const existing = latestWrites.get(e.artifact);
-    if (!existing || new Date(e.ts) > new Date(existing)) {
-      latestWrites.set(e.artifact, e.ts);
+    if (!existing || e.ts_ms > existing.ts_ms) {
+      latestWrites.set(e.artifact, e);
     }
   }
 
   const corrections: Array<{ file: string; diff: string }> = [];
 
-  for (const [file, ts] of latestWrites.entries()) {
+  for (const [file, event] of latestWrites.entries()) {
     try {
-      const diff = execSync(`git log -p --since="${ts}" -- "${file}"`, {
+      const since = new Date(event.ts_ms).toISOString();
+      const diff = execSync(`git log -p --since="${since}" -- "${file}"`, {
         cwd: root,
         stdio: ["ignore", "pipe", "ignore"],
       }).toString().trim();
@@ -103,9 +231,9 @@ export function minePreferences(days: number): string | null {
     lines.push(`The following violations were detected by Ritsu's policy engine during the last ${days} days.`);
     lines.push(``);
     for (const v of violations) {
-      lines.push(`- **Rule**: ${v.rule_id} (${v.skill})`);
-      lines.push(`  - **Message**: ${v.message}`);
-      lines.push(`  - **Evidence**: \`${v.evidence}\``);
+      lines.push(`- **Rule**: ${v.rule_id ?? "unknown"} (${v.skill ?? "unknown"})`);
+      lines.push(`  - **Message**: ${v.message ?? "n/a"}`);
+      lines.push(`  - **Evidence**: \`${v.evidence ?? ""}\``);
       lines.push(``);
     }
   }
@@ -131,35 +259,44 @@ export function promotePreference(prefId: string): boolean {
   const ritsuDir = resolve(root, RITSU_DIR);
   const prefPath = resolve(root, ".ritsu/preferences.yaml");
 
-  const files = readdirSync(ritsuDir).filter((f) => f.startsWith("mining-sheet-") && f.endsWith(".md")).sort();
+  if (!existsSync(ritsuDir)) return false;
+
+  const files = readdirSync(ritsuDir)
+    .filter((f) => f.startsWith("mining-sheet-") && f.endsWith(".md"))
+    .sort();
   if (files.length === 0) return false;
 
   // Search from the most recent sheet
   for (let i = files.length - 1; i >= 0; i--) {
     const content = readFileSync(join(ritsuDir, files[i]), "utf-8");
-    // Simple regex to extract YAML block with specific prefId
-    // This is a bit naive but works for a prototype
-    const regex = new RegExp(`- id: ${prefId}[\\s\\S]+?(?=\\n-|\\n\\s*\\n|\\n\`\`\`)`, "g");
-    const match = content.match(regex);
-    
-    if (match) {
-      const yamlSnippet = match[0].trim();
-      let currentPrefs = "";
+    const promotedRule = extractPreferenceRuleFromSheet(content, prefId);
+
+    if (promotedRule) {
+      let currentRules: PreferenceRule[] = [];
+      let shouldRewriteCanonicalDoc = false;
       if (existsSync(prefPath)) {
-        currentPrefs = readFileSync(prefPath, "utf-8");
-      }
-      
-      // Check if already exists
-      if (currentPrefs.includes(`id: ${prefId}`)) {
-        return true; // Already promoted
+        try {
+          const parsed = yaml.load(readFileSync(prefPath, "utf-8"));
+          currentRules = normalizePreferenceRules(parsed);
+          shouldRewriteCanonicalDoc =
+            currentRules.length > 0 && !hasCanonicalRulesRoot(parsed);
+        } catch {
+          currentRules = [];
+        }
       }
 
-      const separator = currentPrefs.trim() ? "\n\n" : "preferences:\n";
-      writeFileSync(prefPath, currentPrefs.trim() + separator + yamlSnippet + "\n");
+      if (currentRules.some((rule) => rule.id === prefId)) {
+        if (shouldRewriteCanonicalDoc) {
+          writeFileSync(prefPath, yaml.dump({ rules: currentRules }), "utf-8");
+        }
+        return true;
+      }
+
+      currentRules.push(promotedRule);
+      writeFileSync(prefPath, yaml.dump({ rules: currentRules }), "utf-8");
       return true;
     }
   }
 
   return false;
 }
-

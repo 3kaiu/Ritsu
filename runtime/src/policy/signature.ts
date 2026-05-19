@@ -5,6 +5,19 @@ import { getProjectRoot } from "../handlers/_utils.js";
 
 const KEY_FILE = ".ritsu/secret.key";
 
+interface SignableEvent {
+  ts?: unknown;
+  trace_id?: unknown;
+  span_id?: unknown;
+  status?: unknown;
+  artifact?: unknown;
+  violation?: unknown;
+}
+
+interface VerifiableEvent extends SignableEvent {
+  signature?: unknown;
+}
+
 export function getOrCreateKey(): string | null {
   const root = getProjectRoot();
   const path = resolve(root, KEY_FILE);
@@ -30,21 +43,21 @@ export function initKey(): string {
   return key;
 }
 
-export function signEvent(event: any, key: string): string {
+export function signEvent(event: SignableEvent, key: string): string {
   const payload = JSON.stringify({
     ts: event.ts,
     trace_id: event.trace_id,
     span_id: event.span_id,
     status: event.status,
     artifact: event.artifact,
-    violation: event.violation
+    violation: event.violation,
   });
   
   return createHmac("sha256", key).update(payload).digest("hex");
 }
 
-export function verifyEvent(event: any, key: string): boolean {
-  if (!event.signature) return false;
+export function verifyEvent(event: VerifiableEvent, key: string): boolean {
+  if (typeof event.signature !== "string" || !event.signature) return false;
   
   const expected = signEvent(event, key);
   const actual = Buffer.from(event.signature, "hex");

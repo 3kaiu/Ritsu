@@ -2,6 +2,23 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { readAllEntries } from "../ctx-reader.js";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 
+type TraceEntry = Record<string, unknown>;
+
+interface TraceSpan {
+  span_id: string;
+  parent_span_id?: string;
+  skill?: string;
+  domain?: string;
+  status: "in_progress" | "done" | "failed";
+  events: TraceEntry[];
+  children?: TraceSpan[];
+}
+
+function getStringField(entry: TraceEntry, key: string): string | undefined {
+  const value = entry[key];
+  return typeof value === "string" ? value : undefined;
+}
+
 export async function ritsu_join_trace(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
@@ -20,48 +37,53 @@ export async function ritsu_join_trace(
   }
 
   // Build span tree
-  const spans: Record<string, any> = {};
+  const spans: Record<string, TraceSpan> = {};
   const artifacts: string[] = [];
   
   for (const e of traceEvents) {
-    const spanId = String(e.span_id ?? "unknown");
+    const spanId = getStringField(e, "span_id") ?? "unknown";
     if (!spans[spanId]) {
       spans[spanId] = {
         span_id: spanId,
-        parent_span_id: e.parent_span_id,
-        skill: e.skill,
-        domain: e.domain,
+        parent_span_id: getStringField(e, "parent_span_id"),
+        skill: getStringField(e, "skill"),
+        domain: getStringField(e, "domain"),
         status: "in_progress",
-        events: []
+        events: [],
       };
     }
     
     spans[spanId].events.push(e);
     
-    if (e.status === "done" || e.status === "failed") {
-      spans[spanId].status = e.status;
+    const status = getStringField(e, "status");
+    if (status === "done" || status === "failed") {
+      spans[spanId].status = status;
     }
     
-    if (e.status === "artifact_written" && e.artifact) {
-      artifacts.push(String(e.artifact));
+    if (status === "artifact_written") {
+      const artifact = getStringField(e, "artifact");
+      if (artifact) {
+        artifacts.push(artifact);
+      }
     }
   }
 
   // Reconstruct tree
-  const rootSpans = [];
+  const rootSpans: TraceSpan[] = [];
   for (const span of Object.values(spans)) {
-    if (span.parent_span_id && spans[span.parent_span_id]) {
-      if (!spans[span.parent_span_id].children) {
-        spans[span.parent_span_id].children = [];
+    const parentSpan = span.parent_span_id ? spans[span.parent_span_id] : undefined;
+    if (parentSpan) {
+      if (!parentSpan.children) {
+        parentSpan.children = [];
       }
-      spans[span.parent_span_id].children.push(span);
+      parentSpan.children.push(span);
     } else {
       rootSpans.push(span);
     }
   }
 
   // Coordination Analysis
-  let coordinationSheet = null;
+  let coordinationSheet: string | null = null;
   const projectRoot = getProjectRoot();
   const fs = await import("node:fs");
   const path = await import("node:path");

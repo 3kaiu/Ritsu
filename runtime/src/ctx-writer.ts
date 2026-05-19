@@ -90,7 +90,7 @@ export async function appendEvent(
   return {
     path: ctxPath,
     lineCount: _lastLineCount,
-    correlation_id: String(event.correlation_id),
+    correlation_id: String(event.correlation_id ?? event.trace_id ?? ""),
   };
 }
 

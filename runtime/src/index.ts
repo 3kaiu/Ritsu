@@ -10,6 +10,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { compileToolsFromYaml } from "./schema-compiler.js";
 import { registerHandlers } from "./handlers/index.js";
 import { readFileSync, readdirSync, rmSync, existsSync } from "node:fs";
@@ -24,6 +25,22 @@ const pkg = JSON.parse(
   readFileSync(resolve(__dirname, "../package.json"), "utf-8"),
 );
 const SERVER_VERSION: string = pkg.version;
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getTextContent(result: CallToolResult): string | null {
+  const firstContent = result.content[0];
+  if (firstContent?.type === "text" && typeof firstContent.text === "string") {
+    return firstContent.text;
+  }
+  return null;
+}
+
+function hasErrorField(value: unknown): value is { error: unknown } {
+  return typeof value === "object" && value !== null && "error" in value;
+}
 
 async function main() {
   // 版本一致性校验 — package.json 版本必须与 ctx-event-schema.json 版本对齐
@@ -48,28 +65,35 @@ async function main() {
 
   // 注册工具 + handler
   for (const tool of tools) {
-    const rawHandler = registerHandlers[tool.name] ??
-        (async () => ({
-          content: [{ type: "text" as const, text: "handler not implemented" }],
-        }));
+    const rawHandler =
+      registerHandlers[tool.name] ??
+      (async (): Promise<CallToolResult> => ({
+        content: [{ type: "text" as const, text: "handler not implemented" }],
+      }));
 
-    const wrappedHandler = async (params: any, _extra?: any) => {
-      const result = await rawHandler(params);
-      const isProd = process.env.NODE_ENV === 'production';
-      const strictMode = process.env.RITSU_STRICT_OUTPUT ?? (isProd ? 'warn' : '1');
+    const wrappedHandler = async (params: unknown): Promise<CallToolResult> => {
+      const safeParams =
+        typeof params === "object" && params !== null && !Array.isArray(params)
+          ? (params as Record<string, unknown>)
+          : {};
+      const result = await rawHandler(safeParams);
+      const isProd = process.env.NODE_ENV === "production";
+      const strictMode = process.env.RITSU_STRICT_OUTPUT ?? (isProd ? "warn" : "1");
+      const textContent = getTextContent(result);
 
-      if (strictMode !== '0' && tool.outputSchema && result.content && result.content[0] && result.content[0].type === "text" && result.content[0].text) {
+      if (strictMode !== "0" && tool.outputSchema && textContent) {
         try {
-          const parsedContent = JSON.parse(result.content[0].text);
-          if (!parsedContent.error) {
+          const parsedContent = JSON.parse(textContent) as unknown;
+          if (!hasErrorField(parsedContent)) {
             tool.outputSchema.parse(parsedContent);
           }
-        } catch (e: any) {
-          if (strictMode === 'warn') {
-            console.warn(`[ritsu-mcp-server] ⚠️  STRICT_OUTPUT_WARN for tool '${tool.name}': ${e.message}`);
+        } catch (error: unknown) {
+          const message = getErrorMessage(error);
+          if (strictMode === "warn") {
+            console.warn(`[ritsu-mcp-server] ⚠️  STRICT_OUTPUT_WARN for tool '${tool.name}': ${message}`);
           } else {
             return {
-              content: [{ type: "text" as const, text: JSON.stringify({ error: "STRICT_OUTPUT_ERROR", tool: tool.name, message: e.message }) }],
+              content: [{ type: "text" as const, text: JSON.stringify({ error: "STRICT_OUTPUT_ERROR", tool: tool.name, message }) }],
               isError: true,
             };
           }

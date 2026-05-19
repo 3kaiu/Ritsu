@@ -14,10 +14,12 @@ export function getSharedDir(): string {
 // ─── Skill / Stage 语义映射 ────────────────────────────────
 
 export const SKILL_STAGE_MAP: Record<string, string> = {
+  init: "init",
   think: "think",
   dev: "dev",
   hunt: "hunt",
   review: "review",
+  augment: "augment",
 };
 
 export function getStageForSkill(skill: string): string {

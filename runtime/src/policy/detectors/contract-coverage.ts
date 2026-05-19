@@ -1,7 +1,39 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
 import { getProjectRoot } from "../../handlers/_utils.js";
+
+interface CoverageMetric {
+  covered: number;
+}
+
+interface CoverageStats {
+  lines?: CoverageMetric;
+}
+
+interface StoredCoverage {
+  per_file: Record<string, CoverageStats>;
+}
+
+interface StoredQualityGate {
+  coverage?: StoredCoverage;
+}
+
+interface ContractRecord {
+  id: string;
+  description: string;
+  test_file_hint: string;
+}
+
+type PartialContractRecord = Partial<ContractRecord>;
+
+function hasCoveredLines(stats: CoverageStats): boolean {
+  return typeof stats.lines?.covered === "number" && stats.lines.covered > 0;
+}
+
+function isCompleteContract(contract: PartialContractRecord | null): contract is ContractRecord {
+  return Boolean(contract?.id && contract.description && contract.test_file_hint);
+}
 
 export class ContractCoverageDetector implements DetectorPlugin {
   type = "contract_coverage" as const;
@@ -22,9 +54,9 @@ export class ContractCoverageDetector implements DetectorPlugin {
       return violations; // Can't check without coverage data
     }
 
-    let lastGate: any;
+    let lastGate: StoredQualityGate;
     try {
-      lastGate = JSON.parse(readFileSync(lastGatePath, "utf-8"));
+      lastGate = JSON.parse(readFileSync(lastGatePath, "utf-8")) as StoredQualityGate;
     } catch {
       return violations;
     }
@@ -34,10 +66,7 @@ export class ContractCoverageDetector implements DetectorPlugin {
       return violations;
     }
 
-    // Try to find design-sheet contracts
-    // In a real scenario, this would be passed in ctx.context.contracts
-    // For now, let's try to find the latest design-sheet.md
-    const designSheetPath = resolve(root, "docs/design-sheet.md");
+    const designSheetPath = this.findLatestDesignSheet(root);
     if (!existsSync(designSheetPath)) {
       return violations;
     }
@@ -54,8 +83,7 @@ export class ContractCoverageDetector implements DetectorPlugin {
       for (const [file, stats] of Object.entries(coverage.per_file)) {
         if (file.includes(hint) || hint.includes(file)) {
           // Check if lines/functions are covered
-          const s = stats as any;
-          if (s.lines && s.lines.covered > 0) {
+          if (hasCoveredLines(stats)) {
             covered = true;
             break;
           }
@@ -68,7 +96,7 @@ export class ContractCoverageDetector implements DetectorPlugin {
           severity: rule.severity,
           message: `Contract '${contract.id}' (${contract.description}) has no confirmed test coverage in hinted file '${hint}'.`,
           evidence: `Contract ID: ${contract.id}`,
-          suggestion: `Implement a test case for contract '${contract.id}' in '${hint}' and run quality gates.`
+          suggestion: `Implement a test case for contract '${contract.id}' in '${hint}' and run quality gates.`,
         });
       }
     }
@@ -76,11 +104,55 @@ export class ContractCoverageDetector implements DetectorPlugin {
     return violations;
   }
 
-  private parseContracts(content: string): Array<{ id: string; description: string; test_file_hint: string }> {
-    const contracts: any[] = [];
-    // Very simple table parser for the contracts table
-    // | ID | Description | Test File Hint |
+  private findLatestDesignSheet(root: string): string {
+    const artifactDir = resolve(root, ".ritsu");
+    if (existsSync(artifactDir)) {
+      const latest = readdirSync(artifactDir)
+        .filter((file) => file.startsWith("design-sheet-") && file.endsWith(".md"))
+        .sort()
+        .at(-1);
+      if (latest) {
+        return resolve(artifactDir, latest);
+      }
+    }
+
+    return resolve(root, "docs/design-sheet.md");
+  }
+
+  private parseContracts(content: string): ContractRecord[] {
+    const contracts: ContractRecord[] = [];
     const lines = content.split("\n");
+
+    let current: PartialContractRecord | null = null;
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const idMatch = line.match(/^-?\s*id:\s*(.+)$/);
+      if (idMatch) {
+        if (isCompleteContract(current)) {
+          contracts.push(current);
+        }
+        current = { id: idMatch[1].trim() };
+        continue;
+      }
+      const descriptionMatch = line.match(/^description:\s*(.+)$/);
+      if (descriptionMatch && current) {
+        current.description = descriptionMatch[1].trim();
+        continue;
+      }
+      const hintMatch = line.match(/^test_file_hint:\s*(.+)$/);
+      if (hintMatch && current) {
+        current.test_file_hint = hintMatch[1].trim().replace(/`/g, "");
+      }
+    }
+    if (isCompleteContract(current)) {
+      contracts.push(current);
+    }
+
+    if (contracts.length > 0) {
+      return contracts;
+    }
+
+    const tableContracts: ContractRecord[] = [];
     let inTable = false;
     for (const line of lines) {
       if (line.includes("| ID |") && line.includes("|")) {
@@ -89,18 +161,19 @@ export class ContractCoverageDetector implements DetectorPlugin {
       }
       if (inTable && line.startsWith("| ---")) continue;
       if (inTable && line.startsWith("|")) {
-        const parts = line.split("|").map(p => p.trim()).filter(Boolean);
+        const parts = line
+          .split("|")
+          .map((part) => part.trim())
+          .filter(Boolean);
         if (parts.length >= 3) {
-          contracts.push({
+          tableContracts.push({
             id: parts[0],
             description: parts[1],
-            test_file_hint: parts[2].replace(/`/g, "")
+            test_file_hint: parts[2].replace(/`/g, ""),
           });
         }
-      } else if (inTable) {
-        // Table ended
       }
     }
-    return contracts;
+    return tableContracts;
   }
 }

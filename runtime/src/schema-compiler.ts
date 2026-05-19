@@ -4,10 +4,12 @@ import { getSharedDir } from "./shared.js";
 import yaml from "js-yaml";
 import { z } from "zod";
 
+type ZodShape = Record<string, z.ZodTypeAny>;
+
 interface CompiledTool {
   name: string;
   description: string;
-  inputSchema: z.ZodObject<any>;
+  inputSchema: z.ZodObject<ZodShape>;
   outputSchema?: z.ZodTypeAny;
   error_shape?: Record<string, unknown>;
   call_template?: Record<string, unknown>;
@@ -21,6 +23,26 @@ interface YamlInputField {
   values?: string[];
   items?: unknown;
   properties?: Record<string, unknown>;
+}
+
+interface ToolOutputSchemaDefinition {
+  type?: string;
+  properties?: Record<string, YamlInputField>;
+  required?: string[];
+}
+
+interface YamlToolDefinition {
+  name: string;
+  description?: string;
+  input?: Record<string, YamlInputField>;
+  output_schema?: ToolOutputSchemaDefinition;
+  error_shape?: Record<string, unknown>;
+  call_template?: Record<string, unknown>;
+  validation?: string;
+}
+
+interface ToolsYamlDoc {
+  tools?: YamlToolDefinition[];
 }
 
 /**
@@ -76,8 +98,8 @@ function convertFieldToZod(field: YamlInputField): z.ZodTypeAny {
  */
 function convertInputToZod(
   input: Record<string, YamlInputField>,
-): z.ZodObject<any> {
-  const shape: Record<string, z.ZodTypeAny> = {};
+): z.ZodObject<ZodShape> {
+  const shape: ZodShape = {};
 
   for (const [key, field] of Object.entries(input)) {
     shape[key] = convertFieldToZod(field);
@@ -86,13 +108,15 @@ function convertInputToZod(
   return z.object(shape);
 }
 
-function convertOutputSchemaToZod(schema: any): z.ZodTypeAny {
+function convertOutputSchemaToZod(
+  schema: ToolOutputSchemaDefinition | undefined,
+): z.ZodTypeAny {
   if (!schema || schema.type !== "object" || !schema.properties) {
     return z.any();
   }
   const requiredFields = Array.isArray(schema.required) ? schema.required : [];
   const shape: Record<string, z.ZodTypeAny> = {};
-  for (const [key, prop] of Object.entries(schema.properties as Record<string, any>)) {
+  for (const [key, prop] of Object.entries(schema.properties)) {
     const field: YamlInputField = { ...prop, required: requiredFields.includes(key) };
     shape[key] = convertFieldToZod(field);
   }
@@ -106,26 +130,28 @@ function convertOutputSchemaToZod(schema: any): z.ZodTypeAny {
 export async function compileToolsFromYaml(): Promise<CompiledTool[]> {
   const yamlPath = resolve(getSharedDir(), "mcp-tools.yaml");
   const raw = readFileSync(yamlPath, "utf-8");
-  const doc = yaml.load(raw) as { tools: unknown[] };
+  const doc = yaml.load(raw) as ToolsYamlDoc | null;
 
-  if (!doc.tools || !Array.isArray(doc.tools)) {
+  if (!doc?.tools || !Array.isArray(doc.tools)) {
     throw new Error("mcp-tools.yaml: missing or invalid 'tools' array");
   }
 
-  return doc.tools.map((t: any) => {
+  return doc.tools.map((toolDef) => {
     const tool: CompiledTool = {
-      name: t.name,
-      description: t.description,
-      inputSchema: t.input
-        ? convertInputToZod(t.input as Record<string, YamlInputField>)
+      name: toolDef.name,
+      description: toolDef.description ?? "",
+      inputSchema: toolDef.input
+        ? convertInputToZod(toolDef.input)
         : z.object({}),
     };
 
     // Optional fields with fallback safety
-    if (t.output_schema) tool.outputSchema = convertOutputSchemaToZod(t.output_schema);
-    if (t.error_shape) tool.error_shape = t.error_shape;
-    if (t.call_template) tool.call_template = t.call_template;
-    if (t.validation) tool.validation = t.validation;
+    if (toolDef.output_schema) {
+      tool.outputSchema = convertOutputSchemaToZod(toolDef.output_schema);
+    }
+    if (toolDef.error_shape) tool.error_shape = toolDef.error_shape;
+    if (toolDef.call_template) tool.call_template = toolDef.call_template;
+    if (toolDef.validation) tool.validation = toolDef.validation;
 
     return tool;
   });

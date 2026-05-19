@@ -1,4 +1,4 @@
-# Project Baseline: Ritsu v5.2.0
+# Project Baseline: Ritsu v6.1.0
 # Created by Antigravity AI Engineering Framework
 
 <!-- Ritsu Configuration Block -->
@@ -10,6 +10,8 @@ tech_fingerprints:
 rules_overrides:
   disable: []
   downgrade: []
+lint_cmd: npm --prefix runtime run lint
+test_cmd: npm --prefix runtime run test:coverage
 <!-- End Ritsu Block -->
 
 ## Technical Stack

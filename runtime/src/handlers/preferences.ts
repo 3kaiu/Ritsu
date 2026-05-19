@@ -6,11 +6,20 @@ import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 
 const PREFERENCES_FILE = ".ritsu/preferences.yaml";
 
+type PreferenceScope =
+  | "coding_style"
+  | "library_choice"
+  | "naming_convention"
+  | "architecture";
+
 type PreferenceRule = {
   id: string;
-  source: string;
-  pattern: string;
-  scope: "coding_style" | "library_choice" | "naming_convention" | "architecture";
+  source?: string;
+  match_regex?: string;
+  forbid_lib?: string;
+  require_call?: string;
+  pattern?: string;
+  scope: PreferenceScope;
   auto_inject_to: string[];
   confidence: number;
   created_at: string;
@@ -18,7 +27,88 @@ type PreferenceRule = {
 
 type PreferencesDoc = {
   rules: PreferenceRule[];
+  preferences?: PreferenceRule[];
 };
+
+const VALID_SCOPES: PreferenceScope[] = [
+  "coding_style",
+  "library_choice",
+  "naming_convention",
+  "architecture",
+];
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function normalizePreferenceRule(
+  input: Partial<PreferenceRule> | undefined,
+): PreferenceRule | null {
+  if (!input?.scope || !VALID_SCOPES.includes(input.scope)) {
+    return null;
+  }
+
+  const matchRegex =
+    typeof input.match_regex === "string" && input.match_regex.trim()
+      ? input.match_regex.trim()
+      : typeof input.pattern === "string" && input.pattern.trim()
+        ? input.pattern.trim()
+        : undefined;
+  const forbidLib =
+    typeof input.forbid_lib === "string" && input.forbid_lib.trim()
+      ? input.forbid_lib.trim()
+      : undefined;
+  const requireCall =
+    typeof input.require_call === "string" && input.require_call.trim()
+      ? input.require_call.trim()
+      : undefined;
+
+  if (!matchRegex && !forbidLib && !requireCall) {
+    return null;
+  }
+
+  return {
+    id: typeof input.id === "string" && input.id.trim() ? input.id.trim() : "",
+    source:
+      typeof input.source === "string" && input.source.trim()
+        ? input.source.trim()
+        : undefined,
+    match_regex: matchRegex,
+    forbid_lib: forbidLib,
+    require_call: requireCall,
+    scope: input.scope,
+    auto_inject_to: Array.isArray(input.auto_inject_to)
+      ? input.auto_inject_to
+          .filter((skill): skill is string => typeof skill === "string")
+          .map((skill) => skill.trim())
+          .filter(Boolean)
+      : [],
+    confidence:
+      typeof input.confidence === "number" ? input.confidence : 0.8,
+    created_at:
+      typeof input.created_at === "string" && input.created_at.trim()
+        ? input.created_at
+        : new Date().toISOString(),
+  };
+}
+
+function normalizePreferencesDoc(doc: PreferencesDoc | null | undefined): PreferencesDoc {
+  const candidateRules = Array.isArray(doc?.rules)
+    ? doc.rules
+    : Array.isArray(doc?.preferences)
+      ? doc.preferences
+      : [];
+  const rules = candidateRules
+        .map((rule) => normalizePreferenceRule(rule))
+        .filter((rule): rule is PreferenceRule => Boolean(rule))
+  return { rules };
+}
+
+function getRuleIdentity(rule: PreferenceRule): string {
+  if (rule.match_regex) return `regex:${rule.match_regex}`;
+  if (rule.forbid_lib) return `forbid:${rule.forbid_lib}`;
+  return `require:${rule.require_call}`;
+}
 
 export async function ritsu_read_preferences(): Promise<CallToolResult> {
   const root = getProjectRoot();
@@ -30,10 +120,10 @@ export async function ritsu_read_preferences(): Promise<CallToolResult> {
 
   try {
     const content = readFileSync(path, "utf-8");
-    const doc = yaml.load(content) as PreferencesDoc;
-    return textResult(JSON.stringify(doc || { rules: [] }));
-  } catch (e: any) {
-    return errorResult(`Failed to read preferences: ${e.message}`);
+    const doc = normalizePreferencesDoc(yaml.load(content) as PreferencesDoc);
+    return textResult(JSON.stringify(doc));
+  } catch (error: unknown) {
+    return errorResult(`Failed to read preferences: ${getErrorMessage(error)}`);
   }
 }
 
@@ -44,14 +134,16 @@ export async function ritsu_write_preference(
   const dir = resolve(root, ".ritsu");
   const path = resolve(root, PREFERENCES_FILE);
 
-  const rule = params.rule as PreferenceRule;
-  if (!rule || !rule.pattern || !rule.scope) {
-    return errorResult("Rule with 'pattern' and 'scope' is required");
+  const rawRule = params.rule as Partial<PreferenceRule> | undefined;
+  const rule = normalizePreferenceRule(rawRule);
+  if (!rule) {
+    return errorResult(
+      "Rule with 'scope' and one of 'match_regex', 'forbid_lib', or 'require_call' is required",
+    );
   }
 
-  const validScopes = ["coding_style", "library_choice", "naming_convention", "architecture"];
-  if (!validScopes.includes(rule.scope)) {
-    return errorResult(`Invalid scope: ${rule.scope}. Must be one of: ${validScopes.join(", ")}`);
+  if (!VALID_SCOPES.includes(rule.scope)) {
+    return errorResult(`Invalid scope: ${rule.scope}. Must be one of: ${VALID_SCOPES.join(", ")}`);
   }
 
   if (rule.confidence !== undefined && (rule.confidence < 0 || rule.confidence > 1)) {
@@ -68,8 +160,8 @@ export async function ritsu_write_preference(
   if (existsSync(path)) {
     try {
       const content = readFileSync(path, "utf-8");
-      doc = (yaml.load(content) as PreferencesDoc) || { rules: [] };
-    } catch (e) {
+      doc = normalizePreferencesDoc((yaml.load(content) as PreferencesDoc) || { rules: [] });
+    } catch {
       // ignore parse error, start fresh
     }
   }
@@ -82,8 +174,10 @@ export async function ritsu_write_preference(
     rule.created_at = new Date().toISOString();
   }
 
-  // De-duplicate by pattern
-  const existingIdx = doc.rules.findIndex((r) => r.pattern === rule.pattern);
+  // De-duplicate by semantic identity
+  const existingIdx = doc.rules.findIndex(
+    (r) => getRuleIdentity(r) === getRuleIdentity(rule),
+  );
   if (existingIdx !== -1) {
     doc.rules[existingIdx] = { ...doc.rules[existingIdx], ...rule };
   } else {
@@ -93,7 +187,7 @@ export async function ritsu_write_preference(
   try {
     writeFileSync(path, yaml.dump(doc), "utf-8");
     return textResult(JSON.stringify({ ok: true, id: rule.id }));
-  } catch (e: any) {
-    return errorResult(`Failed to write preference: ${e.message}`);
+  } catch (error: unknown) {
+    return errorResult(`Failed to write preference: ${getErrorMessage(error)}`);
   }
 }

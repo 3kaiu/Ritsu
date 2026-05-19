@@ -23,7 +23,7 @@ export interface DetectorConfig {
   type: DetectorType;
   target?: "artifact_content" | "diff";
   patterns?: string[];
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface ExemptionConfig {
