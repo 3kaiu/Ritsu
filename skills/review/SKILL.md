@@ -50,4 +50,7 @@ total_steps: 4
    - 架构一致性验证。
 3. **验收单 (Assurance Sheet) 产出**: 包含结论、风险矩阵、发布建议。
 4. **偏好深度学习**: 从验收结论中提取架构级、命名级偏好，调用 `ritsu_write_preference` 更新自适应记忆。
-5. **归档**: 调用 `ritsu_close_span(status: done/failed)` 结束追踪。
+5. **归档与生态联动**: 
+   - 调用 `ritsu_close_span(status: done/failed)` 结束追踪。
+   - **OpenSpec 联动**: 如果当前项目为 OpenSpec 项目，通知用户：“Ritsu 的底层生命周期钩子已在后台自动触发 `npx openspec archive` 长期文档归档，您可以检查 specs 的更新。”
+

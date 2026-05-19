@@ -425,3 +425,22 @@ tools:
         valid: { type: boolean }
         violation_count: { type: integer }
         details: { type: array }
+  
+  - name: ritsu_patch_artifact
+    description: "通过给定的块进行增量替换，更新大型 Markdown 文件的内容，实现 Zero-Token 开销。"
+    call_template:
+      tool: ritsu_patch_artifact
+      params:
+        filename: "{filename}"
+        target_content: "{old}"
+        replacement_content: "{new}"
+    input:
+      filename: { type: string, required: true }
+      target_content: { type: string, required: true }
+      replacement_content: { type: string, required: true }
+    output_schema:
+      type: object
+      required: [path, size_bytes]
+      properties:
+        path: { type: string }
+        size_bytes: { type: integer }

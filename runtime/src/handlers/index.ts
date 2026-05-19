@@ -7,6 +7,7 @@ import { ritsu_emit_event } from "./emit-event.js";
 import { ritsu_read_ctx } from "./read-ctx.js";
 import { ritsu_read_agents } from "./read-agents.js";
 import { ritsu_write_artifact } from "./write-artifact.js";
+import { ritsu_patch_artifact } from "./patch-artifact.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
 import { ritsu_get_changed_files } from "./get-changed-files.js";
@@ -35,6 +36,7 @@ export const registerHandlers: Record<
   ritsu_read_ctx,
   ritsu_read_agents,
   ritsu_write_artifact,
+  ritsu_patch_artifact,
   ritsu_list_artifacts,
   ritsu_exec,
   ritsu_get_changed_files,

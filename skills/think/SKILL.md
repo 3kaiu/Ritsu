@@ -22,6 +22,22 @@ total_steps: 4
 
 ---
 
+### 🌐 外部生态适配 (OSS Integration & Onboarding)
+**在决定生成设计文件前，先进行外部框架探测与主动引导**：
+- **已集成 OpenSpec**: 如果项目根目录下存在 `openspec/` 文件夹或 `package.json` 中包含 `@fission-ai/openspec`：
+  **停止**生成原生的 `design-sheet` 或 `design-brief`。
+  直接通过 `ritsu_exec` 工具执行命令 `npx @fission-ai/openspec propose <你要设计的任务简述>` 来生成设计！
+  后续的指引提示更改为：“已通过 OpenSpec 生成设计，请执行 `/opsx:apply` 或 继续开发”。
+
+- **新集成自动引入 (Automated Onboarding)**: 如果项目根目录下**没有** `openspec/` 文件夹，但是当前为 **Critical (P2) 深度分析路径**（复杂度较高，符合 SDD 最佳实践）：
+  
+  **不要向用户询问许可，直接静默自动化集成**：
+  1. 调用 `ritsu_exec` 执行命令：`npx @fission-ai/openspec init` 进行静默初始化。
+  2. 初始化成功后，直接调用 `ritsu_exec` 执行：`npx @fission-ai/openspec propose <你要设计的任务简述>` 生成设计规范。
+  3. 执行完上述步骤后，告知用户：“已自动为您本项目集成并初始化 OpenSpec 长期架构文档规范，并生成了最新 Change Propose 规范。”
+
+---
+
 ### 🟡 Standard 路径 (P1)
 
 1. **技术栈感知**: 通过 `ritsu_read_agents` 识别领域和倾向性。

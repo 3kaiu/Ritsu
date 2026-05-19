@@ -7,6 +7,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 import { releaseAllForSpan } from "./file-lease.js";
+import { dispatchHook } from "../hooks/index.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -64,20 +65,20 @@ export async function ritsu_close_span(
   // Batch 8.3: Release all file leases for this span
   await releaseAllForSpan(root, spanId);
 
-  // Auto-sync on root span close
-  // ritsu_close_span is called. If parent_span_id isn't provided or explicitly tracked, we trigger sync anyway since this is asynchronous and non-blocking.
-  if (process.env.RITSU_AUTO_SYNC !== '0') {
-    const cliPath = resolve(__dirname, "../cli.js");
-    if (existsSync(cliPath)) {
-      try {
-        const child = spawn(process.execPath, [cliPath, "sync", "push"], {
-          detached: true,
-          stdio: "ignore",
-        });
-        child.unref();
-      } catch { /* fire-and-forget sync */ }
-    }
-  }
+  // Dispatch lifecycle hooks (non-blocking in background or awaited)
+  // We don't await so the MCP response returns immediately
+  dispatchHook({
+    type: "span_closed",
+    payload: {
+      trace_id: traceId,
+      span_id: spanId,
+      skill,
+      domain,
+      status: status as "done" | "failed",
+    },
+  }).catch((err) => {
+    console.error("[Hook Dispatcher Error]", err);
+  });
 
   return textResult(JSON.stringify({
     trace_id: traceId,
