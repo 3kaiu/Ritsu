@@ -91,6 +91,17 @@ global:
       type: preference_lint
       target: artifact_content
 
+  - id: AP-13
+    name: Structural smell (ast-grep)
+    pattern: "变更文件含 debugger、空 catch 或调试 console.log"
+    enforcement: "交付前对 scan_files 运行 ast-grep 规则集 rules/ast-grep/"
+    severity: WARN
+    detector:
+      type: ast_grep
+      target: diff
+      rule_dir: rules/ast-grep
+      languages: [typescript, javascript]
+
 review:
   - id: R-1
     name: 不明标识符

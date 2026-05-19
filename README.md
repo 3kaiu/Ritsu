@@ -40,6 +40,19 @@ npx skills add 3kaiu/Ritsu -a claude-code -g -y
 /r-init
 ```
 
+### 3. MCP（Claude Code）
+`/r-init` 会生成项目根 `.mcp.json`。重载 MCP 后校验：
+```bash
+ritsu doctor --ecosystem
+```
+
+等价手动添加（可选）：
+```bash
+claude mcp add ritsu -- node runtime/dist/index.js
+```
+
+详见 [docs/integrations.md](docs/integrations.md) 与 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
+
 ---
 
 ## 🧭 指令参考
@@ -90,6 +103,8 @@ graph TD
 - **`runtime/`**: 基于 Node.js 的 MCP 服务层，驱动事件流与工具调用。
 - **`_shared/`**: 统一的产物 Schema 与协作协议。
 - **`rules/`**: 全局工程红线与反模式库。
+- **`docs/integrations.md`**: Claude-first MCP / OpenSpec / ast-grep 组合。
+- **`docs/ARCHITECTURE.md`**: 三层架构与 MCP 收敛原则。
 
 ---
 

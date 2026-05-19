@@ -16,12 +16,16 @@ function parsePolicyContext(value: unknown): PolicyCheckContext["context"] | und
   const inScopeFiles = Array.isArray(raw.in_scope_files)
     ? raw.in_scope_files.filter((file): file is string => typeof file === "string")
     : undefined;
+  const scanFiles = Array.isArray(raw.scan_files)
+    ? raw.scan_files.filter((file): file is string => typeof file === "string")
+    : undefined;
 
   return {
     skill: typeof raw.skill === "string" ? raw.skill : undefined,
     correlation_id:
       typeof raw.correlation_id === "string" ? raw.correlation_id : undefined,
     in_scope_files: inScopeFiles,
+    scan_files: scanFiles,
   };
 }
 

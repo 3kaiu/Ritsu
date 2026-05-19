@@ -44,6 +44,12 @@ total_steps: 4
 - 确保 `.gitignore` 包含 `.ritsu/` 等 AI 过程目录。
 - 初始化语义引擎所需的 `.ritsu/` 目录结构。
 
+### 3.5 生态静默引入（必须）
+
+1. 调用 **`ritsu_bootstrap_ecosystem`**（或 CLI `ritsu bootstrap`，默认 `host: claude-code`）：写入项目根 **`.mcp.json`** 与 `.ritsu/ecosystem.json`。
+2. 提示用户 **重载 Claude Code MCP**（重启会话或 `/mcp`），再运行 `ritsu doctor --ecosystem`；若有 fail 项，在交付摘要中列出 fix。
+3. Cursor 用户可选：`ritsu bootstrap --host all`（见 [docs/integrations.md](../docs/integrations.md) 附录 B）。
+
 ### 4. 交付摘要与引导
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=init）

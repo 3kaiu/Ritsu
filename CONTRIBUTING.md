@@ -2,6 +2,10 @@
 
 First off, thank you for considering contributing to Ritsu! It's people like you that make Ritsu such a great tool.
 
+## OSS Integrations
+
+See [docs/integrations.md](docs/integrations.md) for Claude-first MCP, OpenSpec, and ast-grep. Optional Cursor Agent SDK example: [examples/cursor-agent-sdk/README.md](examples/cursor-agent-sdk/README.md) (not part of core runtime).
+
 ## Development Setup
 
 Ritsu is a Node.js project. You will need:

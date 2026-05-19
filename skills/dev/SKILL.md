@@ -16,7 +16,7 @@ total_steps: 5
 
 > 引用 `_shared/skill-common-steps.md` Step 0
 
-判定完成后，按等级分叉：
+判定完成后，按等级分叉。
 
 ---
 
@@ -24,33 +24,36 @@ total_steps: 5
 
 **准入条件**: 变更 < 20 LoC，单文件，无逻辑架构变动。
 
-1. **直接编码**: 根据用户描述直接修改代码。遵循 HC-1 (引用安全) 和 HC-2 (零占位符)。
-2. **质量验证**: 运行 lint 或 type check。
-3. **一句话回复**: "已完成。修改了 `{文件}` 的 {N} 行。" — 结束，无产物，无 ctx。
+1. **直接编码**: 遵循 HC-1 / HC-2。
+2. **质量验证**: lint 或 type check。
+3. **一句话回复** — 无产物，无 ctx。
 
 ---
 
-### 🟡 Standard 路径 (P1)
+### 🟡 Standard / 🔴 Critical 路径 (P1/P2)
 
-**准入条件**: 常规需求，多文件联动，有 design-brief 或 design-sheet。
+#### 1. Preflight（必须）
 
-1. **目标对账**: 读取 `design-brief` 或 `design-sheet`，确认实施清单。
-2. **技术栈感知**: 识别项目指纹，加载对应领域纪律。
-3. **偏好加载**: 若 `.ritsu/preferences.yaml` 存在，读取并遵循项目偏好（如：优先使用 ahooks、组件拆分粒度等）。
-4. **编码实现**: 服从设计文档并执行领域纪律 (HC-1/HC-2/HC-3)。
-5. **质量门禁**: 运行 `ritsu_run_quality_gates`。若当前任务已持有 `correlation_id` / `trace_id` / `span_id`，必须原样传入，使 snapshot 与当前执行轨迹绑定；同时会记录当时的 Git 工作树指纹。未通过则禁止交付。
-6. **交付摘要**: 必须将 quality_gates 的结果写入 `dev-report` 的 `质量门禁对账 (Quality Gates)` 结构化字段中（至少包含 `总状态` / `Lint` / `Test`，若有覆盖率则附 `覆盖率 (Lines)`），并在 `write_artifact` / `emit_event(done)` 时继续沿用同一组 `correlation_id` / `trace_id` / `span_id`；若质量门禁后又发生代码变更，必须重新运行 `ritsu_run_quality_gates`，否则禁止交付。
+`ritsu_preflight(stage: dev)` — 自动串联 ctx、design 产物列表、changed_files、diff、**policy+ast-grep**。
 
----
+- `ok: false` → 按 `context_pack.policy.violations` 修复后重试；**禁止**写 dev-report 或进入 review。
+- fatal/hard_stop 必须清零。
 
-### 🔴 Critical 路径 (P2)
+#### 2. 实现对账
 
-**准入条件**: 架构变更、基础组件修改、跨模块重构。
+- **P1**: 读取 `design-brief` 或 `design-sheet`。
+- **P2**: `ritsu_open_span`（若尚无 trace）+ 完整对账 `design-sheet` / `coordination-sheet` + 偏好加载。
 
-1. **完整对账**: `ritsu_read_ctx` + 关联 `design-sheet` + 若存在 `coordination-sheet`，读取分配的 `trace_id` 和 `parent_span_id`。调用 `ritsu_open_span`。
-2. **技术栈感知**: 识别项目指纹，自动切换资深专家人格。
-3. **偏好加载**: 读取 `.ritsu/preferences.yaml`。
-4. **高保真实现**: 严格服从 `design-sheet`，代码风格与领域 YAML 100% 对齐。
-5. **质量门禁**: 运行 `ritsu_run_quality_gates`，并传入当前 `trace_id` / `span_id`。未通过则禁止 `emit_event(done)`。
-6. **产物交付**: 产出完整 `dev-report`（必须包含结构化 quality_gates 结果） + `emit_event(done)` + 交付摘要。`run_quality_gates`、`write_artifact(dev-report)`、`emit_event(done)` 必须属于同一条 trace/span，且工作树必须与质量门禁通过时一致；若最近一次 quality gate 非 `passed`、trace/span 不一致，或门禁后工作树再度变化，禁止 `emit_event(done)`。
-7. **强制引导**: "代码已实现。建议运行 `/r-review` 进行最终验收。"
+#### 3. 编码
+
+服从设计文档与领域纪律 (HC-1/HC-2/HC-3)。
+
+#### 4. 质量门禁
+
+`ritsu_run_quality_gates`（已内嵌 policy preflight；传入当前 trace/span/correlation_id）。未通过禁止交付。
+
+#### 5. 交付
+
+- 将 gates 结果写入 `dev-report` 结构化字段。
+- P2：`emit_event(done)` 与 gates 同 trace/span，且门禁后工作树不变。
+- 引导：`/r-review`（P2 强制建议）。

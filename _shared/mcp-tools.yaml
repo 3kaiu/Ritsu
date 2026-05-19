@@ -162,37 +162,28 @@ tools:
         total: { type: integer }
         domain_hint: { type: string }
 
-  - name: ritsu_get_diff
-    description: 获取 Git diff 结构化分析。
+  - name: ritsu_inspect_diff
+    description: "统一 diff 检视：mode=stat|chunks|full（合并原 get_diff 与 diff_chunks）。"
     call_template:
-      tool: ritsu_get_diff
+      tool: ritsu_inspect_diff
       params:
+        mode: full
         cached: false
     input:
+      mode:
+        type: enum
+        values: [stat, chunks, full]
+        required: false
       cached: { type: boolean, required: false }
       max_output_lines: { type: integer, required: false }
+      top_n: { type: integer, required: false }
     output_schema:
       type: object
-      required: [files, total_files, diff]
       properties:
+        mode: { type: string }
         files: { type: array }
-        total_files: { type: integer }
-        diff: { type: string }
-
-  - name: ritsu_diff_chunks
-    description: 按 hunk 切分 diff 并进行风险加权（SQL、Auth、API签名等），为 Phase B/C 的前置基础设施。
-    call_template:
-      tool: ritsu_diff_chunks
-      params:
-        cached: false
-    input:
-      cached: { type: boolean, required: false }
-    output_schema:
-      type: object
-      required: [total_chunks, chunks]
-      properties:
-        total_chunks: { type: integer }
         chunks: { type: array }
+        diff: { type: string }
 
   - name: ritsu_run_quality_gates
     description: 执行项目质量门禁（Lint + Test）。
@@ -206,6 +197,7 @@ tools:
     input:
       skip_lint: { type: boolean, required: false }
       skip_test: { type: boolean, required: false }
+      skip_policy: { type: boolean, required: false }
       timeout_ms: { type: integer, required: false }
       correlation_id: { type: string, required: false }
       trace_id: { type: string, required: false }
@@ -426,6 +418,74 @@ tools:
         violation_count: { type: integer }
         details: { type: array }
   
+  - name: ritsu_bootstrap_ecosystem
+    description: "静默写入项目根 .mcp.json（Claude Code 标准）与 .ritsu/ecosystem.json；Cursor 为 opt-in。"
+    call_template:
+      tool: ritsu_bootstrap_ecosystem
+      params:
+        host: claude-code
+    input:
+      host:
+        type: enum
+        values: [claude-code, cursor, all]
+        required: false
+      include_cursor_hooks: { type: boolean, required: false }
+    output_schema:
+      type: object
+      required: [project_root, files_written, ecosystem]
+      properties:
+        project_root: { type: string }
+        files_written: { type: array }
+        files_merged: { type: array }
+        ecosystem: { type: object }
+        notes: { type: array }
+
+  - name: ritsu_preflight
+    description: "按阶段一键串联 read_ctx、changed_files、policy、inspect_diff、OpenSpec 等，返回 context_pack。"
+    call_template:
+      tool: ritsu_preflight
+      params:
+        stage: "{think|dev|hunt|review}"
+        tier: "{P0|P1|P2}"
+        task_summary: "{summary}"
+    input:
+      stage:
+        type: enum
+        values: [think, dev, hunt, review]
+        required: true
+      tier:
+        type: string
+        required: false
+      task_summary:
+        type: string
+        required: false
+    output_schema:
+      type: object
+      required: [ok, context_pack]
+      properties:
+        ok: { type: boolean }
+        context_pack: { type: object }
+
+  - name: ritsu_sync_openspec_contracts
+    description: "从 OpenSpec change proposal 提取需求并写入精简 design-sheet（contracts 表）。"
+    call_template:
+      tool: ritsu_sync_openspec_contracts
+      params:
+        change_id: "{change_id}"
+    input:
+      change_id:
+        type: string
+        required: false
+        description: "openspec/changes/<id>；省略则取最近修改的 change"
+    output_schema:
+      type: object
+      required: [change_id, contracts, design_sheet_path]
+      properties:
+        change_id: { type: string }
+        contracts: { type: array }
+        design_sheet_path: { type: string }
+        openspec_proposal_path: { type: string }
+
   - name: ritsu_patch_artifact
     description: "通过给定的块进行增量替换，更新大型 Markdown 文件的内容，实现 Zero-Token 开销。"
     call_template:

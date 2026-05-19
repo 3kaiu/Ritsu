@@ -7,6 +7,10 @@ import { ritsu_close_span } from "../src/handlers/close-span.js";
 import { ritsu_verify_trace } from "../src/handlers/verify-trace.js";
 import { existsSync, rmSync } from "node:fs";
 
+/**
+ * In-process Ritsu MCP handlers demo (trace, lease, task claim).
+ * For optional Cursor Agent SDK example, see examples/cursor-agent-sdk/
+ */
 async function runDemo() {
   console.log("🚀 Starting Multi-Agent Collaboration Demo...");
   

@@ -1,0 +1,32 @@
+# Ritsu Skills / Policy regression (no LLM API keys required)
+description: Ritsu contract-chain and policy regressions
+
+providers:
+  - id: echo
+    config:
+      type: echo
+
+prompts:
+  - "{{content}}"
+
+tests:
+  - description: AP-6 blocks TODO in artifact content
+    vars:
+      content: "Implementation complete TODO fix tests"
+    assert:
+      - type: javascript
+        value: file://assertions/policy-blocks-todo.js
+
+  - description: design-sheet fixture must contain contracts table header
+    vars:
+      content: file://fixtures/design-sheet-with-contracts.md
+    assert:
+      - type: javascript
+        value: file://assertions/design-has-contracts.js
+
+  - description: dev-report without gates should fail structural check
+    vars:
+      content: file://fixtures/dev-report-missing-gates.md
+    assert:
+      - type: javascript
+        value: file://assertions/dev-report-requires-gates.js

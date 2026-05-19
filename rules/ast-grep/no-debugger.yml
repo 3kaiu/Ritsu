@@ -1,0 +1,6 @@
+id: ritsu-no-debugger
+message: Remove debugger statements before commit
+severity: error
+language: TypeScript
+rule:
+  pattern: debugger

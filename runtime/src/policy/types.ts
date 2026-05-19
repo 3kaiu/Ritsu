@@ -17,7 +17,14 @@ export interface PolicyRule {
   exemption?: ExemptionConfig[];
 }
 
-export type DetectorType = "regex" | "cross_file" | "scope_diff" | "ast" | "contract_coverage" | "preference_lint";
+export type DetectorType =
+  | "regex"
+  | "cross_file"
+  | "scope_diff"
+  | "ast"
+  | "contract_coverage"
+  | "preference_lint"
+  | "ast_grep";
 
 export interface DetectorConfig {
   type: DetectorType;
@@ -41,6 +48,8 @@ export interface PolicyCheckContext {
     skill?: string;
     correlation_id?: string;
     in_scope_files?: string[];
+    /** Relative paths for ast-grep and other file-scoped detectors */
+    scan_files?: string[];
   };
 }
 

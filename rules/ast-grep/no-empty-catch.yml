@@ -1,0 +1,8 @@
+id: ritsu-no-empty-catch
+message: Empty catch blocks hide failures (AP-7 silent failures)
+severity: warning
+language: TypeScript
+rule:
+  pattern: |
+    catch ($E) {
+    }

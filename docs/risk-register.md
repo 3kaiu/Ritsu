@@ -19,7 +19,7 @@
 | **R-07** | `ctx-reader.ts` 静默 skip 坏 JSON 行；可能掩盖数据丢失或并发写入撕裂 | 静默失败 | Medium | 开放 | 至少 console.warn 记录跳过行数；可加 `--strict` CLI 选项 | （独立项） |
 | **R-08** | `correlation.ts` 无 collision 检测；依赖单调 seq + lock；如果 lock 失败或时钟回拨，可能产生重复 cid | 数据完整性 | Medium | 监测 | 加 cid 重复检测警告；时钟回拨场景写入测试 | （独立项） |
 | **R-09** | `miner.ts` 对每个文件调用 `git log -p --since=<ts>`——大仓库（>1k 文件改动）性能可能不可接受 | 性能-规模 | Medium | 监测 | 改为一次 `git log --since=<ts>` 拿全量再按文件分组 | （独立项） |
-| **R-15** | 6 plugin + 7 skill + 14 tool 已逼近反指标"Ritsu 自己变复杂" | 复杂度内胀 | Medium | 监测 | 季度复审 surface 数量；新增前必须有删 1 个或合 1 对 | （持续） |
+| **R-15** | MCP 对外工具经 v6.1 收敛后约 **25** 个（目标 ≤23）；`policy_check` 已内部化，`inspect_diff` 合并 diff 双工具 | 复杂度内胀 | Medium | 缓解中 | 季度复审；新增须删/并旧工具；lease 三件套合并留 v6.2 | Claude-first 收敛 |
 | **R-16** | `index.ts` 版本一致性 console.warn 不阻塞 server 启动——versioning 错误状态可隐藏运行 | 静默失败 | Low | 开放 | RITSU_STRICT=1 时改 throw；保留默认 warn | （独立项） |
 | **R-17** | exec 沙盒虽有三层，但 `getAllowedBinariesForProject` 的白名单根据 tech_fingerprints 动态返回——如果 fingerprint 解析失败，白名单可能过宽 | 安全边界 | Medium | 开放 | 加测试覆盖 fingerprint 缺失/异常时的 fallback 行为 | （独立项） |
 | **R-18** | `policy-check` handler 完全没有自动化测试；它是安全敏感入口 | 安全测试空白 | High | 开放 | 与 R-05 一起补 `runtime/tests/handlers/policy-check.test.ts` | （独立项） |

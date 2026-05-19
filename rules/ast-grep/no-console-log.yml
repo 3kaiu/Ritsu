@@ -1,0 +1,6 @@
+id: ritsu-no-console-log
+message: Avoid console.log in production paths (use structured logging)
+severity: warning
+language: TypeScript
+rule:
+  pattern: console.log($$$)

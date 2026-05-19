@@ -1,0 +1,10 @@
+# Internal MCP tools — NOT registered by schema-compiler.
+# Handlers remain in runtime for tests and write-artifact interception.
+tools:
+  - name: ritsu_policy_check
+    description: "Internal policy evaluation (use ritsu_preflight / run_quality_gates instead)."
+    input:
+      action:
+        type: enum
+        values: [write_artifact, emit_event, commit_diff]
+        required: true

@@ -18,17 +18,27 @@ total_steps: 4
 
 ---
 
-### 🟡 Standard 路径 (P1) - 默认路径
+### 所有路径：Preflight（必须）
 
-1. **快速取证**: 关联报错日志或堆栈。
-2. **假设验证**: 提出 1-2 个核心假设并验证。
-3. **修复建议**: 给出直接修复方案。引导至 `/r-dev`。
+`ritsu_preflight(stage: hunt)` — 自动提供：
+- `recovery_context`（断点续传）
+- `changed_files`、top risk `chunks`
+- `similar_violations`（历史 ctx 相似违规）
+
+仅基于 `context_pack` 定向读文件与日志；第三方库 API 用 Context7 等 doc MCP（见 [docs/integrations.md](../docs/integrations.md)）。
 
 ---
 
-### 🔴 Critical 路径 (P2) - 架构级故障
+### 🟡 Standard 路径 (P1)
 
-1. **深度取证**: 识别组件技术栈，切换专家人格。关联 `dev-report` 与 `design-sheet`。
-2. **定向假设与 MECE 验证**: 对照领域 `hypothesis_directions`。
-3. **诊断结论 (Diagnosis) 产出**: 记录完整证据链，产出 `diagnosis` 产物。
-4. **引导**: 引导用户进入 `/r-dev` 修复或 `/r-think` 重设方案。
+1. **快速取证**: 报错/堆栈与 preflight 交叉验证。
+2. **假设验证**: 1–2 个核心假设。
+3. **修复建议** → 引导 `/r-dev`。
+
+---
+
+### 🔴 Critical 路径 (P2)
+
+1. **深度取证**: 关联 `dev-report` / `design-sheet`；领域 `hypothesis_directions`。
+2. **产出 `diagnosis`**（完整证据链）。
+3. **引导** `/r-dev` 或 `/r-think`。

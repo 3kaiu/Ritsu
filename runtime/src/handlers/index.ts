@@ -11,7 +11,11 @@ import { ritsu_patch_artifact } from "./patch-artifact.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
 import { ritsu_get_changed_files } from "./get-changed-files.js";
-import { ritsu_get_diff } from "./get-diff.js";
+import {
+  ritsu_inspect_diff,
+  ritsu_get_diff,
+  ritsu_diff_chunks,
+} from "./inspect-diff.js";
 import { ritsu_run_quality_gates } from "./run-quality-gates.js";
 import {
   ritsu_read_preferences,
@@ -20,11 +24,14 @@ import {
 import { ritsu_open_span } from "./open-span.js";
 import { ritsu_close_span } from "./close-span.js";
 import { ritsu_join_trace } from "./join-trace.js";
-import { ritsu_diff_chunks } from "./diff-chunks.js";
 import { ritsu_init_trust_key } from "./init-trust-key.js";
 import { ritsu_claim_task, ritsu_list_pending_tasks } from "./task-protocol.js";
 import { ritsu_verify_trace } from "./verify-trace.js";
 import { ritsu_claim_file, ritsu_release_file, ritsu_list_leases } from "./file-lease.js";
+import { ritsu_policy_check } from "./policy-check.js";
+import { ritsu_sync_openspec_contracts } from "./sync-openspec-contracts.js";
+import { ritsu_bootstrap_ecosystem } from "./bootstrap-ecosystem.js";
+import { ritsu_preflight } from "./preflight.js";
 
 // ─── Handler Registry ────────────────────────────────────────
 
@@ -40,14 +47,15 @@ export const registerHandlers: Record<
   ritsu_list_artifacts,
   ritsu_exec,
   ritsu_get_changed_files,
+  ritsu_inspect_diff,
   ritsu_get_diff,
+  ritsu_diff_chunks,
   ritsu_run_quality_gates,
   ritsu_read_preferences,
   ritsu_write_preference,
   ritsu_open_span,
   ritsu_close_span,
   ritsu_join_trace,
-  ritsu_diff_chunks,
   ritsu_init_trust_key,
   ritsu_claim_task,
   ritsu_list_pending_tasks,
@@ -55,4 +63,8 @@ export const registerHandlers: Record<
   ritsu_claim_file,
   ritsu_release_file,
   ritsu_list_leases,
+  ritsu_policy_check,
+  ritsu_sync_openspec_contracts,
+  ritsu_bootstrap_ecosystem,
+  ritsu_preflight,
 };

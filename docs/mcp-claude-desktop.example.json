@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "ritsu": {
+      "command": "node",
+      "args": ["ABSOLUTE_PATH_TO/Ritsu/runtime/dist/index.js"],
+      "env": {
+        "RITSU_PROJECT_ROOT": "ABSOLUTE_PATH_TO/your-project"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "ABSOLUTE_PATH_TO/your-project"]
+    },
+    "git": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-git"],
+      "env": {
+        "GIT_REPO_PATH": "ABSOLUTE_PATH_TO/your-project"
+      }
+    }
+  }
+}

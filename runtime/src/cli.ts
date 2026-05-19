@@ -7,6 +7,11 @@ import { syncPush, syncPull } from "./sync.js";
 import { minePreferences, promotePreference } from "./miner.js";
 import { legacyCidToTraceId } from "./correlation.js";
 import { detectProjectRoot } from "./project-root.js";
+import { findSimilarViolations, loadViolationRecords } from "./similar-violations.js";
+import {
+  bootstrapEcosystem,
+  checkEcosystem,
+} from "./ecosystem-bootstrap.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -100,6 +105,9 @@ export function usage(): string {
     "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
     "ritsu doctor --hot-rules   # 离线统计 30 天内 rule_id 触发热度",
     "ritsu doctor --health      # 输出核心健康度 4 指标与趋势分析",
+    "ritsu doctor --similar-violations [--since 30d] [--query text]  # 离线相似违规检索（Jaccard，无 embedding）",
+    "ritsu doctor --ecosystem          # 校验 MCP/OpenSpec/ast-grep 生态可达性",
+    "ritsu bootstrap [--host claude-code|cursor|all]  # 默认写入 .mcp.json + .ritsu/ecosystem.json",
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
     "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",
     "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
@@ -426,6 +434,50 @@ export function formatEvent(e: CtxEvent): string {
   return `${ts} ${cid}  ${skill} ${domain}  ${status}${details ? ` ${details}` : ""}`;
 }
 
+export async function runSimilarViolations(
+  sinceDays = 30,
+  query = "",
+): Promise<void> {
+  const root = getProjectRoot();
+  const ritsuDir = resolve(root, ".ritsu");
+  const since = new Date(Date.now() - sinceDays * 24 * 3600 * 1000)
+    .toISOString()
+    .slice(0, 10)
+    .replace(/-/g, "");
+
+  const records = loadViolationRecords(ritsuDir, since);
+  if (records.length === 0) {
+    console.log(color("No violation_detected events in period.", "gray"));
+    return;
+  }
+
+  const q = query.trim() || "scope policy violation";
+  const hits = findSimilarViolations(records, q, 10);
+
+  console.log(
+    color(
+      `Similar violations (Jaccard, since ${sinceDays}d, query="${q}"):`,
+      "cyan",
+    ),
+  );
+  if (hits.length === 0) {
+    console.log(color("  No matches above threshold.", "gray"));
+    console.log(
+      color(
+        "  Tip: sqlite-vec indexing is optional future work; see docs/integrations.md",
+        "dim",
+      ),
+    );
+    return;
+  }
+  for (const h of hits) {
+    console.log(
+      `  - ${color(h.rule_id, "yellow")} score=${h.score.toFixed(2)} ts=${h.ts}`,
+    );
+    if (h.evidence) console.log(color(`    ${h.evidence.slice(0, 120)}`, "dim"));
+  }
+}
+
 export async function runHotRules(since: string | null = null) {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, ".ritsu");
@@ -518,10 +570,64 @@ export async function runDoctorHealth() {
   }
 }
 
+export function runDoctorEcosystem(): void {
+  const root = getProjectRoot();
+  console.log(color("Ritsu Doctor — Ecosystem Check", "cyan"));
+  const result = checkEcosystem(root);
+  for (const item of result.items) {
+    const icon =
+      item.status === "ok" ? "✔" : item.status === "warn" ? "⚠" : "✖";
+    const c = item.status === "ok" ? "green" : item.status === "warn" ? "yellow" : "red";
+    console.log(color(`${icon} [${item.id}] ${item.message}`, c));
+    if (item.fix) console.log(color(`    fix: ${item.fix}`, "dim"));
+  }
+  console.log(
+    color(
+      `\nSummary: ${result.passed ? "PASSED" : "FAILED"}`,
+      result.passed ? "green" : "red",
+    ),
+  );
+  if (!result.passed) process.exit(1);
+}
+
+export function runBootstrap(args: string[] = []): void {
+  const root = getProjectRoot();
+  console.log(color("Ritsu Bootstrap — Ecosystem", "cyan"));
+  let host: import("./ecosystem-bootstrap.js").HostProfile | undefined;
+  let includeCursorHooks = false;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--host") {
+      const h = args[++i];
+      if (h === "claude-code" || h === "cursor" || h === "all") host = h;
+    }
+    if (args[i] === "--include-cursor-hooks") includeCursorHooks = true;
+  }
+  const result = bootstrapEcosystem(root, {
+    host,
+    include_cursor_hooks: includeCursorHooks,
+  });
+  console.log(color(`Project: ${result.project_root}`, "dim"));
+  console.log(color(`Host profile: ${result.host_profile}`, "dim"));
+  if (result.files_written.length) {
+    console.log(color("Written:", "green"), result.files_written.join(", "));
+  }
+  if (result.files_merged.length) {
+    console.log(color("Merged:", "yellow"), result.files_merged.join(", "));
+  }
+  for (const note of result.notes) {
+    console.log(color(`  • ${note}`, "dim"));
+  }
+}
+
 export async function runDoctor(args: string[] = []) {
   const root = getProjectRoot();
   console.log(color("Ritsu Doctor — Running Health Check...", "cyan"));
   console.log(color(`Project Root: ${root}`, "dim"));
+
+  if (args.includes("--ecosystem")) {
+    runDoctorEcosystem();
+    return;
+  }
 
   if (args.includes("--hot-rules")) {
     let since = null;
@@ -534,6 +640,21 @@ export async function runDoctor(args: string[] = []) {
 
   if (args.includes("--health")) {
     await runDoctorHealth();
+    return;
+  }
+
+  if (args.includes("--similar-violations")) {
+    let sinceDays = 30;
+    let query = "";
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === "--since") {
+        const raw = args[++i] ?? "30d";
+        sinceDays = parseInt(raw.replace(/d$/i, ""), 10) || 30;
+      } else if (args[i] === "--query") {
+        query = args[++i] ?? "";
+      }
+    }
+    await runSimilarViolations(sinceDays, query);
     return;
   }
 
@@ -838,6 +959,11 @@ export function main() {
   }
 
   const [cmd, ...cmdArgs] = args;
+
+  if (cmd === "bootstrap") {
+    runBootstrap(cmdArgs);
+    return;
+  }
 
   if (cmd === "doctor") {
     runDoctor(cmdArgs);

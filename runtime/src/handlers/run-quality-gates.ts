@@ -12,6 +12,7 @@ import {
   type CoverageMetric,
   type CoverageStats,
 } from "../quality-gates.js";
+import { runPolicyPreflight } from "../policy-preflight.js";
 
 interface TestFailure {
   suite: string;
@@ -261,6 +262,12 @@ export async function ritsu_run_quality_gates(
   const timeoutMs = Math.min(Number(params.timeout_ms ?? 60_000), 120_000);
   const executionContext = extractQualityGateExecutionContext(params);
 
+  const skipPolicy = params.skip_policy === true;
+  const skill = typeof params.skill === "string" ? params.skill : "dev";
+  const policyPreflight = skipPolicy
+    ? { passed: true, violations: [], scan_files: [], diff_bytes: 0 }
+    : await runPolicyPreflight(root, skill);
+
   const { lint_cmd, test_cmd } = parseAgentsMd(root);
 
   const result: QualityGateResult = {
@@ -304,6 +311,7 @@ export async function ritsu_run_quality_gates(
 
   const allPassed = result.lint.status === "passed" && result.test.status === "passed";
   const anyFailed = result.lint.status === "failed" || result.test.status === "failed";
+  const policyBlocked = !policyPreflight.passed;
 
   // Check for coverage
   const coveragePath = findCoverageSummaryPath([
@@ -335,8 +343,21 @@ export async function ritsu_run_quality_gates(
   }
 
   const jsonOutput = JSON.stringify({
-    passed: allPassed && !anyFailed,
-    status: anyFailed ? "failed" : (allPassed ? "passed" : "partially_skipped"),
+    passed: allPassed && !anyFailed && !policyBlocked,
+    status: policyBlocked
+      ? "policy_failed"
+      : anyFailed
+        ? "failed"
+        : allPassed
+          ? "passed"
+          : "partially_skipped",
+    preflight: {
+      policy: {
+        passed: policyPreflight.passed,
+        violations: policyPreflight.violations,
+        scan_files: policyPreflight.scan_files,
+      },
+    },
     context:
       Object.keys(executionContext).length > 0 ? executionContext : undefined,
     lint: result.lint,

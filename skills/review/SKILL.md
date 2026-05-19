@@ -16,41 +16,29 @@ total_steps: 4
 
 > 引用 `_shared/skill-common-steps.md` Step 0
 
-判定完成后，按等级分叉：
-
 ---
 
 ### 🟢 Micro 路径 (P0)
 
-**准入条件**: 极小变更，已通过自测。
-
-1. **快速审查**: 对照变更 Diff，确认无低级错误。
-2. **结论**: 直接输出 "验收通过"。无需产出 `assurance-sheet`。
+1. 对照 Diff 快速审查。
+2. 输出「验收通过」，无需 `assurance-sheet`。
 
 ---
 
-### 🟡 Standard 路径 (P1)
+### 🟡 Standard / 🔴 Critical 路径
 
-1. **证据链对账**: 关联最新的 `design-brief` 或 `dev-report`。
-2. **质量审计**: 检查代码一致性，对照 `anti-patterns.yaml` 进行红线扫描。
-3. **偏好学习 (Preference Learning)**: 若存在明显的样式或库选用倾向，调用 `ritsu_write_preference` 记录。
-4. **验收结论**: 给出 PASS/FAIL 结论。
+#### 1. Preflight（必须）
 
----
+`ritsu_preflight(stage: review)` — 含 ctx、artifacts、policy 预检、P2 时 trace 摘要与 triple-check 提示。
 
-### 🔴 Critical 路径 (P2)
+- policy 未通过 → `assurance.verdict` 必须为 `needs_revision`，禁止 PASS。
 
-1. **三方证据对账 (Triple Verification)**:
-   - 调用 `ritsu_join_trace` 获取 Span Tree。
-   - 必须建立三方关联：`design.contracts` (契约) ↔ `dev.gates` (门禁结果) ↔ `assurance.verdict` (验收判定)。
-   - 验证 `dev-report` 中的覆盖率是否填补了 `design-sheet` 中的 contracts 缺口。
-2. **深度架构审计**: 
-   - 提取专项优化与攻击向量规则。
-   - 反模式拦截：若发现违规，必须调用 `ritsu_emit_event(status: violation_detected)` 记录 `rule_id` 与 `evidence`。
-   - 架构一致性验证。
-3. **验收单 (Assurance Sheet) 产出**: 包含结论、风险矩阵、发布建议。
-4. **偏好深度学习**: 从验收结论中提取架构级、命名级偏好，调用 `ritsu_write_preference` 更新自适应记忆。
-5. **归档与生态联动**: 
-   - 调用 `ritsu_close_span(status: done/failed)` 结束追踪。
-   - **OpenSpec 联动**: 如果当前项目为 OpenSpec 项目，通知用户：“Ritsu 的底层生命周期钩子已在后台自动触发 `npx openspec archive` 长期文档归档，您可以检查 specs 的更新。”
+#### 2. 证据与审计
 
+- **P1**: 对账 `design-brief` / `dev-report`；红线扫描；可选 `ritsu_write_preference`。
+- **P2**: 三方对账 `design.contracts` ↔ `dev.gates` ↔ `assurance.verdict`；仅阅读 preflight 中的 high-risk chunks；违规 `emit_event(violation_detected)`。
+
+#### 3. 产出与归档
+
+- 产出 `assurance-sheet`（P2）。
+- `ritsu_close_span`；OpenSpec 项目由 hook 自动 archive（告知用户检查 specs）。
