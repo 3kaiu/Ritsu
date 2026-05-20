@@ -118,7 +118,12 @@ export class ContractCoverageDetector implements DetectorPlugin {
             mtime: statSync(fullPath).mtimeMs,
           };
         });
-        stats.sort((a, b) => b.mtime - a.mtime);
+        stats.sort((a, b) => {
+          if (b.mtime !== a.mtime) {
+            return b.mtime - a.mtime;
+          }
+          return b.path.localeCompare(a.path);
+        });
         return stats[0].path;
       }
     }

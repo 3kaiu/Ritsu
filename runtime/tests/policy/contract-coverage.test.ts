@@ -79,8 +79,11 @@ describe("ContractCoverageDetector", () => {
       }),
       "utf-8",
     );
+    const fileOld = join(testRoot, ".ritsu", "design-sheet-2026-05-01.md");
+    const fileNew = join(testRoot, ".ritsu", "design-sheet-2026-05-02.md");
+
     writeFileSync(
-      join(testRoot, ".ritsu", "design-sheet-2026-05-01.md"),
+      fileOld,
       [
         "| ID | Description | Test File Hint |",
         "| --- | --- | --- |",
@@ -89,7 +92,7 @@ describe("ContractCoverageDetector", () => {
       "utf-8",
     );
     writeFileSync(
-      join(testRoot, ".ritsu", "design-sheet-2026-05-02.md"),
+      fileNew,
       [
         "| ID | Description | Test File Hint |",
         "| --- | --- | --- |",
@@ -97,6 +100,10 @@ describe("ContractCoverageDetector", () => {
       ].join("\n"),
       "utf-8",
     );
+
+    const now = new Date();
+    utimesSync(fileOld, now, new Date(now.getTime() - 10000));
+    utimesSync(fileNew, now, now);
     writeFileSync(
       join(testRoot, "docs", "design-sheet.md"),
       [
