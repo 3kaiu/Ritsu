@@ -3,12 +3,11 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { check as checkLock, lock } from "proper-lockfile";
+import { lock } from "proper-lockfile";
 
 function cloneDefault<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
@@ -21,20 +20,6 @@ function ensureJsonFile<T>(path: string, fallback: T): void {
   }
   if (!existsSync(path)) {
     writeFileSync(path, JSON.stringify(fallback, null, 2), "utf-8");
-  }
-}
-
-async function cleanupStaleLock(path: string): Promise<void> {
-  const lockPath = `${path}.lock`;
-  if (!existsSync(lockPath)) return;
-
-  try {
-    const isLocked = await checkLock(path, { lockfilePath: lockPath });
-    if (!isLocked) {
-      rmSync(lockPath, { force: true });
-    }
-  } catch {
-    rmSync(lockPath, { force: true });
   }
 }
 
@@ -65,7 +50,6 @@ export async function updateLockedJsonFile<T, R>(
   updater: (current: T) => { data: T; result: R } | Promise<{ data: T; result: R }>,
 ): Promise<R> {
   ensureJsonFile(path, fallback);
-  await cleanupStaleLock(path);
 
   const release = await lock(path, {
     retries: {

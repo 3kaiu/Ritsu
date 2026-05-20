@@ -98,6 +98,12 @@ export function syncPush(targetBranch?: string): boolean {
   if (!existsSync(ritsuDir)) return false;
 
   const branch = targetBranch || getCurrentBranch(root);
+
+  // Prevent shell command injection by strictly validating the branch name
+  if (!/^[a-zA-Z0-9._\-/]+$/.test(branch)) {
+    return false;
+  }
+
   const refName = `refs/ritsu/${branch}`;
 
   // We use a temporary index to avoid touching the user's actual git index.
@@ -185,6 +191,12 @@ export function syncPull(targetBranch?: string): boolean {
   if (!isGitRepo(root)) return false;
 
   const branch = targetBranch || getCurrentBranch(root);
+
+  // Prevent shell command injection by strictly validating the branch name
+  if (!/^[a-zA-Z0-9._\-/]+$/.test(branch)) {
+    return false;
+  }
+
   const refName = `refs/ritsu/${branch}`;
 
   try {

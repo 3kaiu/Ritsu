@@ -12,6 +12,15 @@ import {
   bootstrapEcosystem,
   checkEcosystem,
 } from "../src/ecosystem-bootstrap.js";
+import { vi } from "vitest";
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...original,
+    execFileSync: vi.fn().mockReturnValue("0.28.0\n"),
+  };
+});
 
 describe("ecosystem-bootstrap", () => {
   it("writes .mcp.json by default (claude-code)", () => {

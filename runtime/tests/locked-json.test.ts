@@ -10,11 +10,9 @@ import {
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 
-const mockCheckLock = vi.hoisted(() => vi.fn());
 const mockLock = vi.hoisted(() => vi.fn());
 
 vi.mock("proper-lockfile", () => ({
-  check: mockCheckLock,
   lock: mockLock,
 }));
 
@@ -27,9 +25,7 @@ describe("locked-json", () => {
   beforeEach(() => {
     testRoot = mkdtempSync(join(tmpdir(), "ritsu-test-locked-json-"));
     release = vi.fn().mockResolvedValue(undefined);
-    mockCheckLock.mockReset();
     mockLock.mockReset();
-    mockCheckLock.mockResolvedValue(true);
     mockLock.mockResolvedValue(release);
   });
 
@@ -92,68 +88,6 @@ describe("locked-json", () => {
         (name) => name.startsWith(".tmp-") && name.endsWith(".json"),
       ),
     ).toEqual([]);
-    expect(release).toHaveBeenCalledTimes(1);
-  });
-
-  it("removes stale lock files before updating persisted data", async () => {
-    const path = join(testRoot, "leases.json");
-    writeFileSync(path, JSON.stringify({ count: 1 }), "utf-8");
-    writeFileSync(`${path}.lock`, "stale", "utf-8");
-    mockCheckLock.mockResolvedValue(false);
-
-    const result = await updateLockedJsonFile(path, { count: 0 }, (current) => ({
-      data: { count: current.count + 1 },
-      result: current.count,
-    }));
-
-    expect(result).toBe(1);
-    expect(mockCheckLock).toHaveBeenCalledWith(path, {
-      lockfilePath: `${path}.lock`,
-    });
-    expect(existsSync(`${path}.lock`)).toBe(false);
-    expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ count: 2 });
-  });
-
-  it("recovers from malformed json and unreadable lock markers", async () => {
-    const path = join(testRoot, "broken.json");
-    writeFileSync(path, "{not json", "utf-8");
-    writeFileSync(`${path}.lock`, "broken lock", "utf-8");
-    mockCheckLock.mockRejectedValue(new Error("lock metadata unreadable"));
-
-    const result = await updateLockedJsonFile(path, { count: 5 }, (current) => ({
-      data: { count: current.count + 1 },
-      result: current.count,
-    }));
-
-    expect(result).toBe(5);
-    expect(existsSync(`${path}.lock`)).toBe(false);
-    expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ count: 6 });
-    expect(release).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps active lock files in place until the lock is released", async () => {
-    const path = join(testRoot, "active.json");
-    const lockPath = `${path}.lock`;
-    writeFileSync(path, JSON.stringify({ count: 3 }), "utf-8");
-    writeFileSync(lockPath, "active", "utf-8");
-    mockCheckLock.mockResolvedValue(true);
-    release = vi.fn().mockImplementation(async () => {
-      rmSync(lockPath, { force: true });
-    });
-    mockLock.mockImplementation(async (lockedPath: string) => {
-      expect(lockedPath).toBe(path);
-      expect(existsSync(lockPath)).toBe(true);
-      return release;
-    });
-
-    const result = await updateLockedJsonFile(path, { count: 0 }, (current) => ({
-      data: { count: current.count + 1 },
-      result: current.count,
-    }));
-
-    expect(result).toBe(3);
-    expect(existsSync(lockPath)).toBe(false);
-    expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ count: 4 });
     expect(release).toHaveBeenCalledTimes(1);
   });
 });

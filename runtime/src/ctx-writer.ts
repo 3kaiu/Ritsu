@@ -6,8 +6,8 @@
  * P1-5 修复：从 ctx-store.ts 拆分，职责聚焦于写入。
  */
 
-import { appendFileSync, existsSync, readFileSync, rmSync } from "node:fs";
-import { lock, check as checkLock } from "proper-lockfile";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { lock } from "proper-lockfile";
 import { getCtxPath, ensureCtxFile } from "./ctx-path.js";
 import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
 import { signEvent, getOrCreateKey } from "./policy/signature.js";
@@ -16,20 +16,6 @@ let _lastLineCount = 0;
 let _lastCtxMonth = "";
 let _lastCtxPath = "";
 
-/** 清理残留锁文件（进程异常退出后可能遗留） */
-async function cleanupStaleLock(ctxPath: string): Promise<void> {
-  const lockPath = ctxPath + ".lock";
-  if (!existsSync(lockPath)) return;
-
-  try {
-    const isLocked = await checkLock(ctxPath, { lockfilePath: lockPath });
-    if (!isLocked) {
-      rmSync(lockPath, { force: true });
-    }
-  } catch {
-    rmSync(lockPath, { force: true });
-  }
-}
 
 /** 重算行数（月度切换或索引重建时调用） */
 function recalcLineCount(ctxPath: string): number {
@@ -64,7 +50,6 @@ export async function appendEvent(
     _lastLineCount = recalcLineCount(ctxPath);
   }
 
-  await cleanupStaleLock(ctxPath);
 
   const release = await lock(ctxPath);
   try {

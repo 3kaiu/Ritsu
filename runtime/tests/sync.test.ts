@@ -179,4 +179,22 @@ describe("ritsu sync", () => {
     // Verification: master context is restored back to "master state"!
     expect(readFileSync(join(ritsuDir, "test.txt"), "utf-8")).toBe("master state");
   });
+
+  it("should reject malicious branch names with shell metacharacters to prevent command injection", () => {
+    const ritsuDir = join(testRoot, ".ritsu");
+    mkdirSync(ritsuDir, { recursive: true });
+    writeFileSync(join(ritsuDir, "test.txt"), "some state");
+
+    const badBranch = "main; rm -rf /";
+    expect(syncPush(badBranch)).toBe(false);
+    expect(syncPull(badBranch)).toBe(false);
+
+    const anotherBadBranch = "main$(echo dangerous)";
+    expect(syncPush(anotherBadBranch)).toBe(false);
+    expect(syncPull(anotherBadBranch)).toBe(false);
+
+    const goodBranch = "feature/safe-123";
+    // This goodBranch push will try to run, but since there is no ref yet, it returns true/false safely based on git success (it will succeed locally)
+    expect(syncPush(goodBranch)).toBe(true);
+  });
 });

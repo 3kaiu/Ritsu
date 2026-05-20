@@ -1,20 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-const mockCheckLock = vi.hoisted(() => vi.fn());
 const mockLock = vi.hoisted(() => vi.fn());
 
 vi.mock("proper-lockfile", () => ({
-  check: mockCheckLock,
   lock: mockLock,
 }));
 
 import { ensureCtxFile, getCtxPath } from "../src/ctx-path.js";
 import { _resetWriterCache, appendEvent } from "../src/ctx-writer.js";
 
-describe("ctx-writer stale lock cleanup", () => {
+describe("ctx-writer locking", () => {
   let testRoot: string;
   let release: ReturnType<typeof vi.fn>;
 
@@ -24,9 +22,7 @@ describe("ctx-writer stale lock cleanup", () => {
     ensureCtxFile(testRoot);
     _resetWriterCache();
     release = vi.fn().mockResolvedValue(undefined);
-    mockCheckLock.mockReset();
     mockLock.mockReset();
-    mockCheckLock.mockResolvedValue(true);
     mockLock.mockResolvedValue(release);
   });
 
@@ -45,60 +41,30 @@ describe("ctx-writer stale lock cleanup", () => {
     };
   }
 
-  it("removes stale ctx lock files before appending", async () => {
+  it("locks the ctx file before appending and releases the lock afterwards", async () => {
     const ctxPath = getCtxPath(testRoot);
-    const lockPath = `${ctxPath}.lock`;
-    writeFileSync(lockPath, "stale", "utf-8");
-    mockCheckLock.mockResolvedValue(false);
-    mockLock.mockImplementation(async (lockedPath: string) => {
-      expect(lockedPath).toBe(ctxPath);
-      expect(existsSync(lockPath)).toBe(false);
-      return release;
-    });
-
+    
     const result = await appendEvent(testRoot, buildEvent("cid-test-1"));
 
     expect(result.lineCount).toBe(1);
-    expect(existsSync(lockPath)).toBe(false);
+    expect(mockLock).toHaveBeenCalledWith(ctxPath);
+    expect(release).toHaveBeenCalledTimes(1);
     expect(readFileSync(ctxPath, "utf-8")).toContain('"correlation_id":"cid-test-1"');
   });
 
-  it("removes unreadable ctx lock markers before appending", async () => {
+  it("correctly handles multiple appends, locking and releasing each time", async () => {
     const ctxPath = getCtxPath(testRoot);
-    const lockPath = `${ctxPath}.lock`;
-    writeFileSync(lockPath, "broken", "utf-8");
-    mockCheckLock.mockRejectedValue(new Error("lock metadata unreadable"));
-    mockLock.mockImplementation(async () => {
-      expect(existsSync(lockPath)).toBe(false);
-      return release;
-    });
 
-    const result = await appendEvent(testRoot, buildEvent("cid-test-2"));
+    await appendEvent(testRoot, buildEvent("cid-test-2"));
+    await appendEvent(testRoot, buildEvent("cid-test-3"));
 
-    expect(result.lineCount).toBe(1);
-    expect(existsSync(lockPath)).toBe(false);
-    expect(readFileSync(ctxPath, "utf-8")).toContain('"correlation_id":"cid-test-2"');
-  });
-
-  it("keeps active ctx lock files in place until release", async () => {
-    const ctxPath = getCtxPath(testRoot);
-    const lockPath = `${ctxPath}.lock`;
-    writeFileSync(lockPath, "active", "utf-8");
-    mockCheckLock.mockResolvedValue(true);
-    release = vi.fn().mockImplementation(async () => {
-      rmSync(lockPath, { force: true });
-    });
-    mockLock.mockImplementation(async (lockedPath: string) => {
-      expect(lockedPath).toBe(ctxPath);
-      expect(existsSync(lockPath)).toBe(true);
-      return release;
-    });
-
-    const result = await appendEvent(testRoot, buildEvent("cid-test-3"));
-
-    expect(result.lineCount).toBe(1);
-    expect(release).toHaveBeenCalledTimes(1);
-    expect(existsSync(lockPath)).toBe(false);
-    expect(readFileSync(ctxPath, "utf-8")).toContain('"correlation_id":"cid-test-3"');
+    expect(mockLock).toHaveBeenCalledTimes(2);
+    expect(mockLock).toHaveBeenNthCalledWith(1, ctxPath);
+    expect(mockLock).toHaveBeenNthCalledWith(2, ctxPath);
+    expect(release).toHaveBeenCalledTimes(2);
+    
+    const content = readFileSync(ctxPath, "utf-8");
+    expect(content).toContain('"correlation_id":"cid-test-2"');
+    expect(content).toContain('"correlation_id":"cid-test-3"');
   });
 });
