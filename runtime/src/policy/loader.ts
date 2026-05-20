@@ -7,6 +7,7 @@ import { dirname } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { getAgentsProfile } from "../agents-parser.js";
+import { reconcilePreferences } from "./detectors/ast-grep-reconciler.js";
 
 function getProjectRootLocal(): string {
   return process.env.RITSU_PROJECT_ROOT ?? process.cwd();
@@ -129,19 +130,34 @@ function normalizeRules(value: unknown): PolicyRule[] {
 let cachedRules: PolicyRule[] | null = null;
 let lastApMtime = 0;
 let lastAgentsMtime = 0;
+let lastPrefMtime = 0;
 
 export function loadPolicies(): PolicyRule[] {
   const root = getProjectRootLocal();
   const apPath = resolve(__dirname, "../../../rules/anti-patterns.yaml");
   const agentsPath = resolve(root, "AGENTS.md");
+  const prefPath = resolve(root, ".ritsu/preferences.yaml");
 
   let apMtime = 0;
   let agentsMtime = 0;
+  let prefMtime = 0;
   try {
     if (existsSync(apPath)) apMtime = statSync(apPath).mtimeMs;
     if (existsSync(agentsPath)) agentsMtime = statSync(agentsPath).mtimeMs;
+    if (existsSync(prefPath)) prefMtime = statSync(prefPath).mtimeMs;
   } catch {
     // ignore filesystem read or permission errors during static analysis
+  }
+
+  // If preferences.yaml changed, reconcile AST-Grep rules automatically!
+  if (prefMtime !== lastPrefMtime) {
+    try {
+      reconcilePreferences();
+    } catch {
+      // fail-safe
+    }
+    lastPrefMtime = prefMtime;
+    cachedRules = null; // Clear cached rules to force reload
   }
 
   if (cachedRules && apMtime === lastApMtime && agentsMtime === lastAgentsMtime) {

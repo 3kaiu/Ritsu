@@ -51,4 +51,28 @@ describe("AstGrepDetector", () => {
       detector.detect(rule, { action: "commit_diff", context: {} }).length,
     ).toBe(0);
   });
+
+  it("should dynamically detect target file extensions and append them to languages", () => {
+    vi.mocked(execFileSync).mockReturnValue(JSON.stringify([]));
+
+    const detector = new AstGrepDetector();
+    const rule: PolicyRule = {
+      id: "AP-13",
+      name: "ast-grep",
+      severity: "warn",
+      detector: { type: "ast_grep", rule_dir: "rules/ast-grep" },
+    };
+
+    detector.detect(rule, {
+      action: "commit_diff",
+      context: { scan_files: ["runtime/package.json"], skill: "dev" },
+    });
+
+    expect(execFileSync).toHaveBeenCalledTimes(1);
+    const args = vi.mocked(execFileSync).mock.calls[0][1] as string[];
+    const langIndex = args.indexOf("--lang");
+    expect(langIndex).not.toBe(-1);
+    const languagesArg = args[langIndex + 1];
+    expect(languagesArg).toContain("json");
+  });
 });

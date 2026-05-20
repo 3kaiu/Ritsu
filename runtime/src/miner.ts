@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import yaml from "js-yaml";
 import { getProjectRoot } from "./handlers/_utils.js";
+import { reconcilePreferences } from "./policy/detectors/ast-grep-reconciler.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -437,11 +438,13 @@ export function promotePreference(prefId: string): boolean {
         if (shouldRewriteCanonicalDoc) {
           writeFileSync(prefPath, yaml.dump({ rules: currentRules }), "utf-8");
         }
+        reconcilePreferences();
         return true;
       }
 
       currentRules.push(promotedRule);
       writeFileSync(prefPath, yaml.dump({ rules: currentRules }), "utf-8");
+      reconcilePreferences();
       return true;
     }
   }

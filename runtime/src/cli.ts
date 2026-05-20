@@ -5,6 +5,7 @@ import { resolve, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { syncPush, syncPull } from "./sync.js";
 import { minePreferences, promotePreference } from "./miner.js";
+import { reconcilePreferences } from "./policy/index.js";
 import { legacyCidToTraceId } from "./correlation.js";
 import { detectProjectRoot } from "./project-root.js";
 import { findSimilarViolations, loadViolationRecords } from "./similar-violations.js";
@@ -113,6 +114,7 @@ export function usage(): string {
     "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
     "ritsu mine --report [--days 7]  # 离线挖掘偏好，生成 Mining Sheet",
     "ritsu mine --promote <id>  # 将 Mining Sheet 中的提议晋升为正式偏好",
+    "ritsu mine --reconcile     # 强制对账并编译 preferences 为 ast-grep 规则",
     "",
     "  think -> dev -> test/hunt -> review",
     "\nENV:",
@@ -914,11 +916,25 @@ async function runMine(args: string[]) {
   let days = 7;
   let report = false;
   let promoteId: string | null = null;
+  let reconcile = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--days") days = parseInt(args[++i] ?? "7", 10);
     else if (args[i] === "--report") report = true;
     else if (args[i] === "--promote") promoteId = args[++i] ?? null;
+    else if (args[i] === "--reconcile") reconcile = true;
+  }
+
+  if (reconcile) {
+    console.log(color("Ritsu Preference Miner — Reconciling preferences with AST-Grep rules...", "cyan"));
+    const ok = reconcilePreferences();
+    if (ok) {
+      console.log(color("✔ Preference AST-Grep rules reconciled successfully.", "green"));
+    } else {
+      console.error(color("✖ Preference reconciliation failed.", "red"));
+      process.exit(1);
+    }
+    return;
   }
 
   if (promoteId) {
@@ -927,7 +943,7 @@ async function runMine(args: string[]) {
     if (ok) {
       console.log(color(`✔ Preference ${promoteId} promoted successfully to .ritsu/preferences.yaml`, "green"));
     } else {
-      console.error(color(`✖ Failed to find proposal for ${promoteId} in recent mining sheets.`, "red"));
+      console.error(color("✖ Failed to find proposal for " + promoteId + " in recent mining sheets.", "red"));
       process.exit(1);
     }
     return;

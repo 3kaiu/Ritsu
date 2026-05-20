@@ -11,6 +11,7 @@ import {
   mkdirSync,
 } from "node:fs";
 import { resolve } from "node:path";
+import { reconcileBranchSync } from "./sync.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -29,6 +30,11 @@ export function ensureRitsuDir(projectRoot: string): string {
   const dir = resolve(projectRoot, RITSU_DIR);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
+  }
+  try {
+    reconcileBranchSync(projectRoot);
+  } catch {
+    // Fail-safe
   }
   return dir;
 }

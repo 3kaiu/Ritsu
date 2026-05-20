@@ -7,6 +7,9 @@ import { ScopeDiffDetector } from "./detectors/scope-diff.js";
 import { ContractCoverageDetector } from "./detectors/contract-coverage.js";
 import { PreferenceLintDetector } from "./detectors/preference-lint.js";
 import { AstGrepDetector } from "./detectors/ast-grep.js";
+import { reconcilePreferences } from "./detectors/ast-grep-reconciler.js";
+
+export { reconcilePreferences };
 
 const detectors: Record<string, DetectorPlugin> = {
   regex: new RegexDetector(),

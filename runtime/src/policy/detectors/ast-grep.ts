@@ -81,6 +81,32 @@ function findAstGrepBinary(root: string): { binary: string; args: string[] } {
   return { binary: "npx", args: ["--yes", "@ast-grep/cli"] };
 }
 
+const extToLangMap: Record<string, string> = {
+  ts: "typescript",
+  tsx: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  go: "go",
+  py: "python",
+  rs: "rust",
+  java: "java",
+  c: "c",
+  cpp: "cpp",
+  h: "cpp",
+  cs: "csharp",
+  rb: "ruby",
+  php: "php",
+  swift: "swift",
+  kt: "kotlin",
+  kts: "kotlin",
+  scala: "scala",
+  html: "html",
+  css: "css",
+  yaml: "yaml",
+  yml: "yaml",
+  json: "json",
+};
+
 export class AstGrepDetector implements DetectorPlugin {
   type = "ast_grep" as const;
 
@@ -105,12 +131,32 @@ export class AstGrepDetector implements DetectorPlugin {
       .filter((abs) => existsSync(abs));
     if (existing.length === 0) return [];
 
-    const languages =
+    const detectedLangs = new Set<string>();
+    for (const f of existing) {
+      const ext = f.split(".").pop()?.toLowerCase();
+      if (ext && extToLangMap[ext]) {
+        detectedLangs.add(extToLangMap[ext]);
+      }
+    }
+
+    const configuredLangs =
       typeof config.languages === "string"
-        ? config.languages
+        ? [config.languages]
         : Array.isArray(config.languages)
-          ? config.languages.join(",")
-          : "typescript,javascript";
+          ? config.languages
+          : [];
+
+    const langSet = new Set<string>(configuredLangs);
+    if (langSet.size === 0) {
+      langSet.add("typescript");
+      langSet.add("javascript");
+    }
+
+    for (const lang of detectedLangs) {
+      langSet.add(lang);
+    }
+
+    const languages = Array.from(langSet).join(",");
 
     const spec = findAstGrepBinary(root);
 

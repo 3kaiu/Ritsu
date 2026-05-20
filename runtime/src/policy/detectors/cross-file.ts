@@ -1,11 +1,7 @@
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { detectProjectRoot } from "../../project-root.js";
 // @ts-expect-error version-check.js is an untyped external JS file
 import { checkVersions } from "../../../version-check.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const projectRoot = path.resolve(__dirname, "../../../../");
 
 export class CrossFileDetector implements DetectorPlugin {
   type = "cross_file" as const;
@@ -14,6 +10,7 @@ export class CrossFileDetector implements DetectorPlugin {
     const violations: PolicyViolation[] = [];
     
     try {
+      const projectRoot = detectProjectRoot();
       const { mismatches } = checkVersions(projectRoot, false);
       if (mismatches.length > 0) {
         const evidence = mismatches.map((m: { file: string; found: string; expected: string }) => `${m.file}: found ${m.found}, expected ${m.expected}`).join("\n");

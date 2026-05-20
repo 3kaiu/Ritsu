@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, utimesSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadPolicies } from "../../src/policy/loader.js";
@@ -95,5 +95,48 @@ describe("loadPolicies", () => {
     // Now AP-1 should be present because disable list changed to AP-2
     expect(rules3.some((rule) => rule.id === "AP-1")).toBe(true);
     expect(rules3.some((rule) => rule.id === "AP-2")).toBe(false);
+  });
+
+  it("automatically reconciles preferences.yaml changes to AST-Grep rules", () => {
+    const ritsuDir = join(testRoot, ".ritsu");
+    mkdirSync(ritsuDir, { recursive: true });
+    const prefPath = join(ritsuDir, "preferences.yaml");
+
+    // Write a mock preference
+    writeFileSync(
+      prefPath,
+      [
+        "rules:",
+        "  - id: custom-lib",
+        "    forbid_lib: forbidden-package",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    // Call loadPolicies, which should trigger reconciliation under the hood!
+    loadPolicies();
+
+    // Verify AST-Grep rule was compiled
+    const compiledRulePath = join(testRoot, "rules/ast-grep/pref-custom-lib.yml");
+    expect(existsSync(compiledRulePath)).toBe(true);
+
+    // Update preference to use different packages and change mtime to trigger reload
+    writeFileSync(
+      prefPath,
+      [
+        "rules:",
+        "  - id: custom-lib-updated",
+        "    forbid_lib: different-package",
+      ].join("\n"),
+      "utf-8",
+    );
+    const future = new Date(Date.now() + 5000);
+    utimesSync(prefPath, future, future);
+
+    loadPolicies();
+
+    // Verify old rule was cleaned up and new rule compiled
+    expect(existsSync(compiledRulePath)).toBe(false);
+    expect(existsSync(join(testRoot, "rules/ast-grep/pref-custom-lib-updated.yml"))).toBe(true);
   });
 });
