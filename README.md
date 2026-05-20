@@ -19,11 +19,13 @@
 
 在生产级工程中，AI 的“盲目自动化”是最大的技术风险。**Ritsu** 建立了一套严丝合缝的工程契约，将 AI 的生产力牢牢锁定在确定性的轨道上。
 
-### 🏗️ 四大支柱
-- 🛡️ **显式阶段 (Explicit Staging)**: 严格拆分 `Analyze` → `Implement` → `Verify` → `Review`，每步皆有契约。
-- 📊 **分级交付 (Tiered Delivery)**: 根据任务风险（P0-P2）动态调整工程深度，平衡速度与安全。
-- 🔄 **智能流转 (Stateful Continuity)**: 实时计算“任务断点”，支持复杂工程的“断点续传”。
-- 🧩 **领域适配 (Domain Adaptive)**: 自动感知前端、后端、全栈等不同领域的工程规约与红线。
+### 🏗️ 六大支柱 (Six Pillars)
+- 🛡️ **显式阶段 (Explicit Staging)**: 严格拆分 `Analyze` (分析/Think) → `Implement` (实现/Dev) → `Verify` (验证/Augment) → `Review` (评审/Review)，每步皆有机器可校验的契约产物。
+- 📊 **分级交付 (Tiered Delivery)**: 根据任务复杂度及风险（Micro P0 / Standard P1 / Critical P2）动态调整工程深度，平衡敏捷性与严谨度。
+- 🔄 **智能断点续传 (Stateful Continuity)**: 基于高可靠的 Context Store 实时计算任务断点，支持超长链路、网络中断或人工中断后的无缝恢复。
+- 🧩 **领域自适应 (Domain Adaptive)**: 动态感应前端、后端、全栈、数据等特定工程指纹，实时匹配最佳规约与反模式红线。
+- 🤝 **多智能体协作 (Multi-Agent Swarm)**: 借助 `coordination-sheet`、文件租约协议（File Lease）和分布式任务锁（Task Claim），防止多智能体并发开发时的文件覆写和任务竞态。
+- ⛓️ **防篡改与分支同步 (Secure Git-Sync)**: 引入 HMAC 数字签名校验保证追踪链路不被篡改，并提供原生、防命令注入的 Git 分支间 `.ritsu` 数据同步引擎（`syncPush`/`syncPull`），天然匹配 PR/MR 评审流。
 
 ---
 
