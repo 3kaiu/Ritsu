@@ -1,4 +1,4 @@
-# Ritsu MCP Tool Schema 声明 v6.1.0
+# Ritsu MCP Tool Schema 声明 v6.5.0
 
 tools:
   - name: ritsu_emit_event

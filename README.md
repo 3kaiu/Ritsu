@@ -5,7 +5,7 @@
 
 [![CI/CD](https://github.com/3kaiu/Ritsu/actions/workflows/ci.yml/badge.svg)](https://github.com/3kaiu/Ritsu/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/3kaiu/Ritsu/branch/main/graph/badge.svg?token=YOUR_TOKEN)](https://codecov.io/gh/3kaiu/Ritsu)
-[![Version](https://img.shields.io/badge/version-6.1.0-blue.svg)](AGENTS.md)
+[![Version](https://img.shields.io/badge/version-6.5.0-blue.svg)](AGENTS.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-green.svg)](runtime/package.json)
 

@@ -1,6 +1,6 @@
 ---
 name: init
-version: "6.1.0"
+version: "6.5.0"
 description: "Ritsu 初始化模块。建立项目基线、生成 AGENTS.md 并配置忽略规则。"
 when_to_use: "/r-init, 初始化, 初始化项目, 新项目"
 total_steps: 4

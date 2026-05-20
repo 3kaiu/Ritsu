@@ -1,4 +1,4 @@
-# Domain: Fullstack (全栈) v6.1.0
+# Domain: Fullstack (全栈) v6.5.0
 # 继承基准配置。通过多态倾向性实现前后端技术栈的深度协同。
 
 extends: _base

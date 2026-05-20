@@ -1,4 +1,4 @@
-# Domain: Backend (后端) v6.1.0
+# Domain: Backend (后端) v6.5.0
 # 继承 _base.yaml 全部内容。支持多技术栈倾向性（Node.js/Go/Python）。
 
 extends: _base
