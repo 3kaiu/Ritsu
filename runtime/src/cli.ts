@@ -723,19 +723,7 @@ export async function runDoctor(args: string[] = []) {
       console.log(color(`  - protocol version: ${runtimeMeta.protocolVersion}`, "dim"));
     }
 
-    if (
-      runtimeMeta.packageVersion &&
-      runtimeMeta.protocolVersion &&
-      runtimeMeta.packageVersion !== runtimeMeta.protocolVersion
-    ) {
-      console.log(
-        color(
-          `✖ runtime/package.json version mismatch: ${runtimeMeta.packageVersion} != ${runtimeMeta.protocolVersion}`,
-          "red",
-        ),
-      );
-      errors++;
-    }
+
 
     if (
       agentsVersion &&

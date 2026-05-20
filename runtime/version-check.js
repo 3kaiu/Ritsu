@@ -94,8 +94,8 @@ export function checkVersions(targetProjectRoot, WRITE = false) {
       global: true,
     },
 
-    // runtime/package.json 的 version 字段本身也对齐（防止 version != ritsu_protocol_version）
-    { file: "runtime/package.json", pattern: /"version":\s*"(\d+\.\d+\.\d+)"/ },
+    // runtime/package.json 的 ritsu_protocol_version 字段对齐
+    { file: "runtime/package.json", pattern: /"ritsu_protocol_version":\s*"(\d+\.\d+\.\d+)"/ },
   ];
 
   const mismatches = [];
