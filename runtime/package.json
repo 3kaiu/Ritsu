@@ -1,7 +1,7 @@
 {
   "name": "ritsu-mcp-server",
-  "version": "6.1.0",
-  "ritsu_protocol_version": "6.1.0",
+  "version": "6.5.0",
+  "ritsu_protocol_version": "6.5.0",
   "description": "Ritsu MCP Server SDK — 结构化 I/O 原语，供 AI 技能调用",
   "type": "module",
   "main": "dist/index.js",

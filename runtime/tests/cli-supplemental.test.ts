@@ -170,7 +170,7 @@ describe("cli supplemental coverage", () => {
     mockProcessExit();
     writeFileSync(
       resolve(testRoot, "AGENTS.md"),
-      ["ritsu-version: 6.1.0", "domain: fullstack"].join("\n"),
+      ["ritsu-version: 6.5.0", "domain: fullstack"].join("\n"),
       "utf-8",
     );
     const ritsuDir = resolve(testRoot, ".ritsu");

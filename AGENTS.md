@@ -1,8 +1,8 @@
-# Project Baseline: Ritsu v6.1.0
+# Project Baseline: Ritsu v6.5.0
 # Created by Antigravity AI Engineering Framework
 
 <!-- Ritsu Configuration Block -->
-ritsu-version: 6.1.0
+ritsu-version: 6.5.0
 domain: fullstack
 tech_fingerprints:
   - nodejs
