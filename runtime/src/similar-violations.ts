@@ -56,7 +56,9 @@ export function loadViolationRecords(
         const e = JSON.parse(line) as Record<string, unknown>;
         if (e.status !== "violation_detected") continue;
         const ts = typeof e.ts === "string" ? e.ts : "";
-        if (ts.slice(0, 8) < sinceYyyymmdd) continue;
+        const cleanTs = ts.replace(/-/g, "");
+        const tsYmd = cleanTs.slice(0, 8);
+        if (tsYmd && tsYmd < sinceYyyymmdd) continue;
         const v =
           typeof e.violation === "object" && e.violation !== null
             ? (e.violation as Record<string, unknown>)

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadPolicies } from "../../src/policy/loader.js";
@@ -52,5 +52,48 @@ describe("loadPolicies", () => {
 
     expect(rules.some((rule) => rule.id === "AP-1")).toBe(false);
     expect(rules.find((rule) => rule.id === "R-2")?.severity).toBe("warn");
+  });
+
+  it("caches loaded policies and invalidates cache when AGENTS.md changes", () => {
+    const agentsPath = join(testRoot, "AGENTS.md");
+    writeFileSync(
+      agentsPath,
+      [
+        "rules_overrides:",
+        "  disable:",
+        "    - AP-1",
+        "<!-- End Ritsu Block -->",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const rules1 = loadPolicies();
+    expect(rules1.some((rule) => rule.id === "AP-1")).toBe(false);
+
+    // 1. Mutate rules1, verify subsequent load is unaffected (prevents cache corruption)
+    rules1[0].id = "MUTATED-ID";
+    const rules2 = loadPolicies();
+    expect(rules2[0].id).not.toBe("MUTATED-ID");
+    expect(rules2.some((rule) => rule.id === "AP-1")).toBe(false);
+
+    // 2. Modify AGENTS.md and change mtimeMs to invalidate cache
+    writeFileSync(
+      agentsPath,
+      [
+        "rules_overrides:",
+        "  disable:",
+        "    - AP-2",
+        "<!-- End Ritsu Block -->",
+      ].join("\n"),
+      "utf-8",
+    );
+    // Explicitly update mtimeMs forward to guarantee cache invalidation
+    const future = new Date(Date.now() + 5000);
+    utimesSync(agentsPath, future, future);
+
+    const rules3 = loadPolicies();
+    // Now AP-1 should be present because disable list changed to AP-2
+    expect(rules3.some((rule) => rule.id === "AP-1")).toBe(true);
+    expect(rules3.some((rule) => rule.id === "AP-2")).toBe(false);
   });
 });

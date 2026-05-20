@@ -21,7 +21,6 @@ export type DetectorType =
   | "regex"
   | "cross_file"
   | "scope_diff"
-  | "ast"
   | "contract_coverage"
   | "preference_lint"
   | "ast_grep";

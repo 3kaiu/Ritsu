@@ -146,4 +146,17 @@ describe("_cmd-utils", () => {
       "rust",
     ]);
   });
+
+  it("caches fingerprints and invalidates them when the folder mtime changes", () => {
+    // 1. Initially empty folder
+    expect(detectStackFingerprints(testRoot)).toEqual([]);
+
+    // 2. Write package.json - this changes folder mtime, cache should be invalidated
+    writeFileSync(join(testRoot, "package.json"), "{}", "utf-8");
+    expect(detectStackFingerprints(testRoot)).toEqual(["nodejs"]);
+
+    // 3. Write go.mod - this changes folder mtime, cache should be invalidated again
+    writeFileSync(join(testRoot, "go.mod"), "module demo", "utf-8");
+    expect(detectStackFingerprints(testRoot)).toEqual(["nodejs", "go"]);
+  });
 });

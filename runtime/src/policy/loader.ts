@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import yaml from "js-yaml";
 import type { DetectorConfig, ExemptionConfig, PolicyRule, Severity } from "./types.js";
@@ -6,24 +6,18 @@ import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+import { getAgentsProfile } from "../agents-parser.js";
 
 function getProjectRootLocal(): string {
   return process.env.RITSU_PROJECT_ROOT ?? process.cwd();
 }
 
-interface RulesOverrides {
-  disable?: string[];
-  downgrade?: Array<{ id: string; severity: Severity }>;
-}
 
 interface AntiPatternsDoc {
   global?: PolicyRule[];
   review?: PolicyRule[];
 }
 
-interface AgentsOverridesDoc {
-  rules_overrides?: RulesOverrides;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -132,11 +126,29 @@ function normalizeRules(value: unknown): PolicyRule[] {
     .filter((entry): entry is PolicyRule => entry !== null);
 }
 
+let cachedRules: PolicyRule[] | null = null;
+let lastApMtime = 0;
+let lastAgentsMtime = 0;
+
 export function loadPolicies(): PolicyRule[] {
   const root = getProjectRootLocal();
-  
-  // 1. Load baseline anti-patterns
   const apPath = resolve(__dirname, "../../../rules/anti-patterns.yaml");
+  const agentsPath = resolve(root, "AGENTS.md");
+
+  let apMtime = 0;
+  let agentsMtime = 0;
+  try {
+    if (existsSync(apPath)) apMtime = statSync(apPath).mtimeMs;
+    if (existsSync(agentsPath)) agentsMtime = statSync(agentsPath).mtimeMs;
+  } catch {
+    // ignore filesystem read or permission errors during static analysis
+  }
+
+  if (cachedRules && apMtime === lastApMtime && agentsMtime === lastAgentsMtime) {
+    return JSON.parse(JSON.stringify(cachedRules));
+  }
+
+  // 1. Load baseline anti-patterns
   let rules: PolicyRule[] = [];
   if (existsSync(apPath)) {
     const raw = readFileSync(apPath, "utf-8");
@@ -148,46 +160,36 @@ export function loadPolicies(): PolicyRule[] {
   }
 
   // 2. Load overrides from AGENTS.md
-  const agentsPath = resolve(root, "AGENTS.md");
-  if (existsSync(agentsPath)) {
-    const agentsContent = readFileSync(agentsPath, "utf-8");
-    const overrideMatch = agentsContent.match(/rules_overrides:\s*\n([\s\S]*?)<!-- End Ritsu Block -->/);
-    if (overrideMatch) {
-      try {
-        const overridesDoc = yaml.load(
-          `rules_overrides:\n${overrideMatch[1]}`,
-        ) as AgentsOverridesDoc | null;
-        const overrides = overridesDoc?.rules_overrides;
-        
-        if (overrides) {
-          const disabledIds = Array.isArray(overrides.disable)
-            ? overrides.disable.filter((id): id is string => typeof id === "string")
-            : [];
-          if (disabledIds.length > 0) {
-            rules = rules.filter((rule) => !disabledIds.includes(rule.id));
-          }
-          const downgrades = Array.isArray(overrides.downgrade)
-            ? overrides.downgrade
-                .filter(isDowngradeOverride)
-                .map((override) => ({
-                  id: override.id,
-                  severity: normalizeSeverity(override.severity) ?? "warn",
-                }))
-            : [];
-          if (downgrades.length > 0) {
-            for (const dg of downgrades) {
-              const rule = rules.find((candidate) => candidate.id === dg.id);
-              if (rule) {
-                rule.severity = dg.severity;
-              }
-            }
-          }
+  const profile = getAgentsProfile();
+  const overrides = profile?.rules_overrides;
+  if (overrides) {
+    const disabledIds = Array.isArray(overrides.disable)
+      ? overrides.disable.filter((id): id is string => typeof id === "string")
+      : [];
+    if (disabledIds.length > 0) {
+      rules = rules.filter((rule) => !disabledIds.includes(rule.id));
+    }
+    const downgrades = Array.isArray(overrides.downgrade)
+      ? overrides.downgrade
+          .filter(isDowngradeOverride)
+          .map((override) => ({
+            id: override.id,
+            severity: normalizeSeverity(override.severity) ?? "warn",
+          }))
+      : [];
+    if (downgrades.length > 0) {
+      for (const dg of downgrades) {
+        const rule = rules.find((candidate) => candidate.id === dg.id);
+        if (rule) {
+          rule.severity = dg.severity;
         }
-      } catch {
-        // ignore yaml parse errors in AGENTS.md block
       }
     }
   }
 
-  return rules;
+  cachedRules = rules;
+  lastApMtime = apMtime;
+  lastAgentsMtime = agentsMtime;
+
+  return JSON.parse(JSON.stringify(rules));
 }

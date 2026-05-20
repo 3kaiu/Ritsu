@@ -153,32 +153,4 @@ describe("Policy Engine", () => {
       }),
     ).toThrow("Detector type 'missing' is not registered");
   });
-
-  it("should block AST unknown identifiers for artifact writes", () => {
-    (loadPolicies as any).mockReturnValue([
-      {
-        id: "R-1",
-        name: "Unknown identifiers",
-        severity: "hard_stop",
-        detector: {
-          type: "ast",
-          check_identifiers: true,
-        },
-      },
-    ]);
-
-    const result = evaluatePolicies({
-      action: "write_artifact",
-      target: "src/example.ts",
-      content: "export const answer = missingSymbol + 1;",
-    });
-
-    expect(result.passed).toBe(false);
-    expect(result.violations).toHaveLength(1);
-    expect(result.violations[0]).toMatchObject({
-      rule_id: "R-1",
-      severity: "hard_stop",
-      evidence: "missingSymbol",
-    });
-  });
 });

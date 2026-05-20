@@ -12,15 +12,19 @@ export class RegexDetector implements DetectorPlugin {
     const violations: PolicyViolation[] = [];
 
     for (const p of config.patterns) {
-      const regex = new RegExp(p);
-      const match = ctx.content.match(regex);
-      if (match) {
-        violations.push({
-          rule_id: rule.id,
-          severity: rule.severity,
-          message: `Content matched restricted pattern: ${p}`,
-          evidence: match[0],
-        });
+      try {
+        const regex = new RegExp(p);
+        const match = ctx.content.match(regex);
+        if (match) {
+          violations.push({
+            rule_id: rule.id,
+            severity: rule.severity,
+            message: `Content matched restricted pattern: ${p}`,
+            evidence: match[0],
+          });
+        }
+      } catch {
+        // Ignore invalid regex patterns to avoid throwing and skipping other checks
       }
     }
 

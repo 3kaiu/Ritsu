@@ -365,4 +365,46 @@ describe("ritsu_run_quality_gates", () => {
     expect(data.test.output).toBe("spawn failed");
     expect(data.coverage).toBeUndefined();
   });
+
+  it("caches and correctly invalidates Vitest coverage summary reads when mtimeMs changes", async () => {
+    writeFileSync(
+      resolve(root, "package.json"),
+      JSON.stringify({ scripts: { "test:coverage": "vitest --coverage" } }),
+    );
+    mkdirSync(resolve(root, "coverage"), { recursive: true });
+
+    const covPath = resolve(root, "coverage/coverage-summary.json");
+
+    // 1. Write 50% coverage
+    writeFileSync(
+      covPath,
+      JSON.stringify({
+        total: {
+          lines: { pct: 50.0, covered: 5, total: 10 },
+        },
+      }),
+      "utf-8",
+    );
+
+    mockSpawnSequence((child) => completeChild(child, 0, "tests ok"));
+    let result = await ritsu_run_quality_gates({ skip_lint: true, timeout_ms: 1000 });
+    let data = JSON.parse(result.content[0].text as string);
+    expect(data.coverage.summary.lines.pct).toBe(50.0);
+
+    // 2. Overwrite with 90% coverage
+    writeFileSync(
+      covPath,
+      JSON.stringify({
+        total: {
+          lines: { pct: 90.0, covered: 9, total: 10 },
+        },
+      }),
+      "utf-8",
+    );
+
+    mockSpawnSequence((child) => completeChild(child, 0, "tests ok"));
+    result = await ritsu_run_quality_gates({ skip_lint: true, timeout_ms: 1000 });
+    data = JSON.parse(result.content[0].text as string);
+    expect(data.coverage.summary.lines.pct).toBe(90.0);
+  });
 });

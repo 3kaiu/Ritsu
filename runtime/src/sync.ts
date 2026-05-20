@@ -144,10 +144,19 @@ export function syncPull(): boolean {
       mkdirSync(ritsuDir, { recursive: true });
     }
 
-    // 3. Extract the contents
-    // git archive outputs the tree content. 
-    // Since we added `.ritsu` directly, the tree contains a `.ritsu` folder at the root.
-    execSync(`git archive ${refName} | tar -x -C .`, { cwd: root, stdio: "ignore" });
+    // 3. Extract the contents using git checkout with a temporary index file
+    // to avoid dirtying the active user index.
+    const tmpIndex = join(root, `.git`, `ritsu-index-${randomUUID()}`);
+    try {
+      const env = { ...process.env, GIT_INDEX_FILE: tmpIndex };
+      execSync(`git checkout ${refName} -- ${RITSU_DIR}`, { cwd: root, env, stdio: "ignore" });
+    } finally {
+      if (existsSync(tmpIndex)) {
+        try {
+          rmSync(tmpIndex, { force: true });
+        } catch { /* ignore cleanup errors */ }
+      }
+    }
 
     return true;
   } catch (e) {

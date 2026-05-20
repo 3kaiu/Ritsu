@@ -68,6 +68,19 @@ function normalizeMatch(entry: unknown): AstGrepMatch[] {
   return [{ ruleId, file, text, message: typeof obj.message === "string" ? obj.message : undefined }];
 }
 
+function findAstGrepBinary(root: string): { binary: string; args: string[] } {
+  const candidates = [
+    resolve(root, "node_modules/.bin/ast-grep"),
+    resolve(root, "node_modules/.bin/sg"),
+  ];
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      return { binary: path, args: [] };
+    }
+  }
+  return { binary: "npx", args: ["--yes", "@ast-grep/cli"] };
+}
+
 export class AstGrepDetector implements DetectorPlugin {
   type = "ast_grep" as const;
 
@@ -99,12 +112,13 @@ export class AstGrepDetector implements DetectorPlugin {
           ? config.languages.join(",")
           : "typescript,javascript";
 
+    const spec = findAstGrepBinary(root);
+
     try {
       const stdout = execFileSync(
-        "npx",
+        spec.binary,
         [
-          "--yes",
-          "@ast-grep/cli",
+          ...spec.args,
           "scan",
           "--rule-dir",
           ruleDir,

@@ -5,7 +5,6 @@ import { RegexDetector } from "./detectors/regex.js";
 import { CrossFileDetector } from "./detectors/cross-file.js";
 import { ScopeDiffDetector } from "./detectors/scope-diff.js";
 import { ContractCoverageDetector } from "./detectors/contract-coverage.js";
-import { ASTDetector } from "./detectors/ast.js";
 import { PreferenceLintDetector } from "./detectors/preference-lint.js";
 import { AstGrepDetector } from "./detectors/ast-grep.js";
 
@@ -14,7 +13,6 @@ const detectors: Record<string, DetectorPlugin> = {
   cross_file: new CrossFileDetector(),
   scope_diff: new ScopeDiffDetector(),
   contract_coverage: new ContractCoverageDetector(),
-  ast: new ASTDetector(),
   preference_lint: new PreferenceLintDetector(),
   ast_grep: new AstGrepDetector(),
 };

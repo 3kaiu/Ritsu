@@ -7,8 +7,10 @@ import {
   MAX_TIMEOUT_MS_HARD_LIMIT,
 } from "../shared.js";
 import { getAllowedBinariesForProject } from "../shared.js";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { getAgentsProfile } from "../agents-parser.js";
+import { detectProjectRoot } from "../project-root.js";
 
 type ParsedCommand = {
   binary: string;
@@ -147,7 +149,27 @@ export async function runCmdWithCwd(
   });
 }
 
+interface FingerprintCache {
+  fingerprints: string[];
+  mtimeMs: number;
+}
+
+const fingerprintCache = new Map<string, FingerprintCache>();
+
 export function detectStackFingerprints(root: string): string[] {
+  let mtimeMs = 0;
+  try {
+    mtimeMs = statSync(root).mtimeMs;
+  } catch {
+    // If statSync fails (e.g. permission or not found), bypass cache lookup by using random time
+    mtimeMs = Math.random();
+  }
+
+  const cached = fingerprintCache.get(root);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.fingerprints;
+  }
+
   const fingerprints: string[] = [];
   if (existsSync(join(root, "package.json"))) fingerprints.push("nodejs");
   if (existsSync(join(root, "go.mod"))) fingerprints.push("go");
@@ -155,5 +177,24 @@ export function detectStackFingerprints(root: string): string[] {
   if (existsSync(join(root, "pubspec.yaml"))) fingerprints.push("flutter");
   if (existsSync(join(root, "pom.xml")) || existsSync(join(root, "build.gradle"))) fingerprints.push("java");
   if (existsSync(join(root, "Cargo.toml"))) fingerprints.push("rust");
+
+  // Also merge fingerprints from AGENTS.md if they exist
+  try {
+    const projRoot = detectProjectRoot(root);
+    if (existsSync(join(projRoot, "AGENTS.md"))) {
+      const profile = getAgentsProfile();
+      if (profile && profile.path === join(projRoot, "AGENTS.md") && Array.isArray(profile.tech_fingerprints)) {
+        for (const fp of profile.tech_fingerprints) {
+          if (typeof fp === "string" && !fingerprints.includes(fp)) {
+            fingerprints.push(fp);
+          }
+        }
+      }
+    }
+  } catch {
+    // ignore profile reading errors
+  }
+
+  fingerprintCache.set(root, { fingerprints, mtimeMs });
   return fingerprints;
 }

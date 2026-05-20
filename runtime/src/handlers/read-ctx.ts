@@ -20,10 +20,12 @@ function attachStage(
 ): Record<string, unknown> | null {
   if (!entry) return null;
   const skill = String(entry.skill ?? "");
-  return {
+  const copy: Record<string, unknown> = {
     ...entry,
     stage: getStageForSkill(skill),
   };
+  delete copy.signature;
+  return copy;
 }
 
 function attachStageToEntries(

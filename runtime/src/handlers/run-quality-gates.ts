@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { getProjectRoot, textResult } from "./_utils.js";
@@ -12,7 +12,8 @@ import {
   type CoverageMetric,
   type CoverageStats,
 } from "../quality-gates.js";
-import { runPolicyPreflight } from "../policy-preflight.js";
+import { runPolicyPreflight } from "../orchestration/policy-preflight.js";
+import { getAgentsProfile } from "../agents-parser.js";
 
 interface TestFailure {
   suite: string;
@@ -85,6 +86,35 @@ function parseCoverageSummary(content: string): {
   };
 }
 
+interface CoverageCacheEntry {
+  mtimeMs: number;
+  data: {
+    summary: CoverageStats;
+    per_file: CoverageByFile;
+  } | null;
+}
+
+const coverageCacheMap = new Map<string, CoverageCacheEntry>();
+
+function getCoverageSummaryCached(coveragePath: string): {
+  summary: CoverageStats;
+  per_file: CoverageByFile;
+} | null {
+  try {
+    const mtimeMs = statSync(coveragePath).mtimeMs;
+    const cached = coverageCacheMap.get(coveragePath);
+    if (cached && cached.mtimeMs === mtimeMs) {
+      return cached.data;
+    }
+    const content = readFileSync(coveragePath, "utf-8");
+    const data = parseCoverageSummary(content);
+    coverageCacheMap.set(coveragePath, { mtimeMs, data });
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 function runCommand(
   binary: string,
   args: string[],
@@ -118,12 +148,18 @@ function runCommand(
   });
 }
 
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, "");
+}
+
 function parseTestFailures(output: string): TestFailure[] {
   const failures: TestFailure[] = [];
+  const cleanOutput = stripAnsi(output);
 
   // vitest / jest pattern: FAIL <suite>
   // followed by: × <test> [duration] or ✕ <test>
-  const lines = output.split("\n");
+  const lines = cleanOutput.split("\n");
   let currentSuite = "";
 
   for (const line of lines) {
@@ -188,16 +224,15 @@ function parseAgentsMd(root: string): {
   lint_cmd?: CommandSpec;
   test_cmd?: CommandSpec;
 } {
-  const agentsPath = resolve(root, "AGENTS.md");
+  const profile = getAgentsProfile();
   let lint_cmd: CommandSpec | undefined;
   let test_cmd: CommandSpec | undefined;
 
-  if (existsSync(agentsPath)) {
-    const content = readFileSync(agentsPath, "utf-8");
-    const lintMatch = content.match(/lint[_-]?cmd\s*[:=]\s*`?([^`\n]+)`?/i);
-    const testMatch = content.match(/test[_-]?cmd\s*[:=]\s*`?([^`\n]+)`?/i);
-    if (lintMatch) lint_cmd = { cmd: lintMatch[1].trim(), cwd: root };
-    if (testMatch) test_cmd = { cmd: testMatch[1].trim(), cwd: root };
+  if (profile?.lint_cmd) {
+    lint_cmd = { cmd: profile.lint_cmd, cwd: root };
+  }
+  if (profile?.test_cmd) {
+    test_cmd = { cmd: profile.test_cmd, cwd: root };
   }
 
   const candidates = [root, resolve(root, "runtime")];
@@ -284,7 +319,7 @@ export async function ritsu_run_quality_gates(
       command.cwd,
       timeoutMs,
     );
-    result.lint = { status: r.ok ? "passed" : "failed", output: r.output.slice(0, 2000) };
+    result.lint = { status: r.ok ? "passed" : "failed", output: stripAnsi(r.output).slice(0, 2000) };
   } else if (!skipLint && !lint_cmd) {
     result.lint = { status: strict ? "failed" : "skipped", output: "no lint command found" };
   }
@@ -303,7 +338,7 @@ export async function ritsu_run_quality_gates(
     result.test = {
       status: passed ? "passed" : "failed",
       failures,
-      output: r.output.slice(0, 3000),
+      output: stripAnsi(r.output).slice(0, 3000),
     };
   } else if (!skipTest && !test_cmd) {
     result.test = { status: strict ? "failed" : "skipped", failures: [], output: "no test command found" };
@@ -322,7 +357,7 @@ export async function ritsu_run_quality_gates(
   ]);
   if (coveragePath) {
     try {
-      const coverage = parseCoverageSummary(readFileSync(coveragePath, "utf-8"));
+      const coverage = getCoverageSummaryCached(coveragePath);
       if (coverage) {
         const perFile: CoverageByFile = {};
         for (const [file, stats] of Object.entries(coverage.per_file)) {

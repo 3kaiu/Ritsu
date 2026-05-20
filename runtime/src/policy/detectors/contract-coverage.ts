@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
 import { getProjectRoot } from "../../handlers/_utils.js";
@@ -107,12 +107,19 @@ export class ContractCoverageDetector implements DetectorPlugin {
   private findLatestDesignSheet(root: string): string {
     const artifactDir = resolve(root, ".ritsu");
     if (existsSync(artifactDir)) {
-      const latest = readdirSync(artifactDir)
-        .filter((file) => file.startsWith("design-sheet-") && file.endsWith(".md"))
-        .sort()
-        .at(-1);
-      if (latest) {
-        return resolve(artifactDir, latest);
+      const files = readdirSync(artifactDir)
+        .filter((file) => file.startsWith("design-sheet-") && file.endsWith(".md"));
+      
+      if (files.length > 0) {
+        const stats = files.map((file) => {
+          const fullPath = resolve(artifactDir, file);
+          return {
+            path: fullPath,
+            mtime: statSync(fullPath).mtimeMs,
+          };
+        });
+        stats.sort((a, b) => b.mtime - a.mtime);
+        return stats[0].path;
       }
     }
 

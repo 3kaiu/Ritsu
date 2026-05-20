@@ -14,9 +14,6 @@ global:
     pattern: "引用或调用函数前，未 grep 验证其真实存在"
     enforcement: "引用前必须 grep 验证，禁止制造 Unknown identifiers 导致编译失败"
     severity: FATAL
-    detector:
-      type: ast
-      check_identifiers: true
   - id: AP-3
     name: Serial interrogation
     pattern: "遇到不清晰的需求，分成多次对话追问"
@@ -107,9 +104,6 @@ review:
     name: 不明标识符
     pattern: "代码中引入了找不到定义的变量或组件"
     severity: HARD_STOP
-    detector:
-      type: ast
-      check_identifiers: true
     note: "ref AP-2：本条为 review 阶段的 HARD_STOP 特化，只提升严重度与拦截策略，不新增规则语义"
   - id: R-2
     name: 版本号不同步

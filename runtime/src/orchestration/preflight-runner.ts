@@ -139,15 +139,14 @@ async function runDevReviewPreflight(
   }
   pack.changed_files = changed;
 
-  const fullDiff = await inspectDiff({
+  const statDiff = await inspectDiff({
     projectRoot,
-    mode: "full",
-    maxOutputLines: 800,
+    mode: "stat",
   });
-  if (fullDiff.ok) {
+  if (statDiff.ok) {
     pack.diff = {
-      files: fullDiff.data.files,
-      truncated: fullDiff.data.truncated,
+      files: statDiff.data.files,
+      truncated: false,
     };
   }
 

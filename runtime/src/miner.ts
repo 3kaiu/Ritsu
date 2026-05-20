@@ -179,27 +179,175 @@ export function minePreferences(days: number): string | null {
 
   const corrections: Array<{ file: string; diff: string }> = [];
 
-  for (const [file, event] of latestWrites.entries()) {
+  if (latestWrites.size > 0) {
+    let earliestSinceMs = Infinity;
+    for (const event of latestWrites.values()) {
+      if (event.ts_ms < earliestSinceMs) {
+        earliestSinceMs = event.ts_ms;
+      }
+    }
+
+    let globalLogOutput = "";
+    if (earliestSinceMs !== Infinity) {
+      try {
+        const since = new Date(earliestSinceMs).toISOString();
+        globalLogOutput = execSync(`git log -p --date=raw --since="${since}"`, {
+          cwd: root,
+          stdio: ["ignore", "pipe", "ignore"],
+        }).toString();
+      } catch {
+        // Ignore git errors
+      }
+    }
+
+    let globalDiffOutput = "";
     try {
-      const since = new Date(event.ts_ms).toISOString();
-      const diff = execSync(`git log -p --since="${since}" -- "${file}"`, {
+      globalDiffOutput = execSync(`git diff`, {
         cwd: root,
         stdio: ["ignore", "pipe", "ignore"],
-      }).toString().trim();
+      }).toString();
+    } catch {
+      // Ignore git errors
+    }
 
-      const workingDiff = execSync(`git diff -- "${file}"`, {
-        cwd: root,
-        stdio: ["ignore", "pipe", "ignore"],
-      }).toString().trim();
+    // Parse git log output
+    type CommitBlock = {
+      header: string;
+      timestamp: number;
+      fileDiffs: Map<string, string>;
+    };
 
-      let combinedDiff = diff;
-      if (workingDiff) combinedDiff += "\n\n[Uncommitted Working Tree Changes]\n" + workingDiff;
+    const commits: CommitBlock[] = [];
+    let currentCommit: CommitBlock | null = null;
+    let currentFile: string | null = null;
+    let currentFileDiffLines: string[] = [];
+    let currentHeaderLines: string[] = [];
+    let isParsingDiff = false;
+
+    const logLines = globalLogOutput.split(/\r?\n/);
+    for (const line of logLines) {
+      if (line.startsWith("commit ")) {
+        if (currentCommit && currentFile && currentFileDiffLines.length > 0) {
+          currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
+        }
+        if (currentCommit) {
+          commits.push(currentCommit);
+        }
+        currentCommit = {
+          header: "",
+          timestamp: 0,
+          fileDiffs: new Map(),
+        };
+        currentFile = null;
+        currentFileDiffLines = [];
+        currentHeaderLines = [line];
+        isParsingDiff = false;
+        continue;
+      }
+
+      if (currentCommit && !isParsingDiff) {
+        if (line.startsWith("diff --git ")) {
+          isParsingDiff = true;
+          currentCommit.header = currentHeaderLines.join("\n").trimEnd() + "\n\n";
+          const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+          if (match) {
+            currentFile = match[2];
+          } else {
+            currentFile = null;
+          }
+          currentFileDiffLines = [line];
+        } else {
+          currentHeaderLines.push(line);
+          const dateMatch = line.match(/^Date:\s+(\d+)/);
+          if (dateMatch) {
+            currentCommit.timestamp = parseInt(dateMatch[1], 10) * 1000;
+          }
+        }
+        continue;
+      }
+
+      if (currentCommit && isParsingDiff) {
+        if (line.startsWith("diff --git ")) {
+          if (currentFile && currentFileDiffLines.length > 0) {
+            currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
+          }
+          const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+          if (match) {
+            currentFile = match[2];
+          } else {
+            currentFile = null;
+          }
+          currentFileDiffLines = [line];
+        } else {
+          currentFileDiffLines.push(line);
+        }
+      }
+    }
+
+    if (currentCommit) {
+      if (currentFile && currentFileDiffLines.length > 0) {
+        currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
+      }
+      commits.push(currentCommit);
+    }
+
+    // Parse git diff output
+    const uncommittedDiffs = new Map<string, string[]>();
+    const diffLines = globalDiffOutput.split(/\r?\n/);
+    let currentDiffFile: string | null = null;
+    let currentDiffFileLines: string[] = [];
+
+    for (const line of diffLines) {
+      if (line.startsWith("diff --git ")) {
+        if (currentDiffFile && currentDiffFileLines.length > 0) {
+          uncommittedDiffs.set(currentDiffFile, currentDiffFileLines);
+        }
+        const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+        if (match) {
+          currentDiffFile = match[2];
+        } else {
+          currentDiffFile = null;
+        }
+        currentDiffFileLines = [line];
+      } else {
+        if (currentDiffFile) {
+          currentDiffFileLines.push(line);
+        }
+      }
+    }
+    if (currentDiffFile && currentDiffFileLines.length > 0) {
+      uncommittedDiffs.set(currentDiffFile, currentDiffFileLines);
+    }
+
+    // Reconstruct per-file diff strings
+    for (const [file, event] of latestWrites.entries()) {
+      const fileCommitDiffParts: string[] = [];
+      for (const commit of commits) {
+        if (commit.timestamp >= event.ts_ms) {
+          const fileDiff = commit.fileDiffs.get(file);
+          if (fileDiff) {
+            fileCommitDiffParts.push(commit.header + fileDiff);
+          }
+        }
+      }
+
+      let combinedDiff = fileCommitDiffParts.join("\n\n").trim();
+
+      const workingDiffLines = uncommittedDiffs.get(file);
+      if (workingDiffLines && workingDiffLines.length > 0) {
+        const workingDiffStr = workingDiffLines.join("\n").trim();
+        if (workingDiffStr) {
+          if (combinedDiff) {
+            combinedDiff += "\n\n[Uncommitted Working Tree Changes]\n" + workingDiffStr;
+          } else {
+            combinedDiff = "[Uncommitted Working Tree Changes]\n" + workingDiffStr;
+          }
+        }
+      }
 
       if (combinedDiff.trim().length > 10) {
         corrections.push({ file, diff: combinedDiff });
       }
-    } catch {
-      // Ignore git errors
     }
   }
 

@@ -2,14 +2,9 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
 import { validateEvent } from "../event-validator.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
-import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { existsSync } from "node:fs";
 import { releaseAllForSpan } from "./file-lease.js";
 import { dispatchHook } from "../hooks/index.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export async function ritsu_close_span(
   params: Record<string, unknown>,
