@@ -37,7 +37,7 @@ describe("ecosystem-bootstrap", () => {
 
     const mcp = JSON.parse(readFileSync(join(root, ".mcp.json"), "utf-8"));
     expect(mcp.mcpServers.ritsu).toBeDefined();
-    expect(mcp.mcpServers.filesystem).toBeDefined();
+    expect(Object.keys(mcp.mcpServers)).toHaveLength(1);
 
     const eco = JSON.parse(readFileSync(join(root, ".ritsu/ecosystem.json"), "utf-8"));
     expect(eco.host_profile).toBe("claude-code");

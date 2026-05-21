@@ -38,10 +38,7 @@ export type EcosystemConfig = {
   host_profile: HostProfile;
   openspec: "auto" | "off";
   ast_grep: boolean;
-  optional_mcp?: {
-    context7?: { enabled: boolean; disabled_reason?: string };
-    codegraph?: { enabled: boolean; disabled_reason?: string };
-  };
+  optional_mcp?: Record<string, { enabled: boolean; disabled_reason?: string }>;
 };
 
 export type BootstrapOptions = {
@@ -83,48 +80,11 @@ function buildMcpServers(projectRoot: string): Record<string, unknown> {
       };
 
   return {
-    // Ritsu core — 用户的主入口
+    // Ritsu 核心 — 唯一一个 Ritsu 编排层实际调用的 MCP 服务器
     ritsu: ritsuEntry,
 
-    // 底层文件系统 MCP — preflight 内部调用
-    filesystem: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-filesystem", projectRoot],
-    },
-
-    // 底层 Git MCP — diff inspect 内部调用
-    git: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-git"],
-      env: { GIT_REPO_PATH: projectRoot },
-    },
-
-    // 底层 GitHub MCP — review 阶段内部调用
-    github: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-github"],
-      env: {
-        GITHUB_PERSONAL_ACCESS_TOKEN: "${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
-      },
-    },
-
-    // 底层代码图 — preflight 内部自动调用
-    codegraph: {
-      command: "npx",
-      args: ["-y", "codegraph", "serve", "--mcp"],
-    },
-
-    // 底层文档 MCP — 自动注入最新文档，防过时 API 调用
-    context7: {
-      command: "npx",
-      args: ["-y", "@upstash/context7-mcp"],
-    },
-
-    // 底层浏览器自动化 — 测试门禁内部调用
-    playwright: {
-      command: "npx",
-      args: ["-y", "@anthropic-ai/mcp-playwright"],
-    },
+    // 代码图分析 — 由 internal-tools 通过 CLI 直接调用，MCP 是备选通道
+    // codegraph: { command: "npx", args: ["-y", "codegraph", "serve", "--mcp"] },
   };
 }
 
@@ -285,13 +245,7 @@ host_profile: ${hostProfile}
     host_profile: hostProfile,
     openspec: "auto",
     ast_grep: true,
-    optional_mcp: {
-      context7: {
-        enabled: false,
-        disabled_reason:
-          "底层 MCP 已自动配置 — 运行 ritsu doctor 检查",
-      },
-    },
+    optional_mcp: {},
   };
 
   const ecosystemPath = resolve(ritsuDir, "ecosystem.json");
@@ -412,11 +366,11 @@ function checkMcpFile(
     }
 
     items.push({
-      id: `${label}-mcp-filesystem`,
-      status: servers.includes("filesystem") ? "ok" : "warn",
-      message: servers.includes("filesystem")
-        ? `${label}: filesystem configured`
-        : `${label}: filesystem optional`,
+      id: `${label}-mcp-ritsu`,
+      status: servers.includes("ritsu") ? "ok" : "warn",
+      message: servers.includes("ritsu")
+        ? `${label}: ritsu configured`
+        : `${label}: ritsu missing`,
     });
   } catch {
     items.push({

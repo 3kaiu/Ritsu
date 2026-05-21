@@ -2,19 +2,15 @@
 
 > 所有底层工具由 `ritsu bootstrap` 自动配置，preflight 自动调用，对用户透明。
 
-## 自动配置的底层 MCP
+## 自动配置
 
-`ritsu bootstrap` 在 `.mcp.json` 中注册以下 MCP 服务器，全部由 Ritsu 内部调用：
+`ritsu bootstrap` 只在 `.mcp.json` 中注册 Ritsu 自身：
 
-| MCP Server | Ritsu 内部用途 |
-|-----------|--------------|
-| `ritsu` | 策略引擎、ctx 追踪、artifact 管理 |
-| `filesystem` | preflight 时定向读文件 |
-| `git` | preflight 时 diff inspect |
-| `github` | review 时 PR/Issue 访问 |
-| `codegraph` | preflight 时代码图分析 |
-| `context7` | 自动注入最新文档 |
-| `playwright` | quality-gates 的 E2E 测试 |
+| MCP Server | 用途 |
+|-----------|------|
+| `ritsu` | Ritsu 核心引擎 — 策略引擎、ctx 追踪、artifact 管理、diff inspect |
+
+其他工具（CodeGraph、OpenSpec 等）由 `internal-tools.ts` 通过 CLI 直接调用，不需要 MCP 通道。
 
 ## 用户流程
 
