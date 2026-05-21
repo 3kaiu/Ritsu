@@ -62,16 +62,6 @@ total_steps: 4
 2. 提示用户 **重载 Claude Code MCP**（重启会话或 `/mcp`），再运行 `ritsu doctor --ecosystem`；若有 fail 项，在交付摘要中列出 fix。
 3. Cursor 用户可选：`ritsu bootstrap --host all`（见 [docs/integrations.md](../docs/integrations.md) 附录 B）。
 
-### 3.6 架构指纹扫描（新增）
-
-在 AGENTS.md 生成后，运行架构扫描以建立项目基线：
-
-```bash
-ritsu doctor --arch-init
-```
-
-该命令自动分析 `src/` 目录的模块结构和跨模块依赖，将结果追加到 AGENTS.md 的 Architecture Block 中。后续所有 AI 会话通过 AGENTS.md 自动获取项目架构上下文。
-
 初始化完成后可运行 `ritsu doctor --signals` 查看结构化审计信号（PASS/WARN/FAIL 格式），用于快速确认项目基线状态。
 
 ### 4. 交付摘要与引导

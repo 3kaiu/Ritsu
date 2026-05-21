@@ -37,7 +37,6 @@ export function usage(): string {
     "ritsu doctor --health      # 输出核心健康度 4 指标与趋势分析",
     "ritsu doctor --similar-violations [--since 30d] [--query text]  # 离线相似违规检索（Jaccard，无 embedding）",
     "ritsu doctor --ecosystem          # 校验 MCP/OpenSpec/ast-grep 生态可达性",
-    "ritsu doctor --arch-init          # 扫描项目架构并写入 AGENTS.md",
     "ritsu bootstrap [--host claude-code|cursor|all]  # 默认写入 .mcp.json + .ritsu/ecosystem.json",
     "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
     "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",

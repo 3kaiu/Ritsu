@@ -266,47 +266,6 @@ export function buildArchitectureReport(root: string): string {
   ].join("\n");
 }
 
-/**
- * 将架构指纹写入 AGENTS.md
- * 在 /r-init 时调用，使架构约束成为项目基线的一部分。
- * 后续 AI 会话自动读取 AGENTS.md 中的架构块。
- */
-export function appendToAgentsMd(root: string): boolean {
-  const agentsPath = resolve(root, "AGENTS.md");
-  if (!existsSync(agentsPath)) return false;
-
-  const fp = buildArchitectureFingerprint(root);
-  const depYaml = fp.dependencies.map((d) => `    - from: ${d.fromModule}\n      to: ${d.toModule}\n      count: ${d.count}`).join("\n");
-
-  const archBlock = [
-    "",
-    "<!-- Architecture Block (auto-detected by ritsu init) -->",
-    "architecture:",
-    `  modules: [${fp.modules.map((m) => m.name).join(", ")}]`,
-    `  dependency_count: ${fp.dependencies.length}`,
-    `  circular_deps: ${fp.rules.filter((r) => r.type === "circular_dependency").length}`,
-    "  dependencies:",
-    depYaml || "    []",
-    "<!-- End Architecture Block -->",
-    "",
-  ].join("\n");
-
-  try {
-    const content = readFileSync(agentsPath, "utf-8");
-    // Replace existing architecture block or append
-    const archRegex = /<!-- Architecture Block[\s\S]*?End Architecture Block -->/;
-    if (archRegex.test(content)) {
-      const updated = content.replace(archRegex, archBlock.trim());
-      writeFileSync(agentsPath, updated, "utf-8");
-    } else {
-      writeFileSync(agentsPath, content.trimEnd() + "\n" + archBlock, "utf-8");
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function buildArchitectureSignals(root: string): string[] {
   const fp = buildArchitectureFingerprint(root);
   return [
