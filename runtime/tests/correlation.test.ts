@@ -36,7 +36,8 @@ describe("correlation", () => {
 
   it("should recover max seq from existing file", async () => {
     const ctxPath = getCtxPath(testRoot);
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    const now = new Date();
+    const today = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}`;
     const fakeEvent = { correlation_id: `cid-${today}-42`, status: "done" };
     writeFileSync(ctxPath, JSON.stringify(fakeEvent) + "\n");
 
@@ -48,7 +49,8 @@ describe("correlation", () => {
      const cid1 = generateCorrelationId(testRoot);
      // Manual write to file shouldn't affect cache until reset
      const ctxPath = getCtxPath(testRoot);
-     const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+     const now = new Date();
+     const today = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,"0")}${String(now.getDate()).padStart(2,"0")}`;
      writeFileSync(ctxPath, JSON.stringify({ correlation_id: `cid-${today}-100` }) + "\n", { flag: "a" });
      
      const cid2 = generateCorrelationId(testRoot);

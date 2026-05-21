@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { getProjectRoot } from "./handlers/_utils.js";
-import { isNativeAvailable, initNativeStore, computeSimpleEmbedding } from "./native-bridge.js";
+import { isNativeAvailable, initNativeStore, computeSimpleEmbedding, searchSimilarViolations } from "./native-bridge.js";
 
 // ─── Storage ──────────────────────────────────────────────────
 
@@ -73,8 +73,7 @@ export function captureMemory(entry: Omit<MemoryEntry, "id" | "ts">): boolean {
       tags: entry.tags,
       ts,
     });
-    const embedding = computeSimpleEmbedding(text);
-    const { searchSimilarViolations } = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    computeSimpleEmbedding(text);
 
     return true;
   } catch {
@@ -102,8 +101,6 @@ export function searchMemories(query: string, options?: {
   // Vector search via native engine
   if (ensureNativeStore()) {
     try {
-      const { searchSimilarViolations } = require("./native-bridge.js") as typeof import("./native-bridge.js");
-      // Use the existing violation search but with custom collection
       const results = searchSimilarViolations(query, limit);
       if (results.length > 0) return results.map((r) => ({
         id: r.id,
