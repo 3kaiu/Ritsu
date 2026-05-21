@@ -28,6 +28,6 @@ describe("openspec-bridge", () => {
       },
     ], "openspec/changes/feat-x/proposal.md");
     expect(sheet).toContain("OS-feat-x-1");
-    expect(sheet).toContain("OpenSpec Bridge");
+    expect(sheet).toContain("Design Sheet");
   });
 });

@@ -109,27 +109,26 @@ export function buildMinimalDesignSheet(
     )
     .join("\n");
 
-  return `# Design Sheet (设计单) — OpenSpec Bridge
+  return `# Design Sheet (设计单)
 
-> Auto-synced from \`${proposalPath}\`. Full narrative lives in OpenSpec; Ritsu machine checks use contracts below.
+> Contracts auto-synced from spec proposal.
 
 ## 1. 任务识别 (Intake)
 - 任务类型: 新功能
-- 当前目标: OpenSpec change \`${changeId}\`
+- 当前目标: Change \`${changeId}\`
 - 风险等级: critical
-- OpenSpec Change: \`openspec/changes/${changeId}/\`
 
 ## 6. 实施清单 (Execution)
 - 验证计划:
-  - 测试命令: 见 OpenSpec tasks + 项目 test 脚本
+  - 测试命令: 项目 test 脚本
   - 契约验证 (Contracts):
     | ID | 契约描述 | 测试断言位置 |
     | --- | --- | --- |
-${rows || "| OS-placeholder | See OpenSpec proposal | `openspec/changes/" + changeId + "/` |"}
+${rows || "| — | See spec proposal | `openspec/changes/" + changeId + "/\` |"}
 
 ---
 ## 下一步
-运行 \`/r-dev\`；验收时 \`design.contracts\` 与 OpenSpec specs 双向对账。
+运行 \`/r-dev\`；验收时 \`design.contracts\` 与 specs 双向对账。
 `;
 }
 

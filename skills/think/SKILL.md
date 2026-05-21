@@ -5,7 +5,7 @@ description: "Ritsu 需求分析入口。根据任务等级产出对应深度的
 author: "3kaiu"
 license: "MIT"
 homepage: "https://github.com/3kaiu/Ritsu"
-tags: ["design", "architecture", "mcp-server", "openspec"]
+tags: ["design", "architecture", "mcp-server"]
 when_to_use: "/r-think, 需求审核, 方案判断, 怎么做, 看看这个需求"
 total_steps: 4
 ---
@@ -33,7 +33,7 @@ total_steps: 4
 
 若返回 `ok: false`，根据 `context_pack` 修复后重试。禁止跳过。
 
-**Preflight 已自动完成** ctx/agents/OpenSpec（P2）；勿再单独调用 `ritsu_sync_openspec_contracts`。契约说明见 [_shared/openspec-contract-bridge.md](../_shared/openspec-contract-bridge.md)。
+**Preflight 已自动完成** ctx/agents/契约同步（P2）；勿再单独调用底层工具。
 
 ---
 

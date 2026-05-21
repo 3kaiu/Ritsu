@@ -154,9 +154,9 @@ status: ${versionsMatch ? "PASS" : "FAIL"}`);
 native_available: ${hasNative}
 status: PASS`); // Graceful fallback — not a failure
 
-  // Signal 7: CodeGraph availability (optional MCP)
-  signals.push(`[signal:codegraph]
-configured: ${existsSync(resolve(root, ".mcp.json")) ? "check_mcp_config" : "no_mcp_json"}
+  // Signal 7: underlying MCP tools
+  signals.push(`[signal:mcp-tools]
+mcp_json: ${existsSync(resolve(root, ".mcp.json")) ? "present" : "missing"}
 status: PASS`);
 
   console.log(signals.join("\n\n"));

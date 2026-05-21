@@ -9,7 +9,7 @@
 [![Tests](https://img.shields.io/badge/tests-344_✔-green.svg)](runtime/tests)
 [![Bun](https://img.shields.io/badge/bun-%3E%3D1.3.0-black.svg)](runtime/package.json)
 
-[快速开始](#-快速开始) • [核心理念](#-核心理念) • [架构](#-架构) • [与 Superpowers 集成](#-与-superpowers-集成) • [指令集](#-指令参考) • [CLI](#-cli-工具) • [配置](#-配置)
+[快速开始](#-快速开始) • [核心理念](#-核心理念) • [架构](#-架构) • [指令集](#-指令参考) • [CLI](#-cli-工具) • [配置](#-配置)
 
 </div>
 

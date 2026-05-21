@@ -289,7 +289,7 @@ host_profile: ${hostProfile}
       context7: {
         enabled: false,
         disabled_reason:
-          "Add Context7 to .mcp.json manually — see docs/integrations.md",
+          "底层 MCP 已自动配置 — 运行 ritsu doctor 检查",
       },
     },
   };

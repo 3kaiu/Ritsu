@@ -3,61 +3,56 @@
 ## 六层架构
 
 ```text
-Skills (Markdown 协议)        ─→  7 个 SKILL.md (think/dev/review/hunt/augment/init/freestyle)
-Orchestration                 ─→  preflight-runner, diff-inspect, superpowers-bridge
-MCP Handler Layer             ─→  22 个 handler (合并后)
-Policy Engine                 ─→  plugin-loader + 8 detectors (含 codegraph)
+Skills (Markdown 协议)        ─→  7 个 SKILL.md (用户唯一界面)
+Orchestration                 ─→  preflight-runner, internal-tools, diff-inspect
+MCP Handler Layer             ─→  22 个 handler (对用户透明)
+Policy Engine                 ─→  plugin-loader + 8 detectors
 Storage Layer                 ─→  ctx-reader/writer, ctx-db (SQLite), session-memory
-Native Engine                 ─→  Rust napi-rs: vector_store (sqlite-vec cosine)
+Native Engine                 ─→  Rust napi-rs 向量搜索
 CLI Layer                     ─→  cli/: doctor, cat, trace, export, sync, mine, bootstrap
 ```
 
 | 层 | 职责 | 技术 |
 |---|---|---|
 | **Skills** | 阶段剧本，AI 可读的 Markdown 协议 | `skills/<stage>/SKILL.md` |
-| **Orchestration** | 按 stage 串联 ctx、diff、policy、图上下文 | `orchestration/` |
-| **Handlers** | 22 个 MCP 工具实现，全部收敛 | `handlers/` |
+| **Orchestration** | 按 stage 串联 ctx、diff、policy、底层工具 | `orchestration/` |
+| **Handlers** | 22 个 MCP 工具实现 | `handlers/` |
 | **Policy** | 策略引擎，8 个检测器 + 插件系统 | `policy/` |
 | **Storage** | JSONL + SQLite 双写，向量记忆 | `ctx-*.ts`, `session-memory.ts` |
-| **Native** | Rust napi-rs，向量搜索 | `native/` (Rust) |
+| **Native** | Rust napi-rs 向量搜索 | `native/` |
 | **CLI** | doctor, cat, trace, mine, sync | `cli/` |
 
 ## 运行时
 
-- **包管理器**: Bun 1.3+（已迁移，移除 npm）
-- **构建**: `bun run build` → tsc + copy-resources
-- **测试**: vitest — `bun run test`（314 tests, 56 files）
-- **原生插件**: Rust napi-rs，可选，纯 JS 回退
+- **包管理器**: Bun 1.3+
+- **构建**: `bun run build`
+- **测试**: 60 文件, 344 测试, vitest
+- **原生引擎**: Rust napi-rs（可选，纯 JS 回退）
 
-## 外部集成
+## 底层工具编排
 
-| 项目 | 集成方式 | 状态 |
-|---|---|---|
-| **Superpowers** | `superpowers-bridge.ts` — 阶段映射 + preflight 路由 | ✅ 自动检测 |
-| **CodeGraph** | `codegraph` 检测器 + preflight 图上下文 + MCP bootstrap | ✅ CLI fallback |
-| **OpenSpec** | `openspec-bridge.ts` — /opsx: 命令 + contract 提取 | ✅ |
-| **Waza** | 反模式目录 + Gotchas 表 + 验证优先硬停止 | ✅ CLAUDE.md |
-| **Claude-Mem** | `session-memory.ts` — 3 层渐进式记忆 + auto-capture | ✅ native 引擎 |
+Ritsu 在 orchestration 层自动调用多个底层工具，对用户完全透明：
+
+| 功能 | 触发时机 | 实现 |
+|------|---------|------|
+| 代码图分析 | preflight dev/review | `internal-tools.fetchCodeGraphContext()` |
+| 需求头脑风暴 | preflight think | `internal-tools.runSuperpowersBrainstorming()` |
+| 规格同步 | preflight think (P2) | `openspec-bridge.ts` |
+| 文档注入 | bootstrap 自动配置 | Context7 MCP |
+| 浏览器测试 | quality-gates | Playwright MCP |
+| 仓库操作 | preflight/review | GitHub MCP |
 
 ## Policy 引擎
 
 ```
-写入时: ritsu_write_artifact → evaluatePolicies (plugin-loader)
-交付前: preflight / quality-gates → runPolicyPreflight (30s worktree 缓存去重)
+写入时: ritsu_write_artifact → evaluatePolicies
+交付前: preflight / quality-gates → runPolicyPreflight
 ```
 
-8 个内置检测器: regex, cross_file, scope_diff, contract_coverage, preference_lint, ast_grep, ast, codegraph
-用户插件: `rules/detectors/*.js` + `manifest.json`
-
-## 存储
-
-- **事件日志**: JSONL + SQLite 双写（bun:sqlite 优先）
-- **向量记忆**: Rust napi-rs 引擎 + JSONL 回退
-- **偏好**: `.ritsu/preferences.yaml` → AST-grep 规则编译
+8 个内置检测器 + 用户插件 (`rules/detectors/*`)。
 
 ## 关键设计决策
 
-- **22 个 MCP 工具** — 已合并 10 个旧工具，不新增
-- **不嵌入**: 通过 MCP 组合而非内部重写（CodeGraph、Codex++ 插件模式）
-- **Claude Code 优先**: CLAUDE.md + `.claude/rules/` + `.claudeignore`
-- **渐进式 Token 控制**: ritsu_read_ctx 支持 token_budget 参数
+- **用户只看到 Skills** — `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
+- **底层工具完全透明** — bootstrap 自动配置，preflight 自动调用
+- **22 个 MCP 工具** — 已合并 10 个旧工具
