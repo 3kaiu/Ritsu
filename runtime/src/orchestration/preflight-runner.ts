@@ -19,7 +19,7 @@ import {
   fetchCodeGraphContext,
   getToolReadiness,
 } from "./internal-tools.js";
-import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureReport } from "./architecture-analyzer.js";
+import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureReport, buildArchitectureContext } from "./architecture-analyzer.js";
 
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
 export type PreflightTier = "P0" | "P1" | "P2";
@@ -39,12 +39,10 @@ export type PreflightContextPack = Record<string, unknown> & {
   _tools?: { superpowers: boolean; codegraph: boolean; openspec: boolean; native: boolean };
   /** CodeGraph graph context (auto-fetched when available) */
   _codegraph?: { symbols: string[]; files: string[] } | null;
-  /** Architecture fingerprint (learned during think preflight) */
-  _architecture?: import("./architecture-analyzer.js").LayerRule[];
+  /** Architecture context (learned during think preflight) */
+  _architecture?: Record<string, unknown>;
   /** Architecture drift violations (detected during dev/review preflight) */
   _architecture_drift?: import("./architecture-analyzer.js").LayerRule[];
-  /** Architecture context report (learned during think preflight) */
-  _architecture_context?: string;
 };
 
 function inferTier(
@@ -107,12 +105,7 @@ async function runThinkPreflight(
   try {
     const fingerprint = buildArchitectureFingerprint(projectRoot);
     storeArchitectureFingerprint(fingerprint);
-    if (fingerprint.rules.length > 0) {
-      pack._architecture = fingerprint.rules;
-    }
-    // Inject architecture context for AI reasoning
-    const report = buildArchitectureReport(projectRoot);
-    pack._architecture_context = report;
+    pack._architecture = buildArchitectureContext(fingerprint);
   } catch { /* non-critical */ }
 
   const hasOpenSpec = existsSync(resolve(projectRoot, "openspec"));
