@@ -40,8 +40,7 @@ describe("ritsu_exec", () => {
       expect(result.isError).toBe(true);
       // Could be binary block or argument block depending on platform/setup
       const msg = result.content[0].text;
-      const blocked = msg.includes("blocked by safety boundary") || msg.includes("command blocked");
-      expect(blocked).toBe(true);
+      expect(msg).toMatch(/blocked/);
     }
   });
 

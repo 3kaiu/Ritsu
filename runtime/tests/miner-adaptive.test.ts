@@ -154,7 +154,7 @@ diff --git a/src/utils.ts b/src/utils.ts
     expect(minedRule!.match_regex).toBe("legacyApiCall\\(\\);");
   });
 
-  it("should merge mined rules conflict-free and trigger automatic preferences.yaml compilation", () => {
+  it("should merge mined rules conflict-free and trigger automatic preferences.yaml compilation", async () => {
     const ritsuDir = join(testRoot, ".ritsu");
     mkdirSync(ritsuDir);
 
@@ -195,7 +195,7 @@ diff --git a/src/utils.ts b/src/utils.ts
     );
 
     // Execute auto Apply
-    const result = autoApplyMinedRules(7);
+    const result = await autoApplyMinedRules(7);
     expect(result.addedCount).toBe(1);
     expect(result.rules).toHaveLength(1);
     expect(result.rules[0].id).toBe("pref-auto-logger");

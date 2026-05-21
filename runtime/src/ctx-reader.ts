@@ -10,11 +10,31 @@ import { existsSync, readFileSync, statSync, openSync, readSync, closeSync, appe
 import { resolve } from "node:path";
 import { getCtxPath } from "./ctx-path.js";
 import { legacyCidToTraceId, legacyCidToSpanId } from "./correlation.js";
+import { getProjectRoot } from "./handlers/_utils.js";
 
 let cachedEntries: Record<string, unknown>[] | null = null;
 let lastMtime: number = 0;
 let lastSize: number = 0;
 let lastPath: string = "";
+
+// Lazy SQLite initialization
+let _sqliteAvailable = false;
+let _ctxDb: typeof import("./ctx-db.js") | null = null;
+
+function tryOpenSqlite(): boolean {
+  if (_ctxDb) return true;
+  try {
+    // Use require for sync init — works in bun's ESM mode
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("./ctx-db.js") as typeof import("./ctx-db.js");
+    _sqliteAvailable = mod.openDb(getProjectRoot());
+    if (_sqliteAvailable) _ctxDb = mod;
+    return _sqliteAvailable;
+  } catch {
+    _sqliteAvailable = false;
+    return false;
+  }
+}
 
 function tryHealJsonLine(line: string): string | null {
   let trimmed = line.trim();
@@ -136,6 +156,9 @@ function processLine(
  * 优化：对于 JSONL，逐行解析比全量 split 内存更友好。
  */
 export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
+  if (tryOpenSqlite() && _ctxDb) {
+    return _ctxDb.queryEvents({ limit: 10000 });
+  }
   const ctxPath = getCtxPath(projectRoot);
   
   try {
@@ -192,6 +215,9 @@ export function readRecentEntries(
   projectRoot: string,
   limit = 20,
 ): Record<string, unknown>[] {
+  if (tryOpenSqlite() && _ctxDb) {
+    return _ctxDb.queryRecentEntries(limit);
+  }
   const ctxPath = getCtxPath(projectRoot);
   if (!existsSync(ctxPath)) return [];
 
@@ -242,6 +268,10 @@ export function readRecentEntries(
 export function readLastIncomplete(
   projectRoot: string,
 ): Record<string, unknown> | null {
+  if (tryOpenSqlite() && _ctxDb) {
+    const result = _ctxDb.queryLastIncomplete();
+    if (result) return result;
+  }
   const entries = readAllEntries(projectRoot);
   const doneSet = new Set<string>();
 
@@ -267,6 +297,10 @@ export function readLastIncomplete(
 export function readLastCompleted(
   projectRoot: string,
 ): Record<string, unknown> | null {
+  if (tryOpenSqlite() && _ctxDb) {
+    const result = _ctxDb.queryLastCompleted();
+    if (result) return result;
+  }
   const entries = readAllEntries(projectRoot);
   for (let i = entries.length - 1; i >= 0; i--) {
     if (entries[i].status === "done") return entries[i];

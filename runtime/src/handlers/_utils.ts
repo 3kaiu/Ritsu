@@ -1,5 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { detectProjectRoot } from "../project-root.js";
+import type { RitsuToolError } from "../shared.js";
 
 export function getProjectRoot(): string {
   return detectProjectRoot();
@@ -22,6 +23,25 @@ export function textResult(text: string): CallToolResult {
 
 export function errorResult(msg: string): CallToolResult {
   return { content: [{ type: "text", text: `❌ ${msg}` }], isError: true };
+}
+
+// ─── 结构化错误返回 ───────────────────────────────────────────
+
+export function structuredError(
+  type: RitsuToolError["error"]["type"],
+  code: string,
+  message: string,
+  opts?: {
+    violations?: RitsuToolError["error"]["violations"];
+    recovery_hint?: string;
+  },
+): CallToolResult {
+  const result: RitsuToolError = {
+    error: { type, code, message },
+  };
+  if (opts?.violations) result.error.violations = opts.violations;
+  if (opts?.recovery_hint) result.error.recovery_hint = opts.recovery_hint;
+  return { content: [{ type: "text", text: JSON.stringify(result) }], isError: true };
 }
 
 export function jsonErrorResult(data: Record<string, unknown>): CallToolResult {

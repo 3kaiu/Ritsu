@@ -1,9 +1,11 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import yaml from "js-yaml";
 import { getProjectRoot } from "./handlers/_utils.js";
 import { reconcilePreferences } from "./policy/detectors/ast-grep-reconciler.js";
+import { isRecord } from "./shared.js";
+import { synthesizeWithLLM } from "./llm-synthesizer.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -19,10 +21,6 @@ type ViolationEvent = {
   message?: string;
   evidence?: string;
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function parseEventTimestamp(value: string): number | null {
   const trimmed = value.trim();
@@ -72,7 +70,7 @@ function normalizeViolationEvent(event: Record<string, unknown>): ViolationEvent
   };
 }
 
-type PreferenceRule = Record<string, unknown> & {
+export type PreferenceRule = Record<string, unknown> & {
   id: string;
 };
 
@@ -128,11 +126,17 @@ function extractPreferenceRuleFromSheet(
   return null;
 }
 
-export function minePreferences(days: number): string | null {
-  const root = getProjectRoot();
+// ─── Shared: scan human corrections from ctx files ────────────
+
+type ScanResult = {
+  corrections: Array<{ file: string; diff: string }>;
+  violations: ViolationEvent[];
+};
+
+function scanHumanCorrections(root: string, days: number): ScanResult {
   const ritsuDir = resolve(root, RITSU_DIR);
 
-  if (!existsSync(ritsuDir)) return null;
+  if (!existsSync(ritsuDir)) return { corrections: [], violations: [] };
 
   const files = readdirSync(ritsuDir).filter(
     (f) => f.startsWith("ctx-") && f.endsWith(".jsonl"),
@@ -183,38 +187,36 @@ export function minePreferences(days: number): string | null {
   if (latestWrites.size > 0) {
     let earliestSinceMs = Infinity;
     for (const event of latestWrites.values()) {
-      if (event.ts_ms < earliestSinceMs) {
-        earliestSinceMs = event.ts_ms;
-      }
+      if (event.ts_ms < earliestSinceMs) earliestSinceMs = event.ts_ms;
     }
 
     let globalLogOutput = "";
-    if (earliestSinceMs !== Infinity && latestWrites.size > 0) {
+    if (earliestSinceMs !== Infinity) {
       try {
         const since = new Date(earliestSinceMs).toISOString();
-        const fileLimiters = Array.from(latestWrites.keys()).map(f => `"${f}"`).join(" ");
-        globalLogOutput = execSync(`git log -p --date=raw --since="${since}" -- ${fileLimiters}`, {
+        const fileNames = Array.from(latestWrites.keys());
+        globalLogOutput = execFileSync("git", [
+          "log", "-p", "--date=raw", `--since=${since}`, "--", ...fileNames,
+        ], {
           cwd: root,
           stdio: ["ignore", "pipe", "ignore"],
           maxBuffer: 10 * 1024 * 1024,
         }).toString();
-      } catch {
-        // Ignore git errors
-      }
+      } catch { /* ignore git errors */ }
     }
 
     let globalDiffOutput = "";
     if (latestWrites.size > 0) {
       try {
-        const fileLimiters = Array.from(latestWrites.keys()).map(f => `"${f}"`).join(" ");
-        globalDiffOutput = execSync(`git diff -- ${fileLimiters}`, {
+        const fileNames = Array.from(latestWrites.keys());
+        globalDiffOutput = execFileSync("git", [
+          "diff", "--", ...fileNames,
+        ], {
           cwd: root,
           stdio: ["ignore", "pipe", "ignore"],
           maxBuffer: 10 * 1024 * 1024,
         }).toString();
-      } catch {
-        // Ignore git errors
-      }
+      } catch { /* ignore git errors */ }
     }
 
     // Parse git log output
@@ -358,9 +360,19 @@ export function minePreferences(days: number): string | null {
     }
   }
 
+  return { corrections, violations };
+}
+
+// ─── minePreferences ──────────────────────────────────────────
+
+export function minePreferences(days: number): string | null {
+  const root = getProjectRoot();
+  const ritsuDir = resolve(root, RITSU_DIR);
+
+  const { corrections, violations } = scanHumanCorrections(root, days);
+
   if (corrections.length === 0 && violations.length === 0) return null;
 
-  // Generate Mining Sheet
   const dateStr = new Date().toISOString().slice(0, 10);
   const outPath = join(ritsuDir, `mining-sheet-${dateStr}.md`);
 
@@ -458,18 +470,20 @@ export function promotePreference(prefId: string): boolean {
   return false;
 }
 
-export interface DiffHunk {
+// ─── Auto-apply mined rules ───────────────────────────────────
+
+type DiffHunk = {
   deletedLines: string[];
   addedLines: string[];
-}
+};
 
 function parseDiffHunksFromDiff(diffText: string): DiffHunk[] {
   const hunks: DiffHunk[] = [];
   const lines = diffText.split(/\r?\n/);
-  
+
   let currentDeleted: string[] = [];
   let currentAdded: string[] = [];
-  
+
   const flushHunk = () => {
     if (currentDeleted.length > 0 || currentAdded.length > 0) {
       hunks.push({
@@ -480,7 +494,7 @@ function parseDiffHunksFromDiff(diffText: string): DiffHunk[] {
       currentAdded = [];
     }
   };
-  
+
   for (const line of lines) {
     if (
       line.startsWith("diff --git ") ||
@@ -494,7 +508,7 @@ function parseDiffHunksFromDiff(diffText: string): DiffHunk[] {
       flushHunk();
       continue;
     }
-    
+
     if (line.startsWith("-")) {
       if (currentAdded.length > 0) {
         flushHunk();
@@ -534,10 +548,10 @@ export function synthesizeRulesFromCorrections(
     const hunks = parseDiffHunksFromDiff(corr.diff);
     for (const hunk of hunks) {
       // Heuristic 1: Logger Substitution
-      const hasConsole = hunk.deletedLines.some(line => 
+      const hasConsole = hunk.deletedLines.some(line =>
         /console\.(log|warn|error|info)\b/.test(line)
       );
-      const hasLogger = hunk.addedLines.some(line => 
+      const hasLogger = hunk.addedLines.some(line =>
         /(?:logger|log)\.(info|warn|error|debug|log)\b/.test(line) && !/console\./.test(line)
       );
       if (hasConsole && hasLogger) {
@@ -573,7 +587,7 @@ export function synthesizeRulesFromCorrections(
 
       // Heuristic 3: Strong Type Safety
       const hasAny = hunk.deletedLines.some(line => /:\s*any\b/.test(line));
-      const hasStrongType = hunk.addedLines.some(line => 
+      const hasStrongType = hunk.addedLines.some(line =>
         /:\s*(?:string|number|boolean|Record|object|unknown|void|[A-Z][a-zA-Z0-9_]*)\b/.test(line) && !/:\s*any\b/.test(line)
       );
       if (hasAny && hasStrongType) {
@@ -606,11 +620,10 @@ export function synthesizeRulesFromCorrections(
       // Collect generic deleted lines for frequency analysis
       for (const line of hunk.deletedLines) {
         const trimmed = line.trim();
-        // Skip comments, empty lines, and very short expressions
         if (
-          trimmed.length >= 6 && 
-          !trimmed.startsWith("//") && 
-          !trimmed.startsWith("/*") && 
+          trimmed.length >= 6 &&
+          !trimmed.startsWith("//") &&
+          !trimmed.startsWith("/*") &&
           !trimmed.startsWith("*")
         ) {
           genericDeletedFreqs.set(trimmed, (genericDeletedFreqs.get(trimmed) ?? 0) + 1);
@@ -622,7 +635,6 @@ export function synthesizeRulesFromCorrections(
   // Heuristic 5: Generic Recurring Correction Mining
   for (const [trimmedLine, freq] of genericDeletedFreqs.entries()) {
     if (freq >= 2) {
-      // Create a literal match_regex by escaping the deleted code
       const escaped = escapeRegExp(trimmedLine);
       const hash = hashString(trimmedLine);
       const ruleId = `pref-auto-mined-${hash}`;
@@ -642,237 +654,22 @@ export function synthesizeRulesFromCorrections(
   return rules;
 }
 
-export function autoApplyMinedRules(days: number): { addedCount: number; rules: PreferenceRule[] } {
+export async function autoApplyMinedRules(days: number): Promise<{ addedCount: number; rules: PreferenceRule[] }> {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, RITSU_DIR);
   const prefPath = resolve(root, ".ritsu/preferences.yaml");
 
-  if (!existsSync(ritsuDir)) {
-    mkdirSync(ritsuDir, { recursive: true });
-  }
+  if (!existsSync(ritsuDir)) mkdirSync(ritsuDir, { recursive: true });
 
-  // 1. Scan for human corrections
-  const files = readdirSync(ritsuDir).filter(
-    (f) => f.startsWith("ctx-") && f.endsWith(".jsonl"),
-  );
-  const cutoffMs = Date.now() - days * 24 * 3600 * 1000;
-
-  const artifactEvents: ArtifactEvent[] = [];
-  for (const f of files) {
-    const lines = readFileSync(join(ritsuDir, f), "utf-8").split(/\r?\n/);
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const obj = JSON.parse(line) as unknown;
-        if (!isRecord(obj)) continue;
-        if (typeof obj.ts !== "string") continue;
-        const eventTs = parseEventTimestamp(obj.ts);
-        if (eventTs === null || eventTs < cutoffMs) continue;
-
-        if (
-          obj.status === "artifact_written" &&
-          typeof obj.artifact === "string"
-        ) {
-          artifactEvents.push({
-            ts: obj.ts,
-            ts_ms: eventTs,
-            artifact: obj.artifact,
-          });
-        }
-      } catch { /* ignore malformed lines */ }
-    }
-  }
-
-  const latestWrites = new Map<string, ArtifactEvent>();
-  for (const e of artifactEvents) {
-    const existing = latestWrites.get(e.artifact);
-    if (!existing || e.ts_ms > existing.ts_ms) {
-      latestWrites.set(e.artifact, e);
-    }
-  }
-
-  const corrections: Array<{ file: string; diff: string }> = [];
-
-  if (latestWrites.size > 0) {
-    let earliestSinceMs = Infinity;
-    for (const event of latestWrites.values()) {
-      if (event.ts_ms < earliestSinceMs) {
-        earliestSinceMs = event.ts_ms;
-      }
-    }
-
-    let globalLogOutput = "";
-    if (earliestSinceMs !== Infinity && latestWrites.size > 0) {
-      try {
-        const since = new Date(earliestSinceMs).toISOString();
-        const fileLimiters = Array.from(latestWrites.keys()).map(f => `"${f}"`).join(" ");
-        globalLogOutput = execSync(`git log -p --date=raw --since="${since}" -- ${fileLimiters}`, {
-          cwd: root,
-          stdio: ["ignore", "pipe", "ignore"],
-          maxBuffer: 10 * 1024 * 1024,
-        }).toString();
-      } catch {
-        // Ignore git errors
-      }
-    }
-
-    let globalDiffOutput = "";
-    if (latestWrites.size > 0) {
-      try {
-        const fileLimiters = Array.from(latestWrites.keys()).map(f => `"${f}"`).join(" ");
-        globalDiffOutput = execSync(`git diff -- ${fileLimiters}`, {
-          cwd: root,
-          stdio: ["ignore", "pipe", "ignore"],
-          maxBuffer: 10 * 1024 * 1024,
-        }).toString();
-      } catch {
-        // Ignore git errors
-      }
-    }
-
-    // Parse git log output
-    type CommitBlock = {
-      header: string;
-      timestamp: number;
-      fileDiffs: Map<string, string>;
-    };
-
-    const commits: CommitBlock[] = [];
-    let currentCommit: CommitBlock | null = null;
-    let currentFile: string | null = null;
-    let currentFileDiffLines: string[] = [];
-    let currentHeaderLines: string[] = [];
-    let isParsingDiff = false;
-
-    const logLines = globalLogOutput.split(/\r?\n/);
-    for (const line of logLines) {
-      if (line.startsWith("commit ")) {
-        if (currentCommit && currentFile && currentFileDiffLines.length > 0) {
-          currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
-        }
-        if (currentCommit) {
-          commits.push(currentCommit);
-        }
-        currentCommit = {
-          header: "",
-          timestamp: 0,
-          fileDiffs: new Map(),
-        };
-        currentFile = null;
-        currentFileDiffLines = [];
-        currentHeaderLines = [line];
-        isParsingDiff = false;
-        continue;
-      }
-
-      if (currentCommit && !isParsingDiff) {
-        if (line.startsWith("diff --git ")) {
-          isParsingDiff = true;
-          currentCommit.header = currentHeaderLines.join("\n").trimEnd() + "\n\n";
-          const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-          if (match) {
-            currentFile = match[2];
-          } else {
-            currentFile = null;
-          }
-          currentFileDiffLines = [line];
-        } else {
-          currentHeaderLines.push(line);
-          const dateMatch = line.match(/^Date:\s+(\d+)/);
-          if (dateMatch) {
-            currentCommit.timestamp = parseInt(dateMatch[1], 10) * 1000;
-          }
-        }
-        continue;
-      }
-
-      if (currentCommit && isParsingDiff) {
-        if (line.startsWith("diff --git ")) {
-          if (currentFile && currentFileDiffLines.length > 0) {
-            currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
-          }
-          const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-          if (match) {
-            currentFile = match[2];
-          } else {
-            currentFile = null;
-          }
-          currentFileDiffLines = [line];
-        } else {
-          currentFileDiffLines.push(line);
-        }
-      }
-    }
-
-    if (currentCommit) {
-      if (currentFile && currentFileDiffLines.length > 0) {
-        currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
-      }
-      commits.push(currentCommit);
-    }
-
-    // Parse git diff output
-    const uncommittedDiffs = new Map<string, string[]>();
-    const diffLines = globalDiffOutput.split(/\r?\n/);
-    let currentDiffFile: string | null = null;
-    let currentDiffFileLines: string[] = [];
-
-    for (const line of diffLines) {
-      if (line.startsWith("diff --git ")) {
-        if (currentDiffFile && currentDiffFileLines.length > 0) {
-          uncommittedDiffs.set(currentDiffFile, currentDiffFileLines);
-        }
-        const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-        if (match) {
-          currentDiffFile = match[2];
-        } else {
-          currentDiffFile = null;
-        }
-        currentDiffFileLines = [line];
-      } else {
-        if (currentDiffFile) {
-          currentDiffFileLines.push(line);
-        }
-      }
-    }
-    if (currentDiffFile && currentDiffFileLines.length > 0) {
-      uncommittedDiffs.set(currentDiffFile, currentDiffFileLines);
-    }
-
-    // Reconstruct per-file diff strings
-    for (const [file, event] of latestWrites.entries()) {
-      const fileCommitDiffParts: string[] = [];
-      for (const commit of commits) {
-        if (commit.timestamp >= event.ts_ms) {
-          const fileDiff = commit.fileDiffs.get(file);
-          if (fileDiff) {
-            fileCommitDiffParts.push(commit.header + fileDiff);
-          }
-        }
-      }
-
-      let combinedDiff = fileCommitDiffParts.join("\n\n").trim();
-
-      const workingDiffLines = uncommittedDiffs.get(file);
-      if (workingDiffLines && workingDiffLines.length > 0) {
-        const workingDiffStr = workingDiffLines.join("\n").trim();
-        if (workingDiffStr) {
-          if (combinedDiff) {
-            combinedDiff += "\n\n[Uncommitted Working Tree Changes]\n" + workingDiffStr;
-          } else {
-            combinedDiff = "[Uncommitted Working Tree Changes]\n" + workingDiffStr;
-          }
-        }
-      }
-
-      if (combinedDiff.trim().length > 10) {
-        corrections.push({ file, diff: combinedDiff });
-      }
-    }
-  }
-
-  // 2. Synthesize rules from corrections
+  const { corrections, violations } = scanHumanCorrections(root, days);
   const synthesizedRules = synthesizeRulesFromCorrections(corrections);
+
+  // LLM-driven rule synthesis (supplements heuristic rules when enabled)
+  const llmRules = await synthesizeWithLLM({
+    corrections,
+    violations,
+    existingRules: [],
+  });
 
   let currentRules: PreferenceRule[] = [];
   let shouldRewriteCanonicalDoc = false;
@@ -889,7 +686,8 @@ export function autoApplyMinedRules(days: number): { addedCount: number; rules: 
   }
 
   let addedCount = 0;
-  for (const syn of synthesizedRules) {
+  const allNewRules = [...synthesizedRules, ...llmRules];
+  for (const syn of allNewRules) {
     const exists = currentRules.some(
       (existing) =>
         existing.id === syn.id || existing.match_regex === syn.match_regex
@@ -910,4 +708,3 @@ export function autoApplyMinedRules(days: number): { addedCount: number; rules: 
     rules: synthesizedRules
   };
 }
-

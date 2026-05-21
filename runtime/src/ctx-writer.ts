@@ -11,6 +11,22 @@ import { lock } from "proper-lockfile";
 import { getCtxPath, ensureCtxFile } from "./ctx-path.js";
 import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
 import { signEvent, getOrCreateKey } from "./policy/signature.js";
+import { getProjectRoot } from "./handlers/_utils.js";
+
+let _ctxDb: typeof import("./ctx-db.js") | null = null;
+
+function tryInitSqlite(): boolean {
+  if (_ctxDb) return true;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require("./ctx-db.js") as typeof import("./ctx-db.js");
+    if (mod.openDb(getProjectRoot())) {
+      _ctxDb = mod;
+      return true;
+    }
+  } catch { /* bun:sqlite unavailable */ }
+  return false;
+}
 
 let _lastLineCount = 0;
 let _lastCtxMonth = "";
@@ -76,6 +92,11 @@ export async function appendEvent(
     const line = JSON.stringify(event);
     appendFileSync(ctxPath, line + "\n");
     _lastLineCount++;
+
+    // Dual-write to SQLite when available
+    if (tryInitSqlite() && _ctxDb) {
+      _ctxDb.insertEvent(event);
+    }
   } finally {
     await release(); // proper-lockfile suggests using the release function returned by lock()
   }

@@ -18,6 +18,8 @@ Thumbs.db
 # Ritsu
 .ritsu/
 *.lock
+!bun.lock
+!runtime/native/Cargo.lock
 .tmp-*
 
 # Logs

@@ -14,6 +14,7 @@ import {
 } from "../quality-gates.js";
 import { runPolicyPreflight } from "../orchestration/policy-preflight.js";
 import { getAgentsProfile } from "../agents-parser.js";
+import { isRecord } from "../shared.js";
 
 interface TestFailure {
   suite: string;
@@ -38,10 +39,6 @@ interface QualityGateResult {
     summary: CoverageStats;
     per_file: CoverageByFile;
   };
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 function isCoverageMetric(value: unknown): value is CoverageMetric {

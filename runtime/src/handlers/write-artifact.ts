@@ -17,6 +17,10 @@ import {
   getSharedDir,
   getArtifactLayer,
   ARTIFACT_REGISTRY,
+  isRecord,
+  getStageForSkill,
+  isArtifactTypeAllowedForStage,
+  getStageArtifactTypes,
 } from "../shared.js";
 import type { ArtifactType } from "../shared.js";
 import {
@@ -37,10 +41,6 @@ import {
   validateQualityGateSnapshotWorktree,
 } from "../quality-gates.js";
 import { emitViolationEvent } from "../violation-events.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isArtifactType(value: string): value is ArtifactType {
   return ARTIFACT_VALID_TYPES.some((artifactType) => artifactType === value);
@@ -739,6 +739,17 @@ export async function ritsu_write_artifact(
         },
       ],
     );
+  }
+
+  // 阶段感知产物校验：检查产物类型是否匹配当前 span 的阶段
+  if (typeof skill === "string" && skill) {
+    const stage = getStageForSkill(skill);
+    if (!isArtifactTypeAllowedForStage(type, stage)) {
+      (normalizedArtifactMeta as Record<string, unknown>)._stage_warning =
+        `Artifact type '${type}' may not be intended for stage '${stage}' (skill: ${skill}). ` +
+        `Expected one of: ${getStageArtifactTypes(stage).join(", ") || "any"}. ` +
+        `This is a soft warning — the write proceeds.`;
+    }
   }
 
   // 文件名前缀校验（按 artifact-schema.yaml 命名契约）

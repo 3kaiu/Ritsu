@@ -312,7 +312,7 @@ describe("cli main command dispatch", () => {
     expect(miningSheet).toContain("pref-unique-id");
 
     await runMain(["mine", "--days", "3"]);
-    expect(output.output).toContain("ritsu cat");
+    expect(output.output).toContain("--help");
 
     await runMain(["mine", "--promote", "pref-unique-id"]);
     expect(output.output).toContain(

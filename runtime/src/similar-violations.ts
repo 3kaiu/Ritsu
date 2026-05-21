@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { isNativeAvailable, initNativeStore, indexViolationEmbedding, searchSimilarViolations, computeSimpleEmbedding } from "./native-bridge.js";
 
 export type ViolationRecord = {
   ts: string;
@@ -15,11 +16,28 @@ export type SimilarViolationHit = {
   score: number;
 };
 
+let _nativeIndexed = false;
+
+function ensureNativeIndex(records: ViolationRecord[]): void {
+  if (_nativeIndexed || !isNativeAvailable()) return;
+  if (initNativeStore()) {
+    for (const r of records) {
+      indexViolationEmbedding(r.ts, `${r.rule_id} ${r.evidence}`, {
+        rule_id: r.rule_id,
+        evidence: r.evidence,
+        ts: r.ts,
+        skill: r.skill,
+      });
+    }
+    _nativeIndexed = true;
+  }
+}
+
 function tokenize(text: string): Set<string> {
   return new Set(
     text
       .toLowerCase()
-      .replace(/[^a-z0-9_\u4e00-\u9fff]+/gi, " ")
+      .replace(/[^a-z0-9_一-鿿]+/gi, " ")
       .split(/\s+/)
       .filter((t) => t.length > 2),
   );
@@ -82,6 +100,10 @@ export function loadViolationRecords(
       }
     }
   }
+
+  // Index into native engine for semantic search
+  ensureNativeIndex(records);
+
   return records;
 }
 
@@ -91,6 +113,30 @@ export function findSimilarViolations(
   limit = 10,
   minScore = 0.15,
 ): SimilarViolationHit[] {
+  // Native vector search (semantic)
+  if (isNativeAvailable()) {
+    try {
+      const results = searchSimilarViolations(query, limit);
+      if (results.length > 0) {
+        const hits: SimilarViolationHit[] = [];
+        for (const r of results) {
+          let meta: Record<string, unknown> = {};
+          try { meta = JSON.parse(r.metadata) as Record<string, unknown>; } catch { /* ignore */ }
+          hits.push({
+            rule_id: String(meta.rule_id ?? r.id),
+            evidence: String(meta.evidence ?? ""),
+            ts: r.id,
+            score: r.score,
+          });
+        }
+        return hits.filter((h) => h.score >= minScore).slice(0, limit);
+      }
+    } catch {
+      // Fall through to Jaccard
+    }
+  }
+
+  // Jaccard fallback (token-based)
   const hits: SimilarViolationHit[] = [];
   for (const r of records) {
     const haystack = `${r.rule_id} ${r.evidence}`;

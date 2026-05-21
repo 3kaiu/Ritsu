@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runGit } from "./handlers/_git-utils.js";
 import { ts } from "./handlers/_utils.js";
+import { isRecord } from "./shared.js";
 
 export type QualityGateStepStatus = "passed" | "failed" | "skipped";
 export type QualityGateOverallStatus =
@@ -74,9 +75,6 @@ export interface QualityGateWorktreeState {
   untracked: QualityGateWorktreeUntrackedState;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");

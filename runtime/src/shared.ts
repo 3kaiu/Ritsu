@@ -34,6 +34,25 @@ export function getStageForSkill(skill: string): string {
   return SKILL_STAGE_MAP[skill] ?? skill;
 }
 
+// ─── 阶段感知产物校验 ───────────────────────────────────────────
+
+export const STAGE_ARTIFACT_MAP: Record<string, string[]> = {
+  think: ["design-sheet", "design-brief", "coordination-sheet"],
+  dev: ["dev-report"],
+  augment: ["dev-report"],
+  review: ["assurance-sheet"],
+  hunt: ["diagnosis"],
+};
+
+export function getStageArtifactTypes(stage: string): string[] {
+  return STAGE_ARTIFACT_MAP[stage] ?? [];
+}
+
+export function isArtifactTypeAllowedForStage(type: string, stage: string): boolean {
+  const allowed = getStageArtifactTypes(stage);
+  return allowed.length === 0 || allowed.includes(type);
+}
+
 // ─── Artifact 注册表 (中心化管理) ───────────────────────────
 
 export type ArtifactLayer = "primary" | "evidence" | "compatibility" | "system";
@@ -207,3 +226,30 @@ export const RESIDUAL_BLACKLIST: RegExp[] = [
 
 export const MAX_BUFFER_MB_HARD_LIMIT = 100;
 export const MAX_TIMEOUT_MS_HARD_LIMIT = 120_000;
+
+// ─── 通用类型守卫 ─────────────────────────────────────────────
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+// ─── 结构化错误类型 ───────────────────────────────────────────
+
+export type RitsuToolError = {
+  error: {
+    type: "PolicyViolation" | "ValidationError" | "ExecutionError" | "InternalError";
+    code: string;
+    message: string;
+    violations?: Array<{
+      rule_id: string;
+      severity: string;
+      evidence?: string;
+      suggestion?: string;
+    }>;
+    recovery_hint?: string;
+  };
+};
+
+export function isRitsuToolError(value: unknown): value is RitsuToolError {
+  return isRecord(value) && isRecord(value.error) && typeof value.error.type === "string";
+}

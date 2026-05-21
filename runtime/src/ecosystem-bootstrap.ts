@@ -8,6 +8,7 @@ import {
 } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isRecord } from "./shared.js";
 
 const RUNTIME_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -55,10 +56,6 @@ export type BootstrapResult = {
   ecosystem: EcosystemConfig;
   notes: string[];
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function mergeMcpServers(
   existing: Record<string, unknown>,

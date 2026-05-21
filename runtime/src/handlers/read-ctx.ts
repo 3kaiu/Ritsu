@@ -367,6 +367,7 @@ export async function ritsu_read_ctx(
   const root = getProjectRoot();
   const ctxPath = getCtxPath(root);
   const isDetail = !!params.detail;
+  const tokenBudget = typeof params.token_budget === "number" ? params.token_budget : undefined;
 
   const data: Record<string, unknown> = {
     last_incomplete: null,
@@ -390,11 +391,34 @@ export async function ritsu_read_ctx(
   const recentEntries = readRecentEntries(root, 10);
   const failedSummary = summarizeFailedEntries(allEntries);
 
+  // ─── Token 预算裁剪 ─────────────────────────────────────
+  // 高预算 (>5000): 完整返回（同 detail 模式）
+  // 中预算 (1000-5000): last_incomplete + last_completed + summary + recovery
+  // 低预算 (<1000): 仅 recovery_context + recommended_next_step
+  // 无预算: 当前默认行为（兼容）
+
+  if (tokenBudget !== undefined && tokenBudget < 1000) {
+    // 低预算：仅返回恢复上下文和下一步建议
+    data.recovery_context = buildRecoveryContext(
+      lastIncomplete, lastCompleted, allEntries,
+    );
+    data.circuit_breaker_status = computeCircuitBreaker(allEntries);
+
+    const nextStep = computeNextStepAndBreakpoint(
+      root, lastIncomplete, lastCompleted, allEntries,
+    );
+    data.recommended_next_step = nextStep.recommended_next_step;
+    data.breakpoint_summary = nextStep.breakpoint_summary;
+    data._budget = "low";
+
+    return textResult(JSON.stringify(data));
+  }
+
   data.last_incomplete = attachStage(lastIncomplete);
   data.last_completed = attachStage(lastCompleted);
   data.recent_entries = attachStageToEntries(recentEntries);
 
-  if (isDetail) {
+  if (isDetail || (tokenBudget !== undefined && tokenBudget > 5000)) {
     const recentEntriesPruned = pruneRecentEntries(
       allEntries,
       PRUNED_RECENT_LIMIT,
@@ -403,9 +427,10 @@ export async function ritsu_read_ctx(
     );
     data.recent_entries_pruned = attachStageToEntries(recentEntriesPruned);
     data.failed_summary = failedSummary;
+    data._budget = "high";
   } else {
-    // 紧凑模式：只保留失败计数，不保留明细
     data.failed_count = failedSummary.total_failed;
+    if (tokenBudget !== undefined) data._budget = "medium";
   }
 
   data.recovery_context = buildRecoveryContext(

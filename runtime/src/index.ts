@@ -42,6 +42,35 @@ function hasErrorField(value: unknown): value is { error: unknown } {
   return typeof value === "object" && value !== null && "error" in value;
 }
 
+/**
+ * Normalizes plain-text tool errors to structured JSON format.
+ * If the result is already structured (JSON-parseable error field), returns null (no-op).
+ * If the result is a plain text error, wraps it in the structured RitsuToolError format.
+ */
+function normalizeToolError(result: CallToolResult): CallToolResult | null {
+  if (!result.isError) return null;
+  const firstContent = result.content[0];
+  if (firstContent?.type !== "text" || typeof firstContent.text !== "string") return null;
+
+  // Check if already structured JSON
+  try {
+    const parsed = JSON.parse(firstContent.text) as unknown;
+    if (hasErrorField(parsed)) return null;
+  } catch { /* plain text, proceed with normalization */ }
+
+  // Wrap plain text error in structured format
+  const cleanMessage = firstContent.text.replace(/^❌\s*/, "");
+  const structured = {
+    error: {
+      type: "ExecutionError" as const,
+      code: "TOOL_ERROR",
+      message: cleanMessage,
+    },
+  };
+  firstContent.text = JSON.stringify(structured);
+  return result;
+}
+
 async function main() {
   // 版本一致性校验 — package.json 版本必须与 ctx-event-schema.json 版本对齐
   const schemaPath = resolve(__dirname, "../../_shared/ctx-event-schema.json");
@@ -80,6 +109,8 @@ async function main() {
           ? (params as Record<string, unknown>)
           : {};
       const result = await rawHandler(safeParams);
+      const normalized = normalizeToolError(result);
+      if (normalized) return normalized;
       const isProd = process.env.NODE_ENV === "production";
       const strictMode = process.env.RITSU_STRICT_OUTPUT ?? (isProd ? "warn" : "1");
       const textContent = getTextContent(result);

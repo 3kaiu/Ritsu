@@ -1,5 +1,6 @@
 node_modules/
 dist/
 .ritsu/
+package-lock.json
 
 # WASM residue removed

@@ -8,6 +8,7 @@ import { dirname } from "node:path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 import { getAgentsProfile } from "../agents-parser.js";
 import { reconcilePreferences } from "./detectors/ast-grep-reconciler.js";
+import { isRecord } from "../shared.js";
 
 function getProjectRootLocal(): string {
   return process.env.RITSU_PROJECT_ROOT ?? process.cwd();
@@ -19,10 +20,6 @@ interface AntiPatternsDoc {
   review?: PolicyRule[];
 }
 
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
 
 function normalizeSeverity(value: unknown): Severity | null {
   if (typeof value !== "string") return null;
