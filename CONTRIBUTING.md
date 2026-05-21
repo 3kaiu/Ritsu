@@ -1,62 +1,63 @@
 # Contributing to Ritsu
 
-First off, thank you for considering contributing to Ritsu! It's people like you that make Ritsu such a great tool.
+## Prerequisites
 
-## OSS Integrations
+- [Bun](https://bun.sh) >= 1.3.0
+- [Rust](https://rustup.rs) (optional, for native addon)
+- Node.js >= 22 (optional, for semantic-release)
 
-See [docs/integrations.md](docs/integrations.md) for Claude-first MCP, OpenSpec, and ast-grep.
-
-## Development Setup
-
-Ritsu is a Node.js project. You will need:
-- Node.js 18 or higher
-- npm
-
-### Clone and Install
+## Setup
 
 ```bash
-git clone https://github.com/3kaiu/Ritsu.git
 cd Ritsu/runtime
-npm install
+bun install
 ```
 
-### Running Tests
+## Development
 
 ```bash
-npm test
+# Build
+bun run build
+
+# Test (60 files, 344 tests)
+bun run test
+
+# Test single file
+bun run test -- tests/session-memory.test.ts
+
+# Lint
+bun run lint
+
+# Type check
+bunx tsc --noEmit
 ```
 
-### Type Checking
+## Guidelines
 
-```bash
-npx tsc --noEmit
-```
-
-## Pull Request Process
-
-1.  **Fork the repository** and create your branch from `main`.
-2.  **Make your changes**. Ensure code style matches existing patterns.
-3.  **Add tests** for any new functionality or bug fixes.
-4.  **Verify everything passes**: Run `npm run build` and `npm test`.
-5.  **Submit a Pull Request**. Provide a clear description of the changes and link any related issues.
+- **Positive rules**: Write "use const" not "don't use let" — positive rules halve violations
+- **Skill vs Rule vs Script**:
+  - Needs AI judgment → `skills/<stage>/SKILL.md`
+  - Deterministic output → `runtime/src/` (handler or CLI)
+  - Always-on guardrail → `rules/anti-patterns.yaml`
+- Add `wrong/right/story` examples when adding new anti-patterns
+- New features need tests — verify with `bun run test` before PR
 
 ## Conventional Commits
 
-Ritsu follows the [Conventional Commits](https://www.conventionalcommits.org/) specification for commit messages:
-
-- `feat:` for a new feature
-- `fix:` for a bug fix
-- `docs:` for documentation changes
-- `chore:` for maintenance tasks
-- `refactor:` for code refactoring
+- `feat:` new feature
+- `fix:` bug fix
+- `docs:` documentation
+- `chore:` maintenance
+- `refactor:` code restructure
+- `test:` test additions/fixes
 
 ## Skill Development
 
-If you are contributing a new Skill:
-1.  Create a directory in `skills/`.
-2.  Provide a `SKILL.md` file with clear instructions.
-3.  Ensure it aligns with the `_shared/skill-common-steps.md` protocol.
+1. Create directory in `skills/<name>/`
+2. Provide `SKILL.md` with YAML frontmatter (name, version, tags)
+3. Add structured Gotchas table at the bottom
+4. Follow `_shared/skill-common-steps.md` protocol
 
 ## Code of Conduct
 
-Please be respectful and professional in all interactions within the Ritsu project.
+Be respectful and professional in all interactions.
