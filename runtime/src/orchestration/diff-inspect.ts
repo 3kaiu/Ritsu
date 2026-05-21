@@ -21,7 +21,7 @@ export interface NewIdentifier {
   line: number;
 }
 
-function parseStat(statOutput: string): DiffFileStat[] {
+export function parseStat(statOutput: string): DiffFileStat[] {
   const files: DiffFileStat[] = [];
   for (const line of statOutput.split("\n")) {
     const match = line.match(/^\s*(\d+)\s+(\d+)\s+(.+)$/);
@@ -37,7 +37,7 @@ function parseStat(statOutput: string): DiffFileStat[] {
   return files;
 }
 
-function analyzeRisk(file: string, lines: string[]): { score: number; factors: string[] } {
+export function analyzeRisk(file: string, lines: string[]): { score: number; factors: string[] } {
   let score = 0;
   const factors: string[] = [];
   const content = lines.join("\n");
@@ -106,7 +106,7 @@ export function parseChunks(diffOutput: string): DiffChunk[] {
   return chunks;
 }
 
-function extractNewIdentifiers(patch: string): NewIdentifier[] {
+export function extractNewIdentifiers(patch: string): NewIdentifier[] {
   const identifiers: NewIdentifier[] = [];
   const seen = new Set<string>();
   let currentFile = "";
