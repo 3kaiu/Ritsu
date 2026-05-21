@@ -4,7 +4,7 @@ import { existsSync, readFileSync, readdirSync, writeFileSync, appendFileSync } 
 import { resolve, dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { syncPush, syncPull } from "./sync.js";
-import { minePreferences, promotePreference } from "./miner.js";
+import { minePreferences, promotePreference, autoApplyMinedRules } from "./miner.js";
 import { reconcilePreferences } from "./policy/index.js";
 import { legacyCidToTraceId } from "./correlation.js";
 import { detectProjectRoot } from "./project-root.js";
@@ -113,6 +113,7 @@ export function usage(): string {
     "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
     "ritsu mine --report [--days 7]  # 离线挖掘偏好，生成 Mining Sheet",
     "ritsu mine --promote <id>  # 将 Mining Sheet 中的提议晋升为正式偏好",
+    "ritsu mine --auto [--days 7]   # 自动分析人类修正，合成并晋升编码风格偏好规则",
     "ritsu mine --reconcile     # 强制对账并编译 preferences 为 ast-grep 规则",
     "",
     "  think -> dev -> test/hunt -> review",
@@ -867,12 +868,27 @@ async function runMine(args: string[]) {
   let report = false;
   let promoteId: string | null = null;
   let reconcile = false;
+  let auto = false;
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--days") days = parseInt(args[++i] ?? "7", 10);
     else if (args[i] === "--report") report = true;
     else if (args[i] === "--promote") promoteId = args[++i] ?? null;
     else if (args[i] === "--reconcile") reconcile = true;
+    else if (args[i] === "--auto") auto = true;
+  }
+
+  if (auto) {
+    console.log(color(`Ritsu Preference Miner — Auto-mining & reconciling preferences from past ${days} days...`, "cyan"));
+    const result = autoApplyMinedRules(days);
+    console.log(color(`✔ Self-evolution complete. Learned and applied ${result.addedCount} new preference rules.`, "green"));
+    if (result.rules.length > 0) {
+      console.log(color("\nMined rules summary:", "dim"));
+      for (const rule of result.rules) {
+        console.log(color(`  - [${rule.id}] scope: ${rule.scope} | pattern: ${rule.match_regex}`, "yellow"));
+      }
+    }
+    return;
   }
 
   if (reconcile) {
