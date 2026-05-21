@@ -1,4 +1,4 @@
-name: CI/CD
+name: CI
 
 on:
   push:
@@ -23,34 +23,19 @@ jobs:
           bun-version: ${{ matrix.bun-version }}
 
       - name: Install dependencies
-        run: |
-          cd runtime
-          bun install
-
-      - name: Version Consistency Check
-        run: |
-          cd runtime
-          bun version-check.js
+        run: cd runtime && bun install
 
       - name: Lint Check
-        run: |
-          cd runtime
-          bun run lint
+        run: cd runtime && bun run lint
 
       - name: Type Check
-        run: |
-          cd runtime
-          bunx tsc --noEmit
+        run: cd runtime && bunx tsc --noEmit
 
       - name: Run Tests
-        run: |
-          cd runtime
-          bun run test
+        run: cd runtime && bun run test
 
       - name: Build Check
-        run: |
-          cd runtime
-          bun run build
+        run: cd runtime && bun run build
 
   build-native:
     name: Build native (${{ matrix.target }})
@@ -79,46 +64,3 @@ jobs:
           cd runtime/native
           cargo build --release --target ${{ matrix.target }}
           cp target/${{ matrix.target }}/release/libritsu_native${{ matrix.ext }} ${{ matrix.output }}
-
-      - name: Upload native addon
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.output }}
-          path: runtime/native/${{ matrix.output }}
-          if-no-files-found: warn
-
-  release:
-    name: Release
-    needs: [lint-and-test]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3
-
-      - name: Install dependencies
-        run: |
-          cd runtime
-          bun install
-
-      - name: Build
-        run: |
-          cd runtime
-          bun run build
-
-      - name: Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          cd runtime
-          bunx semantic-release

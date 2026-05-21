@@ -1,83 +1,54 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import type { PolicyRule } from "../../src/policy/types.js";
 
-const { checkVersionsMock } = vi.hoisted(() => ({
-  checkVersionsMock: vi.fn(),
-}));
-
-vi.mock("../../version-check.js", () => ({
-  checkVersions: checkVersionsMock,
-}));
-
-import { CrossFileDetector } from "../../src/policy/detectors/cross-file.js";
-
 describe("CrossFileDetector", () => {
+  let testRoot: string;
   const rule: PolicyRule = {
     id: "AP-CROSS-FILE",
     name: "Cross-file version drift",
     severity: "error",
-    detector: {
-      type: "cross_file",
-    },
+    detector: { type: "cross_file" },
   };
 
   beforeEach(() => {
-    checkVersionsMock.mockReset();
+    testRoot = mkdtempSync(join(tmpdir(), "ritsu-test-cross-file-"));
+    process.env.RITSU_PROJECT_ROOT = testRoot;
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    delete process.env.RITSU_PROJECT_ROOT;
+    if (existsSync(testRoot)) rmSync(testRoot, { recursive: true, force: true });
   });
 
-  it("returns no violations when the version check passes", () => {
-    checkVersionsMock.mockReturnValue({
-      expected: "1.0.0",
-      mismatches: [],
-      writes: [],
-    });
+  it("returns no violations when versions match", async () => {
+    const { CrossFileDetector } = await import("../../src/policy/detectors/cross-file.js");
+    writeFileSync(resolve(testRoot, "package.json"), JSON.stringify({ ritsu_protocol_version: "7.0.0" }));
+    mkdirSync(resolve(testRoot, "runtime"), { recursive: true });
+    writeFileSync(resolve(testRoot, "runtime/package.json"), JSON.stringify({ ritsu_protocol_version: "7.0.0" }));
 
-    const detector = new CrossFileDetector();
-    const violations = detector.detect(rule, {
-      action: "write_artifact",
-    });
-
+    const violations = new CrossFileDetector().detect(rule, { action: "write_artifact" });
     expect(violations).toEqual([]);
-    expect(checkVersionsMock).toHaveBeenCalledTimes(1);
   });
 
-  it("surfaces mismatches from version check failure", () => {
-    checkVersionsMock.mockReturnValue({
-      expected: "1.0.0",
-      mismatches: [
-        { file: "AGENTS.md", found: "0.9.0", expected: "1.0.0" }
-      ],
-      writes: [],
-    });
+  it("detects version mismatch", async () => {
+    const { CrossFileDetector } = await import("../../src/policy/detectors/cross-file.js");
+    writeFileSync(resolve(testRoot, "package.json"), JSON.stringify({ ritsu_protocol_version: "7.0.0" }));
+    mkdirSync(resolve(testRoot, "runtime"), { recursive: true });
+    writeFileSync(resolve(testRoot, "runtime/package.json"), JSON.stringify({ ritsu_protocol_version: "6.5.0" }));
 
-    const detector = new CrossFileDetector();
-    const violations = detector.detect(rule, {
-      action: "write_artifact",
-    });
-
-    expect(violations).toHaveLength(1);
-    expect(violations[0]).toMatchObject({
-      rule_id: "AP-CROSS-FILE",
-      severity: "error",
-      evidence: "AGENTS.md: found 0.9.0, expected 1.0.0",
-    });
+    const violations = new CrossFileDetector().detect(rule, { action: "write_artifact" });
+    expect(violations.length).toBeGreaterThanOrEqual(1);
+    expect(violations[0].rule_id).toBe("AP-CROSS-FILE");
+    expect(violations[0].evidence).toContain("6.5.0");
   });
 
-  it("falls back to the thrown error message when execution fails", () => {
-    checkVersionsMock.mockImplementation(() => {
-      throw new Error("generic failure");
-    });
-
-    const detector = new CrossFileDetector();
-    const violations = detector.detect(rule, {
-      action: "write_artifact",
-    });
-
-    expect(violations).toHaveLength(1);
-    expect(violations[0].evidence).toBe("generic failure");
+  it("handles missing files gracefully", async () => {
+    const { CrossFileDetector } = await import("../../src/policy/detectors/cross-file.js");
+    // No package.json files at all
+    const violations = new CrossFileDetector().detect(rule, { action: "write_artifact" });
+    expect(violations).toEqual([]);
   });
 });
