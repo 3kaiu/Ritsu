@@ -4,6 +4,7 @@
 <!-- Ritsu Configuration Block -->
 ritsu-version: 6.5.0
 domain: fullstack
+host_profile: claude-code
 tech_fingerprints:
   - nodejs
   - typescript

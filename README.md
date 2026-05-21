@@ -83,26 +83,29 @@ graph TD
 
 ## 🛠️ 快速开始
 
-### 1. 安装 Skills 脚本
+### 1. 一键智能安装与配置
+在克隆/拉取本仓库后，直接在项目根目录下运行以下命令，即可自动化完成 **Node版本检测** $\rightarrow$ **静默安装依赖** $\rightarrow$ **TS代码构建** $\rightarrow$ **多宿主 (Claude Code/Cursor) MCP服务一键挂载** $\rightarrow$ **版本一致性自动对齐** $\rightarrow$ **生态Doctor自诊断** 的全套极速流程：
+```bash
+npm run setup
+```
+
+### 2. 安装 Skills 脚本
 使用 `npx` 一键无感知地将 Ritsu 的 Markdown 协议动作集装载至您的 AI 会话中：
 ```bash
 npx skills add 3kaiu/Ritsu -a claude-code -g -y
 ```
 
-### 2. 初始化项目基线
+### 3. 初始化项目基线
 在您的项目根目录中，键入 Ritsu 指令生成基础环境配置（这会创建 `AGENTS.md` 和 `.ritsu/` 目录）：
 ```bash
 /r-init
 ```
 
-### 3. 配置 MCP 服务
-在项目根目录运行 `ritsu doctor`，它会引导您完成配置。通常，`/r-init` 会自动为您在当前工作目录生成一份 `.mcp.json`，您可以重载您的 AI 助手以完成挂载。
-
-若需要手动添加至系统，可执行：
+### 🔄 极速零感更新自愈
+当后续拉取了仓库的最新提交后，无需手动重新编译或重刷配置，只需直接在根目录下键入以下命令，即可安全实现**增量依赖重构、最新 TypeScript 重新构建编译、自动对账、以及 MCP 服务重新装载自愈**：
 ```bash
-claude mcp add ritsu -- node /path/to/Ritsu/runtime/dist/index.js
+npm run update
 ```
-*提示：完整配置说明请参阅 [docs/integrations.md](docs/integrations.md)。*
 
 ---
 

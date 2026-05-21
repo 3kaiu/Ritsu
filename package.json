@@ -1,0 +1,23 @@
+{
+  "name": "ritsu-monorepo",
+  "version": "1.2.0",
+  "ritsu_protocol_version": "6.5.0",
+  "description": "律 (Ritsu) — 工业级 AI 协同标准与引擎 (Monorepo Root)",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:all": "npm install --prefix runtime",
+    "build": "npm run build --prefix runtime",
+    "dev": "npm run dev --prefix runtime",
+    "lint": "npm run lint --prefix runtime",
+    "test": "npm run test --prefix runtime",
+    "doctor": "node runtime/dist/cli.js doctor",
+    "bootstrap": "node runtime/dist/cli.js bootstrap",
+    "setup": "node scripts/setup.js",
+    "update": "node scripts/update.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "license": "MIT"
+}

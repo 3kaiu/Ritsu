@@ -4,11 +4,30 @@ import {
   mkdirSync,
   readFileSync,
   writeFileSync,
+  readdirSync,
 } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const RUNTIME_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+function copyFolderSync(from: string, to: string) {
+  if (!existsSync(from)) return;
+  if (!existsSync(to)) mkdirSync(to, { recursive: true });
+  for (const entry of readdirSync(from, { withFileTypes: true })) {
+    const srcPath = resolve(from, entry.name);
+    const destPath = resolve(to, entry.name);
+    if (entry.isDirectory()) {
+      copyFolderSync(srcPath, destPath);
+    } else {
+      try {
+        writeFileSync(destPath, readFileSync(srcPath));
+      } catch {
+        // Safe skip if file cannot be read
+      }
+    }
+  }
+}
 
 export type HostProfile = "claude-code" | "cursor" | "all";
 
@@ -173,6 +192,70 @@ export function bootstrapEcosystem(
   const ritsuDir = resolve(projectRoot, ".ritsu");
   if (!existsSync(ritsuDir)) mkdirSync(ritsuDir, { recursive: true });
 
+  // 1. Scaffold AGENTS.md if missing in the project
+  const agentsPath = resolve(projectRoot, "AGENTS.md");
+  if (!existsSync(agentsPath)) {
+    const defaultAgents = `# Project Baseline: Ritsu v6.5.0
+# Created by Antigravity AI Engineering Framework
+
+<!-- Ritsu Configuration Block -->
+ritsu-version: 6.5.0
+domain: fullstack
+tech_fingerprints:
+  - nodejs
+  - typescript
+rules_overrides:
+  disable: []
+  downgrade: []
+lint_cmd: npm run lint
+test_cmd: npm run test
+host_profile: ${hostProfile}
+<!-- End Ritsu Block -->
+
+## Technical Stack
+- Language: TypeScript / JavaScript
+- Core: MCP Server (Node.js)
+`;
+    writeFileSync(agentsPath, defaultAgents, "utf-8");
+    filesWritten.push("AGENTS.md (scaffolded)");
+  }
+
+  // 2. Scaffold default rules/ if missing in the project
+  const destRulesDir = resolve(projectRoot, "rules");
+  if (!existsSync(destRulesDir)) {
+    const srcRulesDir = existsSync(resolve(RUNTIME_DIR, "dist/rules"))
+      ? resolve(RUNTIME_DIR, "dist/rules")
+      : resolve(RUNTIME_DIR, "../rules");
+    if (existsSync(srcRulesDir)) {
+      copyFolderSync(srcRulesDir, destRulesDir);
+      filesWritten.push("rules/ (scaffolded default rules)");
+    }
+  }
+
+  // 3. Scaffold default domains/ if missing in the project
+  const destDomainsDir = resolve(projectRoot, "domains");
+  if (!existsSync(destDomainsDir)) {
+    const srcDomainsDir = existsSync(resolve(RUNTIME_DIR, "dist/domains"))
+      ? resolve(RUNTIME_DIR, "dist/domains")
+      : resolve(RUNTIME_DIR, "../domains");
+    if (existsSync(srcDomainsDir)) {
+      copyFolderSync(srcDomainsDir, destDomainsDir);
+      filesWritten.push("domains/ (scaffolded default domains)");
+    }
+  }
+
+  // 4. Scaffold default _shared/ if missing in the project
+  const destSharedDir = resolve(projectRoot, "_shared");
+  if (!existsSync(destSharedDir)) {
+    const srcSharedDir = existsSync(resolve(RUNTIME_DIR, "dist/_shared"))
+      ? resolve(RUNTIME_DIR, "dist/_shared")
+      : resolve(RUNTIME_DIR, "../_shared");
+    if (existsSync(srcSharedDir)) {
+      copyFolderSync(srcSharedDir, destSharedDir);
+      filesWritten.push("_shared/ (scaffolded default protocols)");
+    }
+  }
+
   const ecosystem: EcosystemConfig = {
     version: "1",
     profile: "default",
@@ -228,7 +311,6 @@ export function bootstrapEcosystem(
     }
   }
 
-  const agentsPath = resolve(projectRoot, "AGENTS.md");
   if (upsertAgentsEcosystemProfile(agentsPath)) {
     filesMerged.push("AGENTS.md (host_profile)");
   }
@@ -263,6 +345,7 @@ function checkMcpFile(
   mcpPath: string,
   label: string,
   required: boolean,
+  projectRoot: string,
 ): EcosystemCheckItem[] {
   const items: EcosystemCheckItem[] = [];
   if (!existsSync(mcpPath)) {
@@ -286,6 +369,25 @@ function checkMcpFile(
         : `${label}: ritsu missing`,
       fix: servers.includes("ritsu") ? undefined : "ritsu bootstrap",
     });
+
+    if (servers.includes("ritsu") && isRecord(mcp) && isRecord(mcp.mcpServers)) {
+      const ritsuServer = mcp.mcpServers.ritsu;
+      if (isRecord(ritsuServer)) {
+        if (ritsuServer.command === "node" && Array.isArray(ritsuServer.args)) {
+          const indexPath = ritsuServer.args[0];
+          const expectedPath = resolve(projectRoot, "runtime/dist/index.js");
+          if (typeof indexPath === "string" && indexPath !== expectedPath) {
+            items.push({
+              id: `${label}-mcp-path-alignment`,
+              status: "fail",
+              message: `${label}: ritsu path mismatch (project moved)`,
+              fix: "ritsu bootstrap",
+            });
+          }
+        }
+      }
+    }
+
     items.push({
       id: `${label}-mcp-filesystem`,
       status: servers.includes("filesystem") ? "ok" : "warn",
@@ -307,11 +409,11 @@ function checkMcpFile(
 export function checkEcosystem(projectRoot: string): EcosystemCheckResult {
   const items: EcosystemCheckItem[] = [];
 
-  items.push(...checkMcpFile(resolve(projectRoot, ".mcp.json"), "claude", true));
+  items.push(...checkMcpFile(resolve(projectRoot, ".mcp.json"), "claude", true, projectRoot));
 
   const cursorMcp = resolve(projectRoot, ".cursor/mcp.json");
   if (existsSync(cursorMcp)) {
-    items.push(...checkMcpFile(cursorMcp, "cursor", false));
+    items.push(...checkMcpFile(cursorMcp, "cursor", false, projectRoot));
   }
 
   const ecoPath = resolve(projectRoot, ".ritsu/ecosystem.json");

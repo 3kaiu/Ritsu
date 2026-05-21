@@ -4,11 +4,19 @@
 
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export function getSharedDir(): string {
-  return process.env.RITSU_SHARED_DIR ?? resolve(__dirname, "../../_shared");
+  const custom = process.env.RITSU_SHARED_DIR;
+  if (custom) return custom;
+  
+  const inDist = resolve(__dirname, "_shared");
+  if (existsSync(inDist)) {
+    return inDist;
+  }
+  return resolve(__dirname, "../../_shared");
 }
 
 // ─── Skill / Stage 语义映射 ────────────────────────────────

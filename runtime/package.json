@@ -9,8 +9,13 @@
     "ritsu-mcp-server": "dist/index.js",
     "ritsu": "dist/cli.js"
   },
+  "files": [
+    "dist",
+    "package.json",
+    "version-check.js"
+  ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-resources.js",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "lint": "eslint src --ext .ts",
