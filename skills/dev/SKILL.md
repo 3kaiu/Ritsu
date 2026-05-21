@@ -38,7 +38,9 @@ total_steps: 5
 
 #### 1. Preflight（必须）
 
-`ritsu_preflight(stage: dev)` — 自动串联 ctx、design 产物列表、changed_files、diff、**policy+ast-grep**。
+`ritsu_preflight(stage: dev)` — 自动串联 ctx、design 产物列表、changed_files、diff、**policy+ast-grep**、架构漂移检测。
+
+架构上下文参考 AGENTS.md Architecture Block（模块边界和依赖规则）。
 
 - `ok: false` → 按 `context_pack.policy.violations` 修复后重试；**禁止**写 dev-report 或进入 review。
 - fatal/hard_stop 必须清零。

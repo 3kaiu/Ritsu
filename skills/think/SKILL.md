@@ -33,7 +33,7 @@ total_steps: 4
 
 若返回 `ok: false`，根据 `context_pack` 修复后重试。禁止跳过。
 
-**Preflight 已自动完成** ctx/agents/契约同步（P2）；勿再单独调用底层工具。
+**Preflight 已自动完成** ctx/agents/契约同步（P2）；架构指纹已加载（见 AGENTS.md Architecture Block），模块边界和依赖规则可供参考。
 
 ---
 
@@ -41,7 +41,7 @@ total_steps: 4
 
 1. **轻量工程分析**: 基于 `context_pack` 确认目标、关键改动点、实施步骤。
 2. **产出 `design-brief`**: 使用轻量模板，包含目标 + 关键改动 + 实施清单 + 验证。
-3. **引导**: "设计简报已就绪。建议运行 `/r-dev` 开始实现。"
+3. **引导**: "设计已就绪。建议运行 `/r-dev`。"
 
 ---
 

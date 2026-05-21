@@ -72,6 +72,8 @@ ritsu doctor --arch-init
 
 该命令自动分析 `src/` 目录的模块结构和跨模块依赖，将结果追加到 AGENTS.md 的 Architecture Block 中。后续所有 AI 会话通过 AGENTS.md 自动获取项目架构上下文。
 
+初始化完成后可运行 `ritsu doctor --signals` 查看结构化审计信号（PASS/WARN/FAIL 格式），用于快速确认项目基线状态。
+
 ### 4. 交付摘要与引导
 
 > 引用 `_shared/skill-common-steps.md` Step 4（skill=init）

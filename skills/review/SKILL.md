@@ -33,7 +33,9 @@ total_steps: 4
 
 #### 1. Preflight（必须）
 
-`ritsu_preflight(stage: review)` — 含 ctx、artifacts、policy 预检、P2 时 trace 摘要与 triple-check 提示。
+`ritsu_preflight(stage: review)` — 含 ctx、artifacts、policy 预检、P2 时 trace 摘要与 triple-check 提示、架构漂移检测。
+
+架构上下文参考 AGENTS.md Architecture Block（模块边界和依赖规则）。
 
 - policy 未通过 → `assurance.verdict` 必须为 `needs_revision`，禁止 PASS。
 
