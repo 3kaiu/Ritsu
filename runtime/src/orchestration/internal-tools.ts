@@ -2,12 +2,13 @@
  * Ritsu 内部工具编排层
  *
  * 用户只通过 /r-think /r-dev /r-review 与 Ritsu 交互。
- * 此模块在 orchestration 内部自动调用底层工具（Superpowers、CodeGraph、OpenSpec），
- * 对用户完全透明。
+ * 此模块在 orchestration 内部自动调用底层工具
+ * （Superpowers、CodeGraph、OpenSpec、MCP 工具集），
+ * 对用户完全透明。所有 MCP 工具由 bootstrap 自动配置。
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { execFileSync, execSync } from "node:child_process";
 
 // ─── Superpowers 内部调用 ─────────────────────────────────────

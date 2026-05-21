@@ -72,7 +72,7 @@ function mergeMcpServers(
 function buildMcpServers(projectRoot: string): Record<string, unknown> {
   const ritsuEntry = existsSync(resolve(projectRoot, "runtime/dist/index.js"))
     ? {
-        command: "node",
+        command: "bun",
         args: [resolve(projectRoot, "runtime/dist/index.js")],
         env: { RITSU_PROJECT_ROOT: projectRoot },
       }
@@ -83,16 +83,23 @@ function buildMcpServers(projectRoot: string): Record<string, unknown> {
       };
 
   return {
+    // Ritsu core — 用户的主入口
     ritsu: ritsuEntry,
+
+    // 底层文件系统 MCP — preflight 内部调用
     filesystem: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-filesystem", projectRoot],
     },
+
+    // 底层 Git MCP — diff inspect 内部调用
     git: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-git"],
       env: { GIT_REPO_PATH: projectRoot },
     },
+
+    // 底层 GitHub MCP — review 阶段内部调用
     github: {
       command: "npx",
       args: ["-y", "@modelcontextprotocol/server-github"],
@@ -100,9 +107,23 @@ function buildMcpServers(projectRoot: string): Record<string, unknown> {
         GITHUB_PERSONAL_ACCESS_TOKEN: "${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
       },
     },
+
+    // 底层代码图 — preflight 内部自动调用
     codegraph: {
       command: "npx",
       args: ["-y", "codegraph", "serve", "--mcp"],
+    },
+
+    // 底层文档 MCP — 自动注入最新文档，防过时 API 调用
+    context7: {
+      command: "npx",
+      args: ["-y", "@upstash/context7-mcp"],
+    },
+
+    // 底层浏览器自动化 — 测试门禁内部调用
+    playwright: {
+      command: "npx",
+      args: ["-y", "@anthropic-ai/mcp-playwright"],
     },
   };
 }

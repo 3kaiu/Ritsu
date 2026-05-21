@@ -15,14 +15,16 @@
 
 ---
 
-## ⚡ 核心理念：确定性 > 自动化
+## ⚡ 核心理念
 
-Ritsu 将 AI 的工作流约束于**阶段契约**中，提供策略引擎、质量门禁和跨会话记忆。你可以直接用你熟悉的工具（如 Superpowers 的 `/brainstorming` → `/writing-plans` → `/subagent-driven-development`），Ritsu 在背后做治理。
+Ritsu 将 AI 的工作流约束于**阶段契约**中。你只通过 4 个指令与 Ritsu 交互：
+`/r-think` → `/r-dev` → `/r-review` → `/r-hunt`。底层的一切（策略引擎、质量门禁、
+代码图分析、文档注入、跨会话记忆）由 Ritsu 自动完成，对你完全透明。
 
-- **策略引擎** — 13 条反模式 + 8 个检测器，在写入时和交付前拦截违规
-- **质量门禁** — Lint + Test + Worktree 指纹 + 验证声明检查（Waza 模式）
-- **跨会话记忆** — 自动捕获违规/偏好，向量引擎语义检索（Claude-Mem 模式）
-- **阶段感知** — 检测 Superpowers/原生流程，自动路由到对应治理阶段
+- **策略引擎** — 13 条反模式 + 8 个检测器，写入时和交付前自动拦截
+- **质量门禁** — Lint + Test + Worktree 指纹 + 验证声明检查
+- **跨会话记忆** — 自动捕获违规/偏好，向量引擎语义检索
+- **多 MCP 自动配置** — bootstrap 时自动注册文件系统/Git/GitHub/CodeGraph/Context7/Playwright
 - **Token 预算控制** — `ritsu_read_ctx` 支持 `token_budget` 参数动态裁剪
 
 ---
@@ -30,9 +32,9 @@ Ritsu 将 AI 的工作流约束于**阶段契约**中，提供策略引擎、质
 ## 🧭 架构
 
 ```
-Skills (Markdown 协议)   →  7 个 SKILL.md
-Orchestration            →  preflight-runner, superpowers-bridge, diff-inspect
-MCP Handlers             →  22 个合并工具
+Skills (Markdown 协议)   →  7 个 SKILL.md（用户看到的唯一界面）
+Orchestration            →  preflight-runner, internal-tools, diff-inspect
+MCP Handlers             →  22 个合并工具（对用户透明）
 Policy Engine            →  plugin-loader + 8 detectors (含 codegraph)
 Storage                  →  JSONL + SQLite 双写, 向量记忆
 Native Engine            →  Rust napi-rs: 余弦相似度搜索
@@ -73,18 +75,6 @@ ritsu bootstrap
 # 6. 在项目中初始化
 /r-init
 ```
-
-### 与 Superpowers 集成
-
-如果你使用 [Superpowers](https://github.com/obra/superpowers)，Ritsu 自动检测并包裹治理层：
-
-```
-/brainstorming  →  Ritsu 策略引擎拦截反模式
-/writing-plans  →  Ritsu ctx 追踪 + OpenSpec 桥接
-/subagent-driven-development  →  Ritsu 质量门禁 + 跨会话记忆
-```
-
-无需额外配置 — Ritsu 自动检测 Superpowers 并路由到对应的治理阶段。
 
 ---
 
@@ -128,18 +118,6 @@ bun dist/cli.js sync push/pull      # Git 同步
 | `RITSU_STRICT_OUTPUT` | `warn` | 输出严格模式 |
 
 项目基线配置见 `AGENTS.md`，CLI 配置见 `CLAUDE.md`。
-
----
-
-## 外部集成
-
-| 项目 | 集成方式 |
-|------|---------|
-| [Superpowers](https://github.com/obra/superpowers) | `superpowers-bridge.ts` — 阶段自动检测 + 治理路由 |
-| [CodeGraph](https://github.com/colbymchenry/codegraph) | `codegraph` 检测器 + Preflight 图上下文 + MCP bootstrap |
-| [OpenSpec](https://github.com/Fission-AI/OpenSpec) | `openspec-bridge.ts` — `/opsx:` 命令 + contract 提取 |
-| [Waza](https://github.com/tw93/waza) | 反模式目录 + Gotchas 表 + 验证优先硬停止 |
-| [Claude-Mem](https://github.com/thedotmack/claude-mem) | `session-memory.ts` — 3 层渐进式检索 + auto-capture |
 
 ---
 
