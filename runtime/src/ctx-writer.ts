@@ -11,20 +11,18 @@ import { lock } from "proper-lockfile";
 import { getCtxPath, ensureCtxFile } from "./ctx-path.js";
 import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
 import { signEvent, getOrCreateKey } from "./policy/signature.js";
-import { getProjectRoot } from "./handlers/_utils.js";
 
-let _ctxDb: typeof import("./ctx-db.js") | null = null;
+let _nativeCtxReady = false;
 
-function tryInitSqlite(): boolean {
-  if (_ctxDb) return true;
+function tryInitNativeCtx(): boolean {
+  if (_nativeCtxReady) return true;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("./ctx-db.js") as typeof import("./ctx-db.js");
-    if (mod.openDb(getProjectRoot())) {
-      _ctxDb = mod;
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    if (nb.initCtxStore()) {
+      _nativeCtxReady = true;
       return true;
     }
-  } catch { /* bun:sqlite unavailable */ }
+  } catch { /* native module unavailable */ }
   return false;
 }
 
@@ -93,9 +91,12 @@ export async function appendEvent(
     appendFileSync(ctxPath, line + "\n");
     _lastLineCount++;
 
-    // Dual-write to SQLite when available
-    if (tryInitSqlite() && _ctxDb) {
-      _ctxDb.insertEvent(event);
+    // Dual-write to Rust native ctx store (indexed queries)
+    if (tryInitNativeCtx()) {
+      try {
+        const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+        nb.ctxInsert(event);
+      } catch { /* ignore write errors */ }
     }
   } finally {
     await release(); // proper-lockfile suggests using the release function returned by lock()
