@@ -25,40 +25,50 @@ export { runTrace } from "./cli/trace.js";
 export { runMine } from "./cli/mine.js";
 export { runBootstrap } from "./cli/bootstrap.js";
 
-export function usage(): string {
-  return [
-    "ritsu cat <cid>            # 按 correlation_id 展示一条任务链路的 ctx 事件（彩色）",
-    "ritsu cat --recent <N>     # 展示最近 N 条 ctx 事件",
-    "ritsu cat --file <path>    # 直接指定 ctx jsonl 文件路径",
-    "ritsu trace <id>           # 展示 Trace 链路和 Span 树（自动兼容 legacy CID）",
-    "ritsu trace --open         # 展示当前所有未关闭的 Trace",
-    "ritsu trace --check-triple  # 验证最新 Trace 的三方一致性 (Design ↔ Dev ↔ Assurance)",
-    "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
-    "ritsu doctor --health      # 输出核心健康度 4 指标与趋势分析",
-    "ritsu doctor --similar-violations [--since 30d] [--query text]  # 离线相似违规检索（Jaccard，无 embedding）",
-    "ritsu doctor --ecosystem          # 校验 MCP/OpenSpec/ast-grep 生态可达性",
-    "ritsu bootstrap [--host claude-code|cursor|all]  # 默认写入 .mcp.json + .ritsu/ecosystem.json",
-    "ritsu export [--out path]  # 导出当月任务摘要为 Markdown 报告",
-    "ritsu sync push            # 将本地 .ritsu/ 约束状态推送至隔离的 Git 分支",
-    "ritsu sync pull            # 从远端拉取 .ritsu/ 约束状态",
-    "ritsu mine --report [--days 7]  # 离线挖掘偏好，生成 Mining Sheet",
-    "ritsu mine --promote <id>  # 将 Mining Sheet 中的提议晋升为正式偏好",
-    "ritsu mine --auto [--days 7]   # 自动分析人类修正，合成并晋升编码风格偏好规则",
-    "ritsu mine --reconcile     # 强制对账并编译 preferences 为 ast-grep 规则",
+export function usage(detailed = false): string {
+  const lines = [
+    "Usage: ritsu <command> [options]",
     "",
-    "  think -> dev -> test/hunt -> review",
-    "\nENV:",
+    "User Commands:",
+    "  ritsu bootstrap    # 初始化项目 (.mcp.json + ecosystem.json)",
+    "  ritsu doctor       # 项目健康检查",
+    "  ritsu doctor --ecosystem # MCP 生态验证",
+    "  ritsu doctor --signals   # 结构化审计信号 (PASS/WARN/FAIL)",
+    "",
+    "Ritsu CLI — 4 阶段工作流: think → dev → review → hunt",
+    "",
+  ];
+
+  if (detailed) {
+    lines.push(
+      "Development / Debug:",
+      "  ritsu cat <cid>      # 查看 ctx 事件",
+      "  ritsu trace <id>     # Trace 链路与 Span 树",
+      "  ritsu export         # 导出月度任务报告",
+      "  ritsu sync push/pull # .ritsu Git 同步",
+      "  ritsu mine --auto    # 自动偏好学习",
+      "",
+    );
+  }
+
+  lines.push(
+    "ENV:",
     "  RITSU_PROJECT_ROOT       # 项目根目录（默认当前目录）",
-  ].join("\n");
+    "  RITSU_LLM_ENABLED=1      # 启用 LLM 规则合成",
+    "  RITSU_LLM_API_KEY        # LLM API 密钥",
+    "",
+    "Use 'ritsu help' for all commands.",
+  );
+
+  return lines.join("\n");
 }
 
 export function main() {
   const args = process.argv.slice(2);
-  const helpRequested = args.length === 0 || args.includes("-h") || args.includes("--help");
-
-  if (helpRequested) { console.log(usage()); return; }
-
   const [cmd, ...cmdArgs] = args;
+
+  if (!cmd || cmd === "-h" || cmd === "--help") { console.log(usage()); return; }
+  if (cmd === "help") { console.log(usage(true)); return; }
 
   if (cmd === "bootstrap") { runBootstrap(cmdArgs); return; }
   if (cmd === "doctor") { runDoctor(cmdArgs); return; }

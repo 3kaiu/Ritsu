@@ -37,6 +37,6 @@ describe("cli entrypoint", () => {
     vi.resetModules();
     await import("../src/cli.js");
 
-    expect(stripAnsi(logs.join("\n"))).toContain("ritsu cat");
+    expect(stripAnsi(logs.join("\n"))).toContain("ritsu bootstrap");
   });
 });

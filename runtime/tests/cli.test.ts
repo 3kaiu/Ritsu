@@ -104,7 +104,8 @@ describe("cli utilities", () => {
 
   it("provides usage information", () => {
     const text = usage();
-    expect(text).toContain("ritsu cat");
+    expect(text).toContain("ritsu bootstrap");
+    expect(text).toContain("ritsu doctor");
     expect(text).toContain("ENV:");
   });
 
@@ -828,7 +829,7 @@ describe("cli utilities", () => {
 
     main();
 
-    expect(output.output).toContain("ritsu cat");
+    expect(output.output).toContain("ritsu bootstrap");
     expect(output.output).toContain("ENV:");
   });
 
@@ -839,7 +840,7 @@ describe("cli utilities", () => {
 
     expect(() => main()).toThrow("process.exit:1");
     expect(output.output).toContain("Unknown command: bogus");
-    expect(output.output).toContain("ritsu cat");
+    expect(output.output).toContain("ritsu doctor");
   });
 
   it("prints cat output for the most recent events in main()", () => {
