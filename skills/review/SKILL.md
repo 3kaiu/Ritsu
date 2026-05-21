@@ -46,3 +46,12 @@ total_steps: 4
 
 - 产出 `assurance-sheet`（P2）。
 - `ritsu_close_span`；OpenSpec 项目由 hook 自动 archive（告知用户检查 specs）。
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| 审查通过但漏掉了硬编码的 API key | Always run regex detector for credentials as part of review |
+| 说 "代码没问题" 但实际有编译错误 | Run `bun run build` before signing off |
+| 版本号不一致没发现 | Check version in both root and runtime/package.json |
+| 新依赖有已知 CVE 但没检查 | Run `npm audit` for new dependencies |

@@ -46,3 +46,11 @@ total_steps: 4
 1. **深度取证**: 关联 `dev-report` / `design-sheet`；领域 `hypothesis_directions`。
 2. **产出 `diagnosis`**（完整证据链）。
 3. **引导** `/r-dev` 或 `/r-think`。
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| 调试了 2 小时发现是 .env 配置问题 | Always check env config first — most failures are configuration, not code |
+| 连续 3 次根因猜测都错了 | Maximum 3 hypotheses before escalating — gather more evidence |
+| 修复了一个 bug 但同类 bug 还有 3 处 | After fixing, `grep` for sibling patterns before closing |

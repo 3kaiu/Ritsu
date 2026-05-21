@@ -5,7 +5,7 @@
  * 每个插件文件应导出一个 `createDetector(): DetectorPlugin` 函数。
  */
 
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { DetectorPlugin } from "./types.js";
 import { RegexDetector } from "./detectors/regex.js";
@@ -43,25 +43,65 @@ export function getAllDetectors(): Record<string, DetectorPlugin> {
   // 扫描用户自定义插件目录
   const pluginsDir = resolve(getProjectRoot(), "rules", "detectors");
   if (existsSync(pluginsDir)) {
+    // Optional manifest.json for plugin metadata
+    const manifestPath = resolve(pluginsDir, "manifest.json");
+    let manifest: Record<string, unknown> | null = null;
+    if (existsSync(manifestPath)) {
+      try {
+        manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+      } catch {
+        console.warn("[ritsu] Failed to parse plugin manifest.json");
+      }
+    }
+
     const files = readdirSync(pluginsDir).filter(
-      (f) => f.endsWith(".js") || f.endsWith(".mjs") || f.endsWith(".cjs"),
+      (f) => f.endsWith(".js") || f.endsWith(".mjs") || f.endsWith(".cjs") || f === "manifest.json",
     );
 
-    for (const file of files) {
+    const manifestPlugins = manifest?.plugins;
+    const pluginRegistry = Array.isArray(manifestPlugins)
+      ? manifestPlugins
+      : files.filter((f) => f !== "manifest.json");
+
+    for (const plugin of pluginRegistry) {
       try {
-        const pluginPath = resolve(pluginsDir, file);
-        // Dynamic import of user plugin
+        const pluginPath = typeof plugin === "string"
+          ? resolve(pluginsDir, plugin)
+          : typeof plugin === "object" && plugin !== null && typeof (plugin as Record<string, unknown>).file === "string"
+            ? resolve(pluginsDir, (plugin as Record<string, unknown>).file as string)
+            : null;
+
+        if (!pluginPath || !existsSync(pluginPath)) {
+          if (typeof plugin === "object" && plugin !== null) {
+            console.warn(`[ritsu] Plugin file not found: ${(plugin as Record<string, unknown>).file}`);
+          }
+          continue;
+        }
+
         const mod = require(pluginPath) as {
           createDetector?: () => DetectorPlugin;
           default?: { createDetector?: () => DetectorPlugin };
         };
         const createFn = mod.createDetector ?? (mod.default as { createDetector?: () => DetectorPlugin } | null)?.createDetector;
         if (typeof createFn === "function") {
-          const plugin = createFn();
-          detectors[plugin.type] = plugin;
+          const pluginInstance = createFn();
+
+          // Validate minRuntime if manifest provides it
+          if (typeof plugin === "object" && plugin !== null) {
+            const p = plugin as Record<string, unknown>;
+            if (typeof p.minRuntime === "string") {
+              const currentVersion = "6.5.0";
+              if (currentVersion.localeCompare(p.minRuntime as string) < 0) {
+                console.warn(`[ritsu] Plugin '${p.id ?? p.file ?? "unknown"}' requires runtime ${p.minRuntime}, current is ${currentVersion} — loading anyway`);
+              }
+            }
+          }
+
+          detectors[pluginInstance.type] = pluginInstance;
         }
       } catch (e) {
-        console.warn(`[ritsu] Failed to load detector plugin: ${file}`, e);
+        const pluginName = typeof plugin === "string" ? plugin : (plugin as Record<string, unknown>)?.file ?? "unknown";
+        console.warn(`[ritsu] Failed to load detector plugin: ${pluginName}`, e);
       }
     }
   }

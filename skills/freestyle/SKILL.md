@@ -23,3 +23,10 @@ hard_constraints:
 1. **直接回答**: 不调用任何 ctx/event 工具，不产出任何产物。
 2. **智能升级**: 如果回答过程中发现问题需要修改代码，主动建议 "这可能需要 `/r-dev` 来修复"。
 3. **保持上下文感知**: 虽然不进入流程，但仍然感知当前项目的技术栈和领域。
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| 用户问了个简单问题，AI 主动跑了完整的 think→dev→review 流程 | If the user didn't ask for it, don't start a workflow — just answer |
+| 快速回答中提供了过时的 API 用法 | For library/API questions, mention version context or suggest reading docs |

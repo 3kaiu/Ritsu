@@ -39,3 +39,11 @@ total_steps: 4
 ---
 ## 💡 AI 行为约束
 - **HC-Augment**：禁止在补测阶段修改业务核心代码。如果业务代码由于写测试而被发现存在无法被 mock 等架构问题，应提交建议并交由 `/r-dev` 或重构。
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| 补测时改了业务代码，引入了新 bug | Never modify business logic during test augmentation |
+| 测试覆盖率报告 100% 但实际只测了 happy path | Verify edge cases and error paths match the coverage report |
+| Mock 了外部依赖但忘记验证 mock 被调用了 | Always assert mock interactions, not just output |

@@ -16,6 +16,7 @@ export async function runDoctor(args: string[] = []) {
 
   if (args.includes("--ecosystem")) { runDoctorEcosystem(); return; }
   if (args.includes("--health")) { await runDoctorHealth(); return; }
+  if (args.includes("--signals")) { runSignals(root); return; }
 
   if (args.includes("--similar-violations")) {
     let sinceDays = 30;
@@ -92,6 +93,73 @@ export async function runDoctor(args: string[] = []) {
 
   console.log("\n" + color(`Summary: ${errors} Errors, ${warnings} Warnings`, errors > 0 ? "red" : (warnings > 0 ? "yellow" : "green")));
   if (errors > 0) process.exit(1);
+}
+
+/**
+ * Waza-style audit signals.
+ * Outputs structured labeled blocks ending with PASS/WARN/FAIL status.
+ * Designed for LLM consumption — skimmable, machine-readable.
+ */
+function runSignals(root: string): void {
+  const signals: string[] = [];
+
+  // Signal 1: Project structure
+  const hasAgents = existsSync(resolve(root, "AGENTS.md"));
+  const hasRitsuDir = existsSync(resolve(root, ".ritsu"));
+  const hasClaudeMd = existsSync(resolve(root, "CLAUDE.md"));
+  const hasMcpJson = existsSync(resolve(root, ".mcp.json"));
+  signals.push(`[signal:project-structure]
+agents_md: ${hasAgents}
+ritsu_dir: ${hasRitsuDir}
+claude_md: ${hasClaudeMd}
+mcp_json: ${hasMcpJson}
+status: ${hasAgents && hasRitsuDir ? "PASS" : "FAIL"}`);
+
+  // Signal 2: Package manager
+  const hasBunLock = existsSync(resolve(root, "bun.lock"));
+  const hasPackageJson = existsSync(resolve(root, "package.json"));
+  signals.push(`[signal:package-manager]
+bun_lock: ${hasBunLock}
+package_json: ${hasPackageJson}
+status: ${hasPackageJson ? "PASS" : "FAIL"}`);
+
+  // Signal 3: Build health
+  const distMcpIndex = resolve(root, "runtime/dist/index.js");
+  const distCli = resolve(root, "runtime/dist/cli.js");
+  const hasBuild = existsSync(distMcpIndex) && existsSync(distCli);
+  signals.push(`[signal:build-health]
+mcp_server: ${existsSync(distMcpIndex)}
+cli: ${existsSync(distCli)}
+status: ${hasBuild ? "PASS" : "FAIL"}`);
+
+  // Signal 4: Ctx file health
+  const ctxFile = findLatestCtxFile(root);
+  signals.push(`[signal:ctx-health]
+ctx_present: ${ctxFile !== null}
+status: ${ctxFile ? "PASS" : "WARN"}`);
+
+  // Signal 5: Version consistency
+  const runtimeMeta = readRuntimeMetadata();
+  const agentsContent = hasAgents ? readFileSync(resolve(root, "AGENTS.md"), "utf-8") : "";
+  const agentsVersion = agentsContent.match(/ritsu-version:\s*(\d+\.\d+\.\d+)/);
+  const versionsMatch = agentsVersion && runtimeMeta.protocolVersion === agentsVersion[1];
+  signals.push(`[signal:version-consistency]
+agents_version: ${agentsVersion?.[1] ?? "missing"}
+runtime_protocol: ${runtimeMeta.protocolVersion ?? "missing"}
+status: ${versionsMatch ? "PASS" : "FAIL"}`);
+
+  // Signal 6: Ritsu native module
+  const hasNative = existsSync(resolve(root, "runtime/native/ritsu-native.darwin-arm64.node"));
+  signals.push(`[signal:native-module]
+native_available: ${hasNative}
+status: PASS`); // Graceful fallback — not a failure
+
+  // Signal 7: CodeGraph availability (optional MCP)
+  signals.push(`[signal:codegraph]
+configured: ${existsSync(resolve(root, ".mcp.json")) ? "check_mcp_config" : "no_mcp_json"}
+status: PASS`);
+
+  console.log(signals.join("\n\n"));
 }
 
 async function runSimilarViolations(sinceDays = 30, query = "") {

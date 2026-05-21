@@ -54,3 +54,12 @@ total_steps: 4
    - 单人非 OpenSpec：`design-sheet` + `contracts[]` 必填。
    - Multi-Agent：`ritsu_open_span` + `coordination-sheet`。
 3. **引导**: "架构设计已就绪。建议 `/r-dev`。"
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| 在 monorepo 根目录设计，但实际子包架构完全不同 | Always `pwd` + read root `package.json` workspaces before designing |
+| 用了 3 轮对话才确认数据库选型 | Bundle all clarifying questions into one turn |
+| 设计文档留了 5 个 "TODO: 待定" | Plans must be decision-complete with zero placeholders |
+| AI 在微服务项目中设计了单体架构 | Always check AGENTS.md domain + existing design artifacts first |

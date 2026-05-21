@@ -61,3 +61,12 @@ total_steps: 5
 - 将 gates 结果写入 `dev-report` 结构化字段。
 - P2：`emit_event(done)` 与 gates 同 trace/span，且门禁后工作树不变。
 - 引导：`/r-review`（P2 强制建议）。
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| 修了一个 bug，顺带重构了相邻的 3 个函数 | Scope creep — touch only what the task requires |
+| "测试通过" 但实际没有运行测试 | Every test claim must point to actual `vitest run` output in this session |
+| 新代码用 `let` 但项目偏好 `const` | Always read `.ritsu/preferences.yaml` before writing new code |
+| import 了一个不存在的模块 | Always `grep` for module exports before importing |

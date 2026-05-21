@@ -69,3 +69,11 @@ total_steps: 4
 **引导建议**：
 - 初始化完成后，告知用户已采用的人格和识别出的技术栈。
 - **示例**：“项目已完成指纹识别（检测到 React + Node.js 全栈架构）。我已就绪，您可以运行 `/r-think` 开始需求评审。”
+
+## Gotchas
+
+| What happened | Rule |
+|---|---|
+| AGENTS.md 中的 fingerprints 不全，导致 ritsu_exec 白名单过窄 | Scan ALL project files for tech clues, not just manifest files |
+| 初始化的 OpenSpec 配置与项目实际结构不匹配 | Verify project structure matches inferred domain before writing config |
+| 指纹识别漏掉了 monorepo 子包 | Walk subdirectories for additional manifest files |
