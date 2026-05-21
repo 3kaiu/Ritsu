@@ -25,7 +25,8 @@ export type DetectorType =
   | "preference_lint"
   | "ast_grep"
   | "ast"
-  | "codegraph";
+  | "codegraph"
+  | "architecture";
 
 export interface DetectorConfig {
   type: DetectorType;

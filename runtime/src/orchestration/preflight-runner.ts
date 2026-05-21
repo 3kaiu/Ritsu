@@ -19,6 +19,7 @@ import {
   fetchCodeGraphContext,
   getToolReadiness,
 } from "./internal-tools.js";
+import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureReport } from "./architecture-analyzer.js";
 
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
 export type PreflightTier = "P0" | "P1" | "P2";
@@ -38,6 +39,10 @@ export type PreflightContextPack = Record<string, unknown> & {
   _tools?: { superpowers: boolean; codegraph: boolean; openspec: boolean; native: boolean };
   /** CodeGraph graph context (auto-fetched when available) */
   _codegraph?: { symbols: string[]; files: string[] } | null;
+  /** Architecture fingerprint (learned during think preflight) */
+  _architecture?: import("./architecture-analyzer.js").LayerRule[];
+  /** Architecture drift violations (detected during dev/review preflight) */
+  _architecture_drift?: import("./architecture-analyzer.js").LayerRule[];
 };
 
 function inferTier(
@@ -95,6 +100,15 @@ async function runThinkPreflight(
       pack._brainstorming = brainstorming.requirements;
     }
   }
+
+  // 架构漂移检测：学习当前项目的架构指纹
+  try {
+    const fingerprint = buildArchitectureFingerprint(projectRoot);
+    storeArchitectureFingerprint(fingerprint);
+    if (fingerprint.rules.length > 0) {
+      pack._architecture = fingerprint.rules;
+    }
+  } catch { /* non-critical */ }
 
   const hasOpenSpec = existsSync(resolve(projectRoot, "openspec"));
 
@@ -165,6 +179,20 @@ async function runDevReviewPreflight(
     const cg = fetchCodeGraphContext(codegraphFiles.filter((f): f is string => typeof f === "string"));
     if (cg.symbols.length > 0) pack._codegraph = cg;
   }
+
+  // 架构漂移检测
+  try {
+    if (Array.isArray(codegraphFiles)) {
+      const { checkArchitectureDrift } = await import("./architecture-analyzer.js");
+      const driftViolations = checkArchitectureDrift(
+        codegraphFiles.filter((f: unknown): f is string => typeof f === "string"),
+        projectRoot,
+      );
+      if (driftViolations.length > 0) {
+        pack._architecture_drift = driftViolations;
+      }
+    }
+  } catch { /* non-critical */ }
 
   const statDiff = await inspectDiff({
     projectRoot,

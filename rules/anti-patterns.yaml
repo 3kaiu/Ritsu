@@ -226,4 +226,17 @@ review:
       - wrong: "涉及数据库 schema 变更的发布没有回滚方案"
         right: "发布计划包含：灰度比例、回滚条件、回滚脚本、验证步骤"
 
+  - id: R-8
+    name: 架构漂移
+    pattern: "新增的跨模块依赖与项目已学习的架构指纹不一致"
+    severity: WARN
+    detector:
+      type: architecture
+      target: diff
+    examples:
+      - wrong: "services/ 模块新 import 了 ui/ 模块 —— 但项目已有的依赖模式全是 services → api → ui"
+        right: "新依赖符合已建立的项目模块依赖方向，或经过架构评审确认合理"
+      - wrong: "circular dependency: api → services → api"
+        right: "提取公共类型到 shared/ 模块，消除循环依赖"
+
 dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"
