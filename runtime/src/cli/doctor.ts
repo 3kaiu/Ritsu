@@ -8,7 +8,7 @@ import {
   findLatestCtxFile, parseJsonl, parseLooseJsonl, color,
   readCoveragePct, readRuntimeMetadata, countTripleVerifiedTraces,
 } from "./shared.js";
-import { buildArchitectureSignals } from "../orchestration/architecture-analyzer.js";
+import { buildArchitectureSignals, appendToAgentsMd } from "../orchestration/architecture-analyzer.js";
 
 export async function runDoctor(args: string[] = []) {
   const root = detectProjectRoot();
@@ -18,6 +18,7 @@ export async function runDoctor(args: string[] = []) {
   if (args.includes("--ecosystem")) { runDoctorEcosystem(); return; }
   if (args.includes("--health")) { await runDoctorHealth(); return; }
   if (args.includes("--signals")) { runSignals(root); return; }
+  if (args.includes("--arch-init")) { runArchInit(root); return; }
 
   if (args.includes("--similar-violations")) {
     let sinceDays = 30;
@@ -167,6 +168,21 @@ status: PASS`);
   } catch { /* skip if module unavailable */ }
 
   console.log(signals.join("\n\n"));
+}
+
+/**
+ * 架构指纹扫描 → 写入 AGENTS.md
+ * 在 /r-init 时或项目结构变更后调用。
+ */
+function runArchInit(root: string): void {
+  console.log(color("Ritsu — Scanning project architecture...", "cyan"));
+  const ok = appendToAgentsMd(root);
+  if (ok) {
+    console.log(color("✔ Architecture fingerprint written to AGENTS.md", "green"));
+    console.log(color("  Modules and dependencies will be available to all future AI sessions.", "dim"));
+  } else {
+    console.error(color("✖ Failed to write architecture fingerprint", "red"));
+  }
 }
 
 async function runSimilarViolations(sinceDays = 30, query = "") {

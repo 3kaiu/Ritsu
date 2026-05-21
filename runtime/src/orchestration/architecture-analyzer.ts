@@ -51,23 +51,29 @@ export type ArchitectureFingerprint = {
 
 // ─── 模块发现 ─────────────────────────────────────────────────
 
-const MODULE_PATTERNS = ["src", "packages", "lib", "app", "components", "api"];
+const MODULE_PATTERNS = ["src", "packages", "lib", "app", "runtime", "components", "api", "backend", "frontend"];
 
 function discoverModules(root: string): ModuleBoundary[] {
   const modules: ModuleBoundary[] = [];
-  for (const pattern of MODULE_PATTERNS) {
-    const dir = resolve(root, pattern);
-    if (existsSync(dir)) {
-      modules.push({ name: pattern, path: dir, depth: 1 });
-      try {
-        for (const entry of readdirSync(dir, { withFileTypes: true })) {
-          if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
-            modules.push({ name: `${pattern}/${entry.name}`, path: resolve(dir, entry.name), depth: 2 });
-          }
-        }
-      } catch { /* permission */ }
-    }
+  const candidates = [root];
+
+  // Also check common subdirectories
+  for (const p of MODULE_PATTERNS) {
+    const dir = resolve(root, p);
+    if (existsSync(dir) && !candidates.includes(dir)) candidates.push(dir);
   }
+
+  for (const base of candidates) {
+    try {
+      for (const entry of readdirSync(base, { withFileTypes: true })) {
+        if (!entry.isDirectory() || entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "dist" || entry.name === "build" || entry.name === "coverage") continue;
+        const fullPath = resolve(base, entry.name);
+        const prefix = base === root ? "" : `${relative(root, base)}/`;
+        modules.push({ name: `${prefix}${entry.name}`, path: fullPath, depth: prefix ? 2 : 1 });
+      }
+    } catch { /* skip unreadable */ }
+  }
+
   return modules;
 }
 
@@ -109,16 +115,16 @@ function walkFiles(root: string, callback: (file: string) => void) {
 function extractDependencies(root: string, modules: ModuleBoundary[]): Dependency[] {
   const deps: Dependency[] = [];
   const seen = new Set<string>();
-  const srcDir = resolve(root, "src");
-  if (!existsSync(srcDir)) return deps;
 
-  walkFiles(srcDir, (fullPath) => {
-    const fromModule = resolveModule(fullPath, ".", modules);
-    if (!fromModule) return;
-    const content = readFileSync(fullPath, "utf-8");
-    for (const imp of extractImports(content)) {
-      const toModule = resolveModule(fullPath, imp, modules);
-      if (toModule && fromModule !== toModule) {
+  for (const mod of modules) {
+    if (!existsSync(mod.path)) continue;
+    walkFiles(mod.path, (fullPath) => {
+      const fromModule = resolveModule(fullPath, ".", modules);
+      if (!fromModule) return;
+      const content = readFileSync(fullPath, "utf-8");
+      for (const imp of extractImports(content)) {
+        const toModule = resolveModule(fullPath, imp, modules);
+        if (!toModule || fromModule === toModule) continue;
         const key = `${fromModule}→${toModule}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -128,8 +134,8 @@ function extractDependencies(root: string, modules: ModuleBoundary[]): Dependenc
           if (existing) existing.count++;
         }
       }
-    }
-  });
+    });
+  }
 
   return deps;
 }
@@ -258,6 +264,47 @@ export function buildArchitectureReport(root: string): string {
     ...(fp.rules.length > 0 ? ["", "### Active Rules"] : []),
     ...fp.rules.map((r) => `- [${r.severity}] ${r.message}`),
   ].join("\n");
+}
+
+/**
+ * 将架构指纹写入 AGENTS.md
+ * 在 /r-init 时调用，使架构约束成为项目基线的一部分。
+ * 后续 AI 会话自动读取 AGENTS.md 中的架构块。
+ */
+export function appendToAgentsMd(root: string): boolean {
+  const agentsPath = resolve(root, "AGENTS.md");
+  if (!existsSync(agentsPath)) return false;
+
+  const fp = buildArchitectureFingerprint(root);
+  const depYaml = fp.dependencies.map((d) => `    - from: ${d.fromModule}\n      to: ${d.toModule}\n      count: ${d.count}`).join("\n");
+
+  const archBlock = [
+    "",
+    "<!-- Architecture Block (auto-detected by ritsu init) -->",
+    "architecture:",
+    `  modules: [${fp.modules.map((m) => m.name).join(", ")}]`,
+    `  dependency_count: ${fp.dependencies.length}`,
+    `  circular_deps: ${fp.rules.filter((r) => r.type === "circular_dependency").length}`,
+    "  dependencies:",
+    depYaml || "    []",
+    "<!-- End Architecture Block -->",
+    "",
+  ].join("\n");
+
+  try {
+    const content = readFileSync(agentsPath, "utf-8");
+    // Replace existing architecture block or append
+    const archRegex = /<!-- Architecture Block[\s\S]*?End Architecture Block -->/;
+    if (archRegex.test(content)) {
+      const updated = content.replace(archRegex, archBlock.trim());
+      writeFileSync(agentsPath, updated, "utf-8");
+    } else {
+      writeFileSync(agentsPath, content.trimEnd() + "\n" + archBlock, "utf-8");
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function buildArchitectureSignals(root: string): string[] {
