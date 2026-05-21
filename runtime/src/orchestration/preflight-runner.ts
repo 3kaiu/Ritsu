@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync } from "node:child_process";
 import { ritsu_read_ctx } from "../handlers/read-ctx.js";
+import { detectSuperpowersPhase } from "./superpowers-bridge.js";
 import { ritsu_read_agents } from "../handlers/read-agents.js";
 import { ritsu_get_changed_files } from "../handlers/get-changed-files.js";
 import { ritsu_list_artifacts } from "../handlers/list-artifacts.js";
@@ -62,6 +63,8 @@ export type PreflightContextPack = Record<string, unknown> & {
   next_skill?: string;
   /** Optional CodeGraph context — present when codegraph CLI is available */
   codegraph?: Record<string, unknown> | null;
+  /** When Superpowers is detected, the active Superpowers phase */
+  superpowers_phase?: string | null;
 };
 
 function inferTier(
@@ -266,12 +269,27 @@ export async function runStagePreflight(
 ): Promise<PreflightContextPack> {
   const { projectRoot, stage, taskSummary = "" } = options;
 
+  // Detect if running inside Superpowers workflow
+  const sp = detectSuperpowersPhase(projectRoot);
+  if (sp.hasSuperpowers) {
+    console.error(`[ritsu-preflight] Superpowers detected, phase=${sp.currentPhase ?? "unknown"}, routing to Ritsu stage=${sp.ritsuStage}`);
+  }
+
+  // When Superpowers is active, the context_pack includes its phase info
   if (stage === "think") {
     const ctx = await readCtxCompact(projectRoot);
     const tier = inferTier(options.tier, ctx);
-    return runThinkPreflight(projectRoot, tier, taskSummary);
+    const pack = await runThinkPreflight(projectRoot, tier, taskSummary);
+    if (sp.hasSuperpowers) pack.superpowers_phase = sp.currentPhase;
+    return pack;
   }
   if (stage === "hunt") return runHuntPreflight(projectRoot);
-  if (stage === "dev") return runDevReviewPreflight(projectRoot, "dev", "dev");
-  return runDevReviewPreflight(projectRoot, "review", "review");
+  if (stage === "dev") {
+    const pack = await runDevReviewPreflight(projectRoot, "dev", "dev");
+    if (sp.hasSuperpowers) pack.superpowers_phase = sp.currentPhase;
+    return pack;
+  }
+  const pack = await runDevReviewPreflight(projectRoot, "review", "review");
+  if (sp.hasSuperpowers) pack.superpowers_phase = sp.currentPhase;
+  return pack;
 }

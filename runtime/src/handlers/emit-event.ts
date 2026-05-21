@@ -13,6 +13,7 @@ import {
 } from "../shared.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
 import { emitViolationEvent } from "../violation-events.js";
+import { autoCaptureOnEvent } from "../session-memory.js";
 
 export async function ritsu_emit_event(
   params: Record<string, unknown>,
@@ -149,6 +150,9 @@ export async function ritsu_emit_event(
       `event written but validation failed: ${postValidation.errors?.join(", ")}`,
     );
   }
+
+  // 跨会话记忆：自动捕获关键事件（违规、偏好学习等）
+  autoCaptureOnEvent(event);
 
   return textResult(
     JSON.stringify({

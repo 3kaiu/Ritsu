@@ -133,6 +133,41 @@ ${rows || "| OS-placeholder | See OpenSpec proposal | `openspec/changes/" + chan
 `;
 }
 
+/**
+ * /opsx: 命令检测 — 检查 OpenSpec 是否支持 /opsx: 工作流
+ */
+export function hasOpsxWorkflow(root: string): boolean {
+  const configPath = resolve(root, "openspec", "config.yaml");
+  if (!existsSync(configPath)) return false;
+  try {
+    const content = readFileSync(configPath, "utf-8");
+    return content.includes("opsx") || content.includes("profile");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 解析 /opsx: 命令的执行产物路径
+ */
+export function resolveOpsxArtifact(
+  root: string,
+  command: string,
+  changeName: string,
+): string | null {
+  const base = resolve(root, "openspec", "changes", changeName);
+  const mapping: Record<string, string> = {
+    propose: "proposal.md",
+    "writing-plans": "tasks.md",
+    design: "design.md",
+    specs: "specs",
+  };
+  const relPath = mapping[command];
+  if (!relPath) return null;
+  const fullPath = join(base, relPath);
+  return existsSync(fullPath) ? fullPath : null;
+}
+
 export function syncOpenSpecContracts(
   projectRoot: string,
   changeIdParam?: string,
@@ -147,7 +182,9 @@ export function syncOpenSpecContracts(
     return { error: "no openspec/changes/<id> directories found" };
   }
 
+  // Support /opsx: 目录结构: proposal.md
   const proposalPath = join(openspecRoot, "changes", changeId, "proposal.md");
+  const opsxProposalPath = join(openspecRoot, "changes", changeId, "proposal.md");
   if (!existsSync(proposalPath)) {
     return { error: `proposal not found: ${proposalPath}` };
   }
