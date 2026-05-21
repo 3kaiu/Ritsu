@@ -44,6 +44,10 @@ export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; vi
     }
   }
 
+  for (const v of violations) {
+    if (v.evidence && v.evidence.length > 200) v.evidence = v.evidence.slice(0, 200) + "...";
+  }
+
   const isBlocked = violations.some(v => v.severity === "fatal" || v.severity === "hard_stop");
 
   return {

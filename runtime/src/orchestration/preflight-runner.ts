@@ -286,7 +286,7 @@ async function runHuntPreflight(projectRoot: string): Promise<PreflightContextPa
   pack.similar_violations = findSimilarViolations(
     loadViolationRecords(resolve(projectRoot, ".ritsu"), since),
     "failure error regression",
-    8,
+    5,
   );
 
   pack.next_skill = "dev";

@@ -155,7 +155,7 @@ function processLine(
 export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
   if (tryInitRustCtx()) {
     const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
-    return nb.ctxQueryAll(10000);
+    return nb.ctxQueryAll(500);
   }
   const ctxPath = getCtxPath(projectRoot);
   
