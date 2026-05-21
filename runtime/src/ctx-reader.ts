@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 /**
  * ctx 读取器 — 查询 JSONL 事件记录
  *
@@ -10,7 +11,6 @@ import { existsSync, readFileSync, statSync, openSync, readSync, closeSync, appe
 import { resolve } from "node:path";
 import { getCtxPath } from "./ctx-path.js";
 import { legacyCidToTraceId, legacyCidToSpanId } from "./correlation.js";
-import { getProjectRoot } from "./handlers/_utils.js";
 
 let cachedEntries: Record<string, unknown>[] | null = null;
 let lastMtime: number = 0;

@@ -11,9 +11,8 @@
  * 不依赖外部代码图工具 — 通过分析文件路径和 import 语句提取架构模式。
  */
 
-import { readFileSync, existsSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
-import { getProjectRoot } from "../handlers/_utils.js";
 import { isNativeAvailable, initNativeStore, indexViolationEmbedding } from "../native-bridge.js";
 
 // ─── 类型 ────────────────────────────────────────────────────

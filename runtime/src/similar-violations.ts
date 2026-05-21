@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { isNativeAvailable, initNativeStore, indexViolationEmbedding, searchSimilarViolations, computeSimpleEmbedding } from "./native-bridge.js";
+import { isNativeAvailable, initNativeStore, indexViolationEmbedding, searchSimilarViolations } from "./native-bridge.js";
 
 export type ViolationRecord = {
   ts: string;

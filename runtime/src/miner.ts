@@ -660,7 +660,7 @@ export function autoApplyMinedRules(days: number): { addedCount: number; rules: 
 
   if (!existsSync(ritsuDir)) mkdirSync(ritsuDir, { recursive: true });
 
-  const { corrections, violations } = scanHumanCorrections(root, days);
+  const { corrections } = scanHumanCorrections(root, days);
   const synthesizedRules = synthesizeRulesFromCorrections(corrections);
 
   let currentRules: PreferenceRule[] = [];

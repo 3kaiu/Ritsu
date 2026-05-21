@@ -1,5 +1,5 @@
 import { resolve, dirname } from "node:path";
-import { existsSync, readFileSync, writeFileSync, appendFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, appendFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { detectProjectRoot } from "../project-root.js";
 import { findSimilarViolations, loadViolationRecords } from "../similar-violations.js";

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { existsSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { detectProjectRoot } from "../project-root.js";
 import { findLatestCtxFile, parseJsonl, color, summarizeTasks } from "./shared.js";
 

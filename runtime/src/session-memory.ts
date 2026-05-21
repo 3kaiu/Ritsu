@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * 跨会话记忆系统
  *
@@ -68,6 +69,7 @@ export function captureMemory(entry: Omit<MemoryEntry, "id" | "ts">): boolean {
     // Index into native vector store for semantic search
     const text = `${entry.summary} ${entry.detail}`;
     const metadata = JSON.stringify({
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
       type: entry.type,
       project: entry.project,
       tags: entry.tags,

@@ -19,7 +19,7 @@ import {
   fetchCodeGraphContext,
   getToolReadiness,
 } from "./internal-tools.js";
-import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureReport, buildArchitectureContext } from "./architecture-analyzer.js";
+import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureContext } from "./architecture-analyzer.js";
 
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
 export type PreflightTier = "P0" | "P1" | "P2";
@@ -138,11 +138,8 @@ async function runThinkPreflight(
   pack.next_skill = "dev";
 
   // AI summary
-  const ctx = pack.ctx as Record<string, unknown> | null | undefined;
-  const stageStr = `Stage: think (${tier})`;
-  const ctxStr = ctx?.recovery_context ? `Resuming: ${(ctx.recovery_context as Record<string, unknown>).resume_hint ?? "incomplete task"}` : "New task";
   const archStr = pack._architecture ? `Architecture: ${(pack._architecture as Record<string, unknown>).modules ?? "scanning"}` : "";
-  pack._ai_summary = [stageStr, ctxStr, archStr].filter(Boolean).join(" | ");
+  pack._ai_summary = ["Stage: think (" + tier + ")", "New task", archStr].filter(Boolean).join(" | ");
 
   return pack;
 }
@@ -225,8 +222,7 @@ async function runDevReviewPreflight(
   if (stage === "review") {
     const ctx = pack.ctx as Record<string, unknown> | null | undefined;
     const lastIncomplete = ctx?.last_incomplete as Record<string, unknown> | undefined;
-    const traceId =
-      typeof lastIncomplete?.trace_id === "string" ? lastIncomplete.trace_id : undefined;
+    const traceId = typeof lastIncomplete?.trace_id === "string" ? lastIncomplete.trace_id : undefined;
     if (traceId) {
       const traceRes = await ritsu_join_trace({ trace_id: traceId });
       const tText = traceRes.content[0];
@@ -248,7 +244,6 @@ async function runDevReviewPreflight(
       : "close_span"
     : stage;
 
-  const ctx = pack.ctx as Record<string, unknown> | null | undefined;
   const passStr = pack.passed ? "Policy: passed" : "Policy: violations found";
   const driftStr = pack._architecture_drift ? `Architecture drift: ${pack._architecture_drift.length} issues` : "";
   pack._ai_summary = [`Stage: ${stage}`, passStr, driftStr].filter(Boolean).join(" | ");

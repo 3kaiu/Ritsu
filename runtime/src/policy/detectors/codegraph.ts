@@ -84,7 +84,7 @@ export class CodeGraphDetector implements DetectorPlugin {
         }
         break;
 
-      case "CG-2": // Missing test coverage for changed symbols
+      case "CG-2": { // Missing test coverage for changed symbols
         const changedSymbols = affected.filter((n) => allFiles.includes(n.file));
         for (const sym of changedSymbols) {
           const hasTest = affected.some(
@@ -99,6 +99,7 @@ export class CodeGraphDetector implements DetectorPlugin {
               suggestion: "Add or update tests for this symbol",
             });
           }
+        }
         }
         break;
 

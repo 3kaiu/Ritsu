@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 /**
  * ctx 写入器 — Rust WAL 并发 + JSONL 备份
  *

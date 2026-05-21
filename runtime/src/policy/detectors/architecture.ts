@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 /**
  * 架构漂移检测器
  *
@@ -7,8 +8,6 @@
  */
 
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
 import { getProjectRoot } from "../../handlers/_utils.js";
 
 export class ArchitectureDetector implements DetectorPlugin {

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-var-requires */
 /**
  * Ritsu 内部工具编排层
  *
@@ -7,7 +8,7 @@
  * 对用户完全透明。所有 MCP 工具由 bootstrap 自动配置。
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, } from "node:fs";
 import { resolve } from "node:path";
 import { execFileSync, execSync } from "node:child_process";
 

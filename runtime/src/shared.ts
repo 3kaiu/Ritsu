@@ -130,13 +130,6 @@ export function getArtifactLayer(type: string): ArtifactLayer {
 
 // ─── 动态安全策略 (Stack-Aware Security) ───────────────────
 
-const BASE_ALLOWED_BINARIES = [
-  "git", "grep", "rg", "cat", "head", "tail", "ls", "find", "fd", "wc", "sort",
-  "uniq", "diff", "echo", "pwd", "which", "env", "node", "npx", "tsc", "eslint",
-  "prettier", "vitest", "jest", "jq", "yq", "make", "cmake", "sed", "awk",
-  "tr", "cut", "xargs", "tee", "mkdir", "touch", "cp", "mv", "ln", "gh",
-];
-
 const MINIMAL_SECURE_BINARIES = [
   "git", "grep", "rg", "cat", "head", "tail", "ls", "find", "fd", "wc", "sort",
   "uniq", "diff", "echo", "pwd", "which", "env", "jq", "yq", "sed", "awk",
