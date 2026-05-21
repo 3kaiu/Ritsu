@@ -291,9 +291,9 @@ async function runHuntPreflight(projectRoot: string): Promise<PreflightContextPa
 
   pack.next_skill = "dev";
 
-  const ctx = pack.ctx as Record<string, unknown> | null | undefined;
+  const ctxSummary = pack.ctx as Record<string, unknown> | null | undefined;
   const cv = (pack.similar_violations as Array<Record<string, unknown>> | undefined)?.length ?? 0;
-  const recovery = ctx?.recovery_context ? `Recovery: ${(ctx.recovery_context as Record<string, unknown>).resume_hint ?? "available"}` : "";
+  const recovery = ctxSummary?.recovery_context ? `Recovery: ${(ctxSummary.recovery_context as Record<string, unknown>).resume_hint ?? "available"}` : "";
   pack._ai_summary = [`Stage: hunt`, `Similar violations found: ${cv}`, recovery].filter(Boolean).join(" | ");
 
   return pack;
