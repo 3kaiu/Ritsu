@@ -215,18 +215,6 @@ host_profile: ${hostProfile}
     }
   }
 
-  // 3. Scaffold default domains/ if missing in the project
-  const destDomainsDir = resolve(projectRoot, "domains");
-  if (!existsSync(destDomainsDir)) {
-    const srcDomainsDir = existsSync(resolve(RUNTIME_DIR, "dist/domains"))
-      ? resolve(RUNTIME_DIR, "dist/domains")
-      : resolve(RUNTIME_DIR, "../domains");
-    if (existsSync(srcDomainsDir)) {
-      copyFolderSync(srcDomainsDir, destDomainsDir);
-      filesWritten.push("domains/ (scaffolded default domains)");
-    }
-  }
-
   // 4. Scaffold default _shared/ if missing in the project
   const destSharedDir = resolve(projectRoot, "_shared");
   if (!existsSync(destSharedDir)) {
