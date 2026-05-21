@@ -1,11 +1,10 @@
-name: Ritsu Triple Verification
+name: Ritsu Verify
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+    branches: [main]
 
 jobs:
   verify:
@@ -15,26 +14,24 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: '22'
-          cache: 'npm'
-          cache-dependency-path: runtime/package-lock.json
+          bun-version: 1.3
 
       - name: Install dependencies
-        run: cd runtime && npm install
+        run: cd runtime && bun install
 
-      - name: Build Ritsu Runtime
-        run: cd runtime && npm run build
+      - name: Build
+        run: cd runtime && bun run build
 
-      - name: Run Ritsu Doctor
-        run: cd runtime && node dist/cli.js doctor
+      - name: Doctor
+        run: cd runtime && bun dist/cli.js doctor
         env:
           RITSU_PROJECT_ROOT: ${{ github.workspace }}
 
-      - name: Run Triple Verification
-        run: cd runtime && node dist/cli.js trace --check-triple
+      - name: Triple Verification
+        run: cd runtime && bun dist/cli.js trace --check-triple
         continue-on-error: true
         env:
           RITSU_PROJECT_ROOT: ${{ github.workspace }}
