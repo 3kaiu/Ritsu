@@ -17,23 +17,20 @@ let lastMtime: number = 0;
 let lastSize: number = 0;
 let lastPath: string = "";
 
-// Lazy SQLite initialization
-let _sqliteAvailable = false;
-let _ctxDb: typeof import("./ctx-db.js") | null = null;
+// Lazy Rust native ctx store initialization
+// When available, all reads go through indexed SQLite (O(1)) instead of JSONL scans (O(n))
+let _rustCtxAvailable = false;
 
-function tryOpenSqlite(): boolean {
-  if (_ctxDb) return true;
+function tryInitRustCtx(): boolean {
+  if (_rustCtxAvailable) return true;
   try {
-    // Use require for sync init — works in bun's ESM mode
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const mod = require("./ctx-db.js") as typeof import("./ctx-db.js");
-    _sqliteAvailable = mod.openDb(getProjectRoot());
-    if (_sqliteAvailable) _ctxDb = mod;
-    return _sqliteAvailable;
-  } catch {
-    _sqliteAvailable = false;
-    return false;
-  }
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    if (nb.initCtxStore()) {
+      _rustCtxAvailable = true;
+      return true;
+    }
+  } catch { /* no native module */ }
+  return false;
 }
 
 function tryHealJsonLine(line: string): string | null {
@@ -156,8 +153,9 @@ function processLine(
  * 优化：对于 JSONL，逐行解析比全量 split 内存更友好。
  */
 export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
-  if (tryOpenSqlite() && _ctxDb) {
-    return _ctxDb.queryEvents({ limit: 10000 });
+  if (tryInitRustCtx()) {
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    return nb.ctxQueryAll(10000);
   }
   const ctxPath = getCtxPath(projectRoot);
   
@@ -215,8 +213,9 @@ export function readRecentEntries(
   projectRoot: string,
   limit = 20,
 ): Record<string, unknown>[] {
-  if (tryOpenSqlite() && _ctxDb) {
-    return _ctxDb.queryRecentEntries(limit);
+  if (tryInitRustCtx()) {
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    return nb.ctxQueryRecent(limit);
   }
   const ctxPath = getCtxPath(projectRoot);
   if (!existsSync(ctxPath)) return [];
@@ -268,8 +267,9 @@ export function readRecentEntries(
 export function readLastIncomplete(
   projectRoot: string,
 ): Record<string, unknown> | null {
-  if (tryOpenSqlite() && _ctxDb) {
-    const result = _ctxDb.queryLastIncomplete();
+  if (tryInitRustCtx()) {
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    const result = nb.ctxQueryLastIncomplete();
     if (result) return result;
   }
   const entries = readAllEntries(projectRoot);
@@ -297,8 +297,9 @@ export function readLastIncomplete(
 export function readLastCompleted(
   projectRoot: string,
 ): Record<string, unknown> | null {
-  if (tryOpenSqlite() && _ctxDb) {
-    const result = _ctxDb.queryLastCompleted();
+  if (tryInitRustCtx()) {
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    const result = nb.ctxQueryLastCompleted();
     if (result) return result;
   }
   const entries = readAllEntries(projectRoot);
