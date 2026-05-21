@@ -10,11 +10,21 @@ import { existsSync } from "node:fs";
 import { detectProjectRoot } from "./project-root.js";
 
 type NativeAddon = {
+  // Vector store
   initStore(dbPath: string): boolean;
   closeStore(): void;
   indexEmbedding(collection: string, id: string, embedding: number[], metadata?: string): boolean;
   searchSimilar(collection: string, query: number[], topK?: number): SearchResult[];
   removeEmbedding(collection: string, id: string): boolean;
+  // Ctx store (Rust-native, replaces bun:sqlite ctx-db)
+  initCtxStore(dbPath: string): boolean;
+  closeCtxStore(): void;
+  ctxInsert(eventJson: string): boolean;
+  ctxQueryLastIncomplete(): string | null;
+  ctxQueryLastCompleted(): string | null;
+  ctxQueryRecent(limit: number): string[];
+  ctxQueryAll(limit: number): string[];
+  ctxCount(): number;
 };
 
 type SearchResult = {
@@ -90,6 +100,59 @@ export function searchSimilarViolations(
  * 当无外部 embedding API 时使用。
  * 未来将替换为本地 ONNX 模型或外部 API 调用。
  */
+// ─── Ctx Store ──────────────────────────────────────────────
+
+export function initCtxStore(): boolean {
+  const addon = tryLoadNative();
+  if (!addon) return false;
+  const root = detectProjectRoot();
+  const dbPath = resolve(root, ".ritsu", "ctx.db");
+  return addon.initCtxStore(dbPath);
+}
+
+export function ctxInsert(event: Record<string, unknown>): boolean {
+  const addon = tryLoadNative();
+  if (!addon) return false;
+  return addon.ctxInsert(JSON.stringify(event));
+}
+
+export function ctxQueryLastIncomplete(): Record<string, unknown> | null {
+  const addon = tryLoadNative();
+  if (!addon) return null;
+  const result = addon.ctxQueryLastIncomplete();
+  if (!result) return null;
+  try { return JSON.parse(result) as Record<string, unknown>; } catch { return null; }
+}
+
+export function ctxQueryLastCompleted(): Record<string, unknown> | null {
+  const addon = tryLoadNative();
+  if (!addon) return null;
+  const result = addon.ctxQueryLastCompleted();
+  if (!result) return null;
+  try { return JSON.parse(result) as Record<string, unknown>; } catch { return null; }
+}
+
+export function ctxQueryRecent(limit = 50): Record<string, unknown>[] {
+  const addon = tryLoadNative();
+  if (!addon) return [];
+  try {
+    return addon.ctxQueryRecent(limit).map((s) => JSON.parse(s) as Record<string, unknown>);
+  } catch { return []; }
+}
+
+export function ctxQueryAll(limit = 10000): Record<string, unknown>[] {
+  const addon = tryLoadNative();
+  if (!addon) return [];
+  try {
+    return addon.ctxQueryAll(limit).map((s) => JSON.parse(s) as Record<string, unknown>);
+  } catch { return []; }
+}
+
+export function closeCtxStore(): void {
+  const addon = tryLoadNative();
+  if (addon) addon.closeCtxStore();
+}
+
 export function computeSimpleEmbedding(text: string, dimensions = 128): number[] {
   const vec = new Array(dimensions).fill(0);
   const normalized = text.toLowerCase().trim();
