@@ -1,8 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { execFileSync } from "node:child_process";
 import { ritsu_read_ctx } from "../handlers/read-ctx.js";
-import { detectSuperpowersPhase } from "./superpowers-bridge.js";
 import { ritsu_read_agents } from "../handlers/read-agents.js";
 import { ritsu_get_changed_files } from "../handlers/get-changed-files.js";
 import { ritsu_list_artifacts } from "../handlers/list-artifacts.js";
@@ -16,36 +14,11 @@ import {
   findSimilarViolations,
 } from "../similar-violations.js";
 import type { PolicyPreflightResult } from "./policy-preflight.js";
-
-/**
- * Optional CodeGraph context fetch for preflight enrichment.
- * Gracefully skips if CodeGraph is not installed.
- */
-function tryFetchCodeGraphContext(changedFiles?: Record<string, unknown> | null): Record<string, unknown> | null {
-  try {
-    execFileSync("which", ["codegraph"], { stdio: "ignore" });
-  } catch {
-    return null;
-  }
-
-  const files = changedFiles?.files;
-  if (!Array.isArray(files) || files.length === 0) return null;
-
-  const filePaths = files.filter((f): f is string => typeof f === "string").slice(0, 10);
-  if (filePaths.length === 0) return null;
-
-  try {
-    const output = execFileSync("codegraph", ["affected", "--json", ...filePaths], {
-      stdio: ["ignore", "pipe", "ignore"],
-      timeout: 10000,
-      maxBuffer: 1024 * 1024,
-    }).toString().trim();
-    const parsed = JSON.parse(output) as Record<string, unknown>;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
+import {
+  runSuperpowersBrainstorming,
+  fetchCodeGraphContext,
+  getToolReadiness,
+} from "./internal-tools.js";
 
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
 export type PreflightTier = "P0" | "P1" | "P2";
@@ -61,10 +34,10 @@ export type PreflightContextPack = Record<string, unknown> & {
   stage: PreflightStage;
   passed: boolean;
   next_skill?: string;
-  /** Optional CodeGraph context — present when codegraph CLI is available */
-  codegraph?: Record<string, unknown> | null;
-  /** When Superpowers is detected, the active Superpowers phase */
-  superpowers_phase?: string | null;
+  /** Available internal tools (auto-detected) */
+  _tools?: { superpowers: boolean; codegraph: boolean; openspec: boolean; native: boolean };
+  /** CodeGraph graph context (auto-fetched when available) */
+  _codegraph?: { symbols: string[]; files: string[] } | null;
 };
 
 function inferTier(
@@ -109,6 +82,17 @@ async function runThinkPreflight(
       pack.agents = JSON.parse(agentsText.text) as Record<string, unknown>;
     } catch {
       pack.agents = null;
+    }
+  }
+
+  // Auto-detect and report available internal tools
+  pack._tools = getToolReadiness(projectRoot);
+
+  // Internal: call Superpowers brainstorming if available
+  if (taskSummary && pack._tools.superpowers) {
+    const brainstorming = runSuperpowersBrainstorming(taskSummary);
+    if (brainstorming.ok) {
+      pack._brainstorming = brainstorming.requirements;
     }
   }
 
@@ -175,8 +159,12 @@ async function runDevReviewPreflight(
   }
   pack.changed_files = changed;
 
-  // Optional CodeGraph context enhancement
-  pack.codegraph = tryFetchCodeGraphContext(changed);
+  // Internal: auto-fetch CodeGraph context for affected symbols
+  const codegraphFiles = changed?.files;
+  if (Array.isArray(codegraphFiles)) {
+    const cg = fetchCodeGraphContext(codegraphFiles.filter((f): f is string => typeof f === "string"));
+    if (cg.symbols.length > 0) pack._codegraph = cg;
+  }
 
   const statDiff = await inspectDiff({
     projectRoot,
@@ -269,27 +257,12 @@ export async function runStagePreflight(
 ): Promise<PreflightContextPack> {
   const { projectRoot, stage, taskSummary = "" } = options;
 
-  // Detect if running inside Superpowers workflow
-  const sp = detectSuperpowersPhase(projectRoot);
-  if (sp.hasSuperpowers) {
-    console.error(`[ritsu-preflight] Superpowers detected, phase=${sp.currentPhase ?? "unknown"}, routing to Ritsu stage=${sp.ritsuStage}`);
-  }
-
-  // When Superpowers is active, the context_pack includes its phase info
   if (stage === "think") {
     const ctx = await readCtxCompact(projectRoot);
     const tier = inferTier(options.tier, ctx);
-    const pack = await runThinkPreflight(projectRoot, tier, taskSummary);
-    if (sp.hasSuperpowers) pack.superpowers_phase = sp.currentPhase;
-    return pack;
+    return runThinkPreflight(projectRoot, tier, taskSummary);
   }
   if (stage === "hunt") return runHuntPreflight(projectRoot);
-  if (stage === "dev") {
-    const pack = await runDevReviewPreflight(projectRoot, "dev", "dev");
-    if (sp.hasSuperpowers) pack.superpowers_phase = sp.currentPhase;
-    return pack;
-  }
-  const pack = await runDevReviewPreflight(projectRoot, "review", "review");
-  if (sp.hasSuperpowers) pack.superpowers_phase = sp.currentPhase;
-  return pack;
+  if (stage === "dev") return runDevReviewPreflight(projectRoot, "dev", "dev");
+  return runDevReviewPreflight(projectRoot, "review", "review");
 }
