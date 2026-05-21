@@ -46,6 +46,8 @@ export interface QualityGateSnapshot {
     total?: CoverageStats;
   };
   strict?: boolean;
+  /** Waza-style verification claim check. Non-null when unverified claims are found. */
+  verification_warning?: string;
 }
 
 export interface QualityGateExecutionContext {
@@ -140,6 +142,41 @@ function computeOverallStatus(
   };
 }
 
+/**
+ * Waza-style verification claims check.
+ * Scans output for unverified claims like "tests pass" / "已验证"
+ * when there's no actual test result available.
+ */
+function checkVerificationClaims(input: {
+  lint: { status: QualityGateStepStatus; output: string };
+  test: {
+    status: QualityGateStepStatus;
+    failures: unknown[];
+    output: string };
+}): string | null {
+  // If tests actually ran, no issue
+  if (input.test.status !== "skipped" || input.lint.status !== "skipped") return null;
+
+  const CLAIM_PATTERNS = [
+    /\b(?:tests?|all)\s+(?:pass|passed|绿色|通过)\b/i,
+    /\bverified\b/i,
+    /\b验证通过\b/,
+    /\b(?:测试|检查)\s*全部通过\b/,
+    /\bno\s+(?:issues|errors|failures)\b/i,
+  ];
+
+  const lintOutput = input.lint.output ?? "";
+  const testOutput = input.test.output ?? "";
+  const combined = `${lintOutput} ${testOutput}`;
+
+  for (const pattern of CLAIM_PATTERNS) {
+    if (pattern.test(combined)) {
+      return `Unverified claim detected: matched "${pattern.source}". Tests were skipped — provide actual execution evidence.`;
+    }
+  }
+  return null;
+}
+
 export function buildQualityGateSnapshot(input: {
   context?: QualityGateExecutionContext;
   worktree?: QualityGateWorktreeState;
@@ -156,11 +193,13 @@ export function buildQualityGateSnapshot(input: {
   strict?: boolean;
 }): QualityGateSnapshot {
   const overall = computeOverallStatus(input.lint.status, input.test.status);
+  const verificationWarning = checkVerificationClaims(input);
 
   return {
     recorded_at: ts(),
     passed: overall.passed,
     status: overall.status,
+    verification_warning: verificationWarning ?? undefined,
     context:
       input.context && Object.keys(input.context).length > 0
         ? input.context

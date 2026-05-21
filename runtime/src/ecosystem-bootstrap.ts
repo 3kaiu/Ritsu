@@ -40,6 +40,7 @@ export type EcosystemConfig = {
   ast_grep: boolean;
   optional_mcp?: {
     context7?: { enabled: boolean; disabled_reason?: string };
+    codegraph?: { enabled: boolean; disabled_reason?: string };
   };
 };
 
@@ -98,6 +99,10 @@ function buildMcpServers(projectRoot: string): Record<string, unknown> {
       env: {
         GITHUB_PERSONAL_ACCESS_TOKEN: "${env:GITHUB_PERSONAL_ACCESS_TOKEN}",
       },
+    },
+    codegraph: {
+      command: "npx",
+      args: ["-y", "codegraph", "serve", "--mcp"],
     },
   };
 }

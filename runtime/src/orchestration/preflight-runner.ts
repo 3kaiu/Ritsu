@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { execFileSync } from "node:child_process";
 import { ritsu_read_ctx } from "../handlers/read-ctx.js";
 import { ritsu_read_agents } from "../handlers/read-agents.js";
 import { ritsu_get_changed_files } from "../handlers/get-changed-files.js";
@@ -15,6 +16,36 @@ import {
 } from "../similar-violations.js";
 import type { PolicyPreflightResult } from "./policy-preflight.js";
 
+/**
+ * Optional CodeGraph context fetch for preflight enrichment.
+ * Gracefully skips if CodeGraph is not installed.
+ */
+function tryFetchCodeGraphContext(changedFiles?: Record<string, unknown> | null): Record<string, unknown> | null {
+  try {
+    execFileSync("which", ["codegraph"], { stdio: "ignore" });
+  } catch {
+    return null;
+  }
+
+  const files = changedFiles?.files;
+  if (!Array.isArray(files) || files.length === 0) return null;
+
+  const filePaths = files.filter((f): f is string => typeof f === "string").slice(0, 10);
+  if (filePaths.length === 0) return null;
+
+  try {
+    const output = execFileSync("codegraph", ["affected", "--json", ...filePaths], {
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10000,
+      maxBuffer: 1024 * 1024,
+    }).toString().trim();
+    const parsed = JSON.parse(output) as Record<string, unknown>;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
 export type PreflightTier = "P0" | "P1" | "P2";
 
@@ -29,6 +60,8 @@ export type PreflightContextPack = Record<string, unknown> & {
   stage: PreflightStage;
   passed: boolean;
   next_skill?: string;
+  /** Optional CodeGraph context — present when codegraph CLI is available */
+  codegraph?: Record<string, unknown> | null;
 };
 
 function inferTier(
@@ -138,6 +171,9 @@ async function runDevReviewPreflight(
     }
   }
   pack.changed_files = changed;
+
+  // Optional CodeGraph context enhancement
+  pack.codegraph = tryFetchCodeGraphContext(changed);
 
   const statDiff = await inspectDiff({
     projectRoot,
