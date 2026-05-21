@@ -37,4 +37,6 @@ coverage/
 
 # Local IDE Configurations
 .mcp.json
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/*

@@ -1,0 +1,15 @@
+---
+description: Ritsu AI Delivery Workflow Engine
+globs: "*"
+---
+# Ritsu
+
+See `CLAUDE.md` for the complete AI onboarding guide.
+
+## Quick Reference
+
+- Build: `bun run --cwd runtime build`
+- Test: `bun run --cwd runtime test` (342 tests)
+- Workflow: `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
+- MCP: `ritsu` 提供 22 个工具
+- Check: `ritsu doctor`
