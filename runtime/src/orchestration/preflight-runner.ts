@@ -43,6 +43,8 @@ export type PreflightContextPack = Record<string, unknown> & {
   _architecture?: Record<string, unknown>;
   /** Architecture drift violations (detected during dev/review preflight) */
   _architecture_drift?: import("./architecture-analyzer.js").LayerRule[];
+  /** AI-readable action summary — 读这个就知道下一步该干什么 */
+  _ai_summary?: string;
 };
 
 function inferTier(
@@ -134,6 +136,14 @@ async function runThinkPreflight(
   }
 
   pack.next_skill = "dev";
+
+  // AI summary
+  const ctx = pack.ctx as Record<string, unknown> | null | undefined;
+  const stageStr = `Stage: think (${tier})`;
+  const ctxStr = ctx?.recovery_context ? `Resuming: ${(ctx.recovery_context as Record<string, unknown>).resume_hint ?? "incomplete task"}` : "New task";
+  const archStr = pack._architecture ? `Architecture: ${(pack._architecture as Record<string, unknown>).modules ?? "scanning"}` : "";
+  pack._ai_summary = [stageStr, ctxStr, archStr].filter(Boolean).join(" | ");
+
   return pack;
 }
 
@@ -238,6 +248,11 @@ async function runDevReviewPreflight(
       : "close_span"
     : stage;
 
+  const ctx = pack.ctx as Record<string, unknown> | null | undefined;
+  const passStr = pack.passed ? "Policy: passed" : "Policy: violations found";
+  const driftStr = pack._architecture_drift ? `Architecture drift: ${pack._architecture_drift.length} issues` : "";
+  pack._ai_summary = [`Stage: ${stage}`, passStr, driftStr].filter(Boolean).join(" | ");
+
   return pack;
 }
 
@@ -275,6 +290,12 @@ async function runHuntPreflight(projectRoot: string): Promise<PreflightContextPa
   );
 
   pack.next_skill = "dev";
+
+  const ctx = pack.ctx as Record<string, unknown> | null | undefined;
+  const cv = (pack.similar_violations as Array<Record<string, unknown>> | undefined)?.length ?? 0;
+  const recovery = ctx?.recovery_context ? `Recovery: ${(ctx.recovery_context as Record<string, unknown>).resume_hint ?? "available"}` : "";
+  pack._ai_summary = [`Stage: hunt`, `Similar violations found: ${cv}`, recovery].filter(Boolean).join(" | ");
+
   return pack;
 }
 

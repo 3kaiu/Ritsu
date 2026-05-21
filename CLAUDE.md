@@ -1,62 +1,51 @@
-# Ritsu — AI Delivery Workflow Engine
+# Ritsu — AI Delivery Workflow Skill
 
-This project is Ritsu. You are the AI operating it.
+Ritsu is a **skill** for Claude Code / Codex / Cursor. It governs your AI delivery workflow through 6 skill commands. It doesn't replace your AI tool — it runs inside it.
 
-当你看到这条消息时，你应该立即执行 `ritsu doctor` 检查 Ritsu 是否正常运行。然后根据当前阶段选择下文对应的技能。
-
-## 快速启动
+## Install
 
 ```bash
-bun run --cwd runtime build   # 编译
-bun run --cwd runtime test    # 测试 (342 tests)
+npx skills add 3kaiu/Ritsu -a claude-code -g -y
+# or: /plugin install ritsu
 ```
 
-## 你的工具
+After install, reload MCP and run `ritsu doctor`.
 
-| 工具 | 用途 |
-|------|------|
-| `ritsu` MCP (22 个工具) | 策略引擎、ctx 追踪、artifact 管理 |
-| `ritsu_exec <cmd>` | 在项目根执行命令（安全沙箱） |
-| `ritsu_preflight` | 进入阶段前加载上下文 |
-| `ritsu_span_lifecycle` | 打开/关闭工作 span |
-| `ritsu_write_artifact` | 写入产物文件 |
-| `ritsu_run_quality_gates` | 质量门禁 |
+## Your Skills
 
-完整工具列表见 `_shared/mcp-tools.yaml`。
-
-## 你的工作流
-
-根据当前阶段选择技能指令:
-
-| 阶段 | 指令 | 产出 |
+| 执行 | 指令 | 产出 |
 |------|------|------|
-| 设计 | `/r-think` | design-sheet (含 contracts) |
-| 实现 | `/r-dev` | dev-report + quality-gates |
-| 验收 | `/r-review` | assurance-sheet |
-| 排障 | `/r-hunt` | diagnosis |
-| 补测 | `/r-augment` | 测试覆盖率提升 |
-| 初始化 | `/r-init` | AGENTS.md + .ritsu/ |
+| Think | `/r-think` | design-sheet |
+| Dev | `/r-dev` | dev-report + quality-gates |
+| Review | `/r-review` | assurance-sheet |
+| Hunt | `/r-hunt` | diagnosis |
+| Augment | `/r-augment` | 提升测试覆盖 |
+| Init | `/r-init` | AGENTS.md + .ritsu/ |
 
-每个阶段执行前先运行 `ritsu_preflight` 获取上下文包。
+Each skill = `skills/<stage>/SKILL.md` — read it before executing.
 
-## 你必须遵守的规则
+## How Ritsu Helps You
 
-`rules/anti-patterns.yaml` 定义 20 条全局底线，关键几条：
+- **preflight**: 进入技能前自动加载上下文、检查策略、检测架构漂移
+- **policy**: 写入时自动拦截反模式 (AP-1 ~ AP-13, 20条规则)
+- **gates**: 完成时自动运行 lint + test + 指纹校验
+- **memory**: 下一 session 自动恢复上次未完成的任务
+- **learning**: 从你的修正中学习偏好，下次自动遵守
 
-- **AP-5** 没有运行日志的"应该能工作"算是撒谎
-- **AP-6** 不准留下 TODO/TBD/后续实现
-- **AP-7** 命令报错了必须停下来分析
-- **AP-9** 不准在产出中标注 AI 身份痕迹
-- **AP-13** 交付前必须扫 debugger/console.log
+## Rules
 
-## 跨会话记忆
+`rules/anti-patterns.yaml` — 全部 20 条。关键的：
 
-Ritsu 会自动捕获违规事件和偏好学习结果到向量引擎。新会话启动时 `ritsu_read_ctx` 会返回上次未完成的任务和恢复上下文。你也可以用 `ritsu mine --auto` 让 Ritsu 从历史修正中学习规则。
+- **AP-5**: 没有命令输出就不要说"通过了"
+- **AP-6**: 不准留 TODO/TBD
+- **AP-7**: 报错了就停下来分析
+- **AP-9**: 产出不留 AI 痕迹
+- **AP-13**: 交付前扫 debugger/console.log
 
 ## 架构参考
 
-- `runtime/src/` — 所有 TypeScript 源码 (~12,600行, 60测试文件)
-- `runtime/native/` — Rust napi-rs 引擎 (向量搜索 + ctx 存储)
-- `skills/<stage>/SKILL.md` — 每个阶段的详细指令和 Gotchas
-- `rules/anti-patterns.yaml` — 策略引擎红线
-- `_shared/mcp-tools.yaml` — MCP 工具定义
+- `skills/<stage>/SKILL.md` — 技能详细指令 + Gotchas
+- `runtime/src/` — 源码 (60 测试文件 / 342 测试)
+- `runtime/native/` — Rust 引擎 (向量搜索 + ctx 存储)
+- `_shared/mcp-tools.yaml` — 22 个 MCP 工具
+- `rules/anti-patterns.yaml` — 策略规则 + WRONG/RIGHT 示例
