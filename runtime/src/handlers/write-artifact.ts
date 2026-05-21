@@ -139,7 +139,7 @@ export type ArtifactErrorPayload = {
 let cachedArtifactSchemas: Record<string, { required_sections?: ArtifactSchemaSection[] }> | null =
   null;
 
-function buildArtifactSummary(content: string): string {
+export function buildArtifactSummary(content: string): string {
   const firstMeaningfulLine = content
     .split(/\r?\n/)
     .map((line) => line.trim())

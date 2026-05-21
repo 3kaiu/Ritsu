@@ -52,7 +52,11 @@ total_steps: 4
 2. **产出设计产物**:
    - 若 preflight 已产出 OpenSpec 桥接 sheet：以其为契约 SoT，**勿**再写第二份完整 narrative design-sheet。
    - 单人非 OpenSpec：`design-sheet` + `contracts[]` 必填。
-   - Multi-Agent：`ritsu_open_span` + `coordination-sheet`。
+   - Multi-Agent：`ritsu_span_lifecycle action=open` + `coordination-sheet`。
+
+### 架构上下文
+Preflight 已自动加载架构指纹（见 AGENTS.md Architecture Block）。分析时优先参考该块的模块边界和依赖规则。
+
 3. **引导**: "架构设计已就绪。建议 `/r-dev`。"
 
 ## Gotchas

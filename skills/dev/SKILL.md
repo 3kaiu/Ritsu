@@ -46,7 +46,7 @@ total_steps: 5
 #### 2. 实现对账
 
 - **P1**: 读取 `design-brief` 或 `design-sheet`。
-- **P2**: `ritsu_open_span`（若尚无 trace）+ 完整对账 `design-sheet` / `coordination-sheet` + 偏好加载。
+- **P2**: `ritsu_span_lifecycle action=open`（若尚无 trace）+ 完整对账 `design-sheet` / `coordination-sheet` + 偏好加载。
 
 #### 3. 编码
 

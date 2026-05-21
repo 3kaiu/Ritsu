@@ -45,7 +45,7 @@ total_steps: 4
 #### 3. 产出与归档
 
 - 产出 `assurance-sheet`（P2）。
-- `ritsu_close_span`；OpenSpec 项目由 hook 自动 archive（告知用户检查 specs）。
+- `ritsu_span_lifecycle action=close`；由 hook 自动归档（告知用户检查 specs）。
 
 ## Gotchas
 
