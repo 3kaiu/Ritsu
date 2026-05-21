@@ -1,0 +1,37 @@
+name: Bug Report
+description: Report a problem with Ritsu
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Steps to reproduce or attach relevant artifacts
+      placeholder: "1. Run `ritsu doctor`\n2. See error..."
+
+  - type: input
+    id: version
+    attributes:
+      label: Ritsu version
+      description: From AGENTS.md or runtime/package.json
+      placeholder: "7.0.0"
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - MCP handler
+        - Policy engine
+        - CLI
+        - CI/CD
+        - Documentation
+        - Other
