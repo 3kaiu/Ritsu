@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
-import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
+import yaml from "js-yaml";
+import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation, Severity } from "../types.js";
 import { getProjectRoot } from "../../handlers/_utils.js";
 
 type AstGrepMatch = {
@@ -82,9 +83,153 @@ function findAstGrepBinary(root: string): { binary: string; args: string[] } {
   return { binary: "npx", args: ["--yes", "@ast-grep/cli"] };
 }
 
+export interface FallbackRule {
+  id: string;
+  pattern: string;
+  message: string;
+  severity: Severity;
+}
+
+export class AstGrepRuleBridge {
+  static loadRules(ruleDir: string): FallbackRule[] {
+    const rules: FallbackRule[] = [];
+    if (!existsSync(ruleDir)) return rules;
+
+    try {
+      const files = readdirSync(ruleDir);
+      for (const file of files) {
+        if (file.endsWith(".yml") || file.endsWith(".yaml")) {
+          const content = readFileSync(resolve(ruleDir, file), "utf-8");
+          const parsed = yaml.load(content) as {
+            id?: unknown;
+            message?: unknown;
+            severity?: unknown;
+            rule?: {
+              pattern?: unknown;
+            };
+          } | null;
+          if (
+            parsed &&
+            typeof parsed.id === "string" &&
+            parsed.rule &&
+            typeof parsed.rule.pattern === "string"
+          ) {
+            rules.push({
+              id: parsed.id,
+              pattern: parsed.rule.pattern,
+              message: typeof parsed.message === "string" ? parsed.message : parsed.id,
+              severity: (typeof parsed.severity === "string" ? parsed.severity : "warn") as Severity,
+            });
+          }
+        }
+      }
+    } catch {
+      // ignore errors
+    }
+    return rules;
+  }
+
+  static patternToRegex(pattern: string): RegExp {
+    let escaped = pattern
+      .replace(/[|\\{}()[\]^$+*?.]/g, "\\$&")
+      .replace(/\s+/g, "\\s*");
+    escaped = escaped.replace(/\\\$\\\$\\\$/g, "[\\s\\S]*?");
+    escaped = escaped.replace(/\\\$[a-zA-Z_][a-zA-Z0-9_]*/g, "[a-zA-Z0-9_$]*");
+    return new RegExp(escaped, "g");
+  }
+
+  static createAstMatcher(pattern: string): (node: ts.Node) => boolean {
+    const norm = pattern.trim().replace(/\s+/g, " ");
+
+    if (norm === "debugger") {
+      return (node) => node.kind === ts.SyntaxKind.DebuggerStatement;
+    }
+
+    if (norm.startsWith("catch")) {
+      return (node) => {
+        if (ts.isCatchClause(node)) {
+          const block = node.block;
+          return block !== undefined && block.statements.length === 0;
+        }
+        return false;
+      };
+    }
+
+    // Property access call: e.g. console.log($$$) or foo.bar($$$)
+    const propertyAccessCallMatch = norm.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\.([a-zA-Z_$][a-zA-Z0-9_$]*)\(\s*(?:\$\$\$|\$[a-zA-Z0-9_$]+)?\s*\)$/);
+    if (propertyAccessCallMatch) {
+      const [, obj, method] = propertyAccessCallMatch;
+      return (node) => {
+        if (ts.isCallExpression(node)) {
+          const exp = node.expression;
+          if (ts.isPropertyAccessExpression(exp)) {
+            return (
+              ts.isIdentifier(exp.expression) &&
+              exp.expression.text === obj &&
+              exp.name.text === method
+            );
+          }
+        }
+        return false;
+      };
+    }
+
+    // Single identifier call: e.g. eval($$$) or alert($$$)
+    const identifierCallMatch = norm.match(/^([a-zA-Z_$][a-zA-Z0-9_$]*)\(\s*(?:\$\$\$|\$[a-zA-Z0-9_$]+)?\s*\)$/);
+    if (identifierCallMatch) {
+      const [, func] = identifierCallMatch;
+      return (node) => {
+        if (ts.isCallExpression(node)) {
+          const exp = node.expression;
+          return ts.isIdentifier(exp) && exp.text === func;
+        }
+        return false;
+      };
+    }
+
+    // Default fallback
+    return () => false;
+  }
+}
+
 function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyViolation[] {
   const violations: PolicyViolation[] = [];
   const hintPrefix = `[ritsu] 💡 提示：检测到当前宿主系统未全局安装 ast-grep，已自动降级为原生安全解析。建议运行 npm i -g @ast-grep/cli 获得更强的底线检测。\n`;
+
+  const config = rule.detector;
+  const ruleDirRel = typeof config?.rule_dir === "string" ? config.rule_dir : "rules/ast-grep";
+  const ruleDir = resolve(root, ruleDirRel);
+
+  let loadedRules = AstGrepRuleBridge.loadRules(ruleDir);
+  if (loadedRules.length === 0) {
+    loadedRules = [
+      {
+        id: "ritsu-no-debugger",
+        pattern: "debugger",
+        message: "Remove debugger statements before commit",
+        severity: "error",
+      },
+      {
+        id: "ritsu-no-empty-catch",
+        pattern: "catch ($E) {\n}",
+        message: "Empty catch blocks hide failures (AP-7 silent failures)",
+        severity: "warn",
+      },
+      {
+        id: "ritsu-no-console-log",
+        pattern: "console.log($$$)",
+        message: "Avoid console.log in production paths (use structured logging)",
+        severity: "warn",
+      },
+    ];
+  }
+
+  // Precompile matchers
+  const matchers = loadedRules.map((r) => ({
+    rule: r,
+    astMatcher: AstGrepRuleBridge.createAstMatcher(r.pattern),
+    regex: AstGrepRuleBridge.patternToRegex(r.pattern),
+  }));
 
   for (const file of files) {
     const fileRel = file.replace(root + "/", "");
@@ -98,6 +243,8 @@ function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyVi
     const ext = file.split(".").pop()?.toLowerCase();
     const isJsTs = ext && ["ts", "tsx", "js", "jsx", "mjs", "cjs"].includes(ext);
 
+    const fileViolations: PolicyViolation[] = [];
+
     if (isJsTs) {
       try {
         const sourceFile = ts.createSourceFile(
@@ -108,51 +255,16 @@ function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyVi
         );
 
         const checkNode = (node: ts.Node) => {
-          // Check debugger
-          if (node.kind === ts.SyntaxKind.DebuggerStatement) {
-            const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-            violations.push({
-              rule_id: rule.id,
-              severity: rule.severity,
-              message: `${hintPrefix}Avoid debugger statements (detected via TypeScript AST).`,
-              evidence: `${fileRel}:${line + 1}:${character + 1} - debugger;`,
-              confidence: 0.95,
-            });
-          }
-
-          // Check empty catch block
-          if (ts.isCatchClause(node)) {
-            const block = node.block;
-            if (block && block.statements.length === 0) {
-              const { line, character } = sourceFile.getLineAndCharacterOfPosition(block.getStart());
-              violations.push({
-                rule_id: rule.id,
-                severity: rule.severity,
-                message: `${hintPrefix}Avoid empty catch blocks (detected via TypeScript AST).`,
-                evidence: `${fileRel}:${line + 1}:${character + 1} - empty catch block`,
+          for (const m of matchers) {
+            if (m.astMatcher(node)) {
+              const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
+              fileViolations.push({
+                rule_id: m.rule.id,
+                severity: m.rule.severity,
+                message: `${hintPrefix}${m.rule.message}`,
+                evidence: `${fileRel}:${line + 1}:${character + 1} - ${node.getText(sourceFile).slice(0, 100)}`,
                 confidence: 0.95,
               });
-            }
-          }
-
-          // Check console.log call
-          if (ts.isCallExpression(node)) {
-            const expression = node.expression;
-            if (ts.isPropertyAccessExpression(expression)) {
-              if (
-                ts.isIdentifier(expression.expression) &&
-                expression.expression.text === "console" &&
-                expression.name.text === "log"
-              ) {
-                const { line, character } = sourceFile.getLineAndCharacterOfPosition(node.getStart());
-                violations.push({
-                  rule_id: rule.id,
-                  severity: rule.severity,
-                  message: `${hintPrefix}Avoid console.log in production paths (detected via TypeScript AST).`,
-                  evidence: `${fileRel}:${line + 1}:${character + 1} - console.log(...)`,
-                  confidence: 0.95,
-                });
-              }
             }
           }
 
@@ -166,40 +278,23 @@ function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyVi
     }
 
     // Always do a regex check as backup or for non-JS/TS files
-    if (violations.length === 0) {
-      const debuggerMatches = [...content.matchAll(/\bdebugger\b/g)];
-      for (let i = 0; i < debuggerMatches.length; i++) {
-        violations.push({
-          rule_id: rule.id,
-          severity: rule.severity,
-          message: `${hintPrefix}Avoid debugger statements (detected via regex).`,
-          evidence: `${fileRel} - debugger`,
-          confidence: 0.7,
-        });
-      }
-
-      const catchMatches = [...content.matchAll(/\bcatch\s*(\([^)]*\))?\s*\{\s*\}/g)];
-      for (let i = 0; i < catchMatches.length; i++) {
-        violations.push({
-          rule_id: rule.id,
-          severity: rule.severity,
-          message: `${hintPrefix}Avoid empty catch blocks (detected via regex).`,
-          evidence: `${fileRel} - empty catch block`,
-          confidence: 0.7,
-        });
-      }
-
-      const consoleMatches = [...content.matchAll(/\bconsole\.log\s*\(/g)];
-      for (let i = 0; i < consoleMatches.length; i++) {
-        violations.push({
-          rule_id: rule.id,
-          severity: rule.severity,
-          message: `${hintPrefix}Avoid console.log in production paths (detected via regex).`,
-          evidence: `${fileRel} - console.log`,
-          confidence: 0.7,
-        });
+    if (fileViolations.length === 0) {
+      for (const m of matchers) {
+        m.regex.lastIndex = 0;
+        const matches = [...content.matchAll(m.regex)];
+        for (const match of matches) {
+          fileViolations.push({
+            rule_id: m.rule.id,
+            severity: m.rule.severity,
+            message: `${hintPrefix}${m.rule.message} (detected via regex)`,
+            evidence: `${fileRel} - ${match[0].slice(0, 100)}`,
+            confidence: 0.7,
+          });
+        }
       }
     }
+
+    violations.push(...fileViolations);
   }
 
   return violations;

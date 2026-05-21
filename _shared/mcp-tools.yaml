@@ -144,46 +144,27 @@ tools:
         ok: { type: boolean }
         output: { type: string }
 
-  - name: ritsu_get_changed_files
-    description: 获取 Git 变更文件列表。
+  - name: ritsu_inspect_git_changes
+    description: "统一 Git 变更与 diff 检视：支持 status (变更列表)、stat (diffstat)、chunks (hunks 摘要)、full (完整 diff)。"
     call_template:
-      tool: ritsu_get_changed_files
+      tool: ritsu_inspect_git_changes
       params:
+        mode: full
         staged: true
         unstaged: true
     input:
-      staged: { type: boolean, required: false }
-      unstaged: { type: boolean, required: false }
-    output_schema:
-      type: object
-      required: [files, total, domain_hint]
-      properties:
-        files: { type: array }
-        total: { type: integer }
-        domain_hint: { type: string }
-
-  - name: ritsu_inspect_diff
-    description: "统一 diff 检视：mode=stat|chunks|full（合并原 get_diff 与 diff_chunks）。"
-    call_template:
-      tool: ritsu_inspect_diff
-      params:
-        mode: full
-        cached: false
-    input:
       mode:
         type: enum
-        values: [stat, chunks, full]
+        values: [status, stat, chunks, full]
         required: false
       cached: { type: boolean, required: false }
       max_output_lines: { type: integer, required: false }
       top_n: { type: integer, required: false }
+      staged: { type: boolean, required: false }
+      unstaged: { type: boolean, required: false }
     output_schema:
       type: object
-      properties:
-        mode: { type: string }
-        files: { type: array }
-        chunks: { type: array }
-        diff: { type: string }
+
 
   - name: ritsu_run_quality_gates
     description: 执行项目质量门禁（Lint + Test）。
@@ -253,52 +234,37 @@ tools:
         id: { type: string }
         matches: { type: array }
 
-  - name: ritsu_open_span
-    description: 创建 root 或 child span，写入 started 事件。
+  - name: ritsu_span_lifecycle
+    description: "生命周期Span管理：支持 open (新建/创建) 与 close (完成/失败关闭)。"
     call_template:
-      tool: ritsu_open_span
+      tool: ritsu_span_lifecycle
       params:
+        action: open
         skill: "{skill_name}"
         domain: "{value}"
     input:
-      skill: { type: string, required: true }
-      domain: { type: string, required: true }
+      action:
+        type: enum
+        values: [open, close]
+        required: true
+      skill: { type: string, required: false }
+      domain: { type: string, required: false }
       trace_id: { type: string, required: false }
+      span_id: { type: string, required: false }
       parent_span_id: { type: string, required: false }
-      agent: { type: object, required: false }
-    output_schema:
-      type: object
-      required: [trace_id, span_id, status]
-      properties:
-        trace_id: { type: string }
-        span_id: { type: string }
-        status: { type: string }
-
-  - name: ritsu_close_span
-    description: 关闭 span，写入 done 或 failed 事件。
-    call_template:
-      tool: ritsu_close_span
-      params:
-        trace_id: "{trace_id}"
-        span_id: "{span_id}"
-        status: "done"
-        skill: "{skill_name}"
-        domain: "{value}"
-    input:
-      trace_id: { type: string, required: true }
-      span_id: { type: string, required: true }
-      status: { type: enum, values: [done, failed], required: true }
-      skill: { type: string, required: true }
-      domain: { type: string, required: true }
+      status:
+        type: enum
+        values: [done, failed]
+        required: false
       error: { type: string, required: false }
       cost: { type: object, required: false }
+      step: { type: string, required: false }
+      metadata: { type: object, required: false }
+      agent: { type: object, required: false }
+      name: { type: string, required: false }
     output_schema:
       type: object
-      required: [trace_id, span_id, status]
-      properties:
-        trace_id: { type: string }
-        span_id: { type: string }
-        status: { type: string }
+
 
   - name: ritsu_join_trace
     description: 查询 trace 状态，返回 span tree 与 artifacts 列表。
@@ -329,77 +295,43 @@ tools:
         ok: { type: boolean }
         path: { type: string }
 
-  - name: ritsu_claim_file
-    description: "申请锁定一个文件（File Lease），防止多 Agent 冲突修改。"
+  - name: ritsu_file_lease
+    description: "防冲突文件锁定机制：支持 claim (申请锁定)、release (释放锁定) 与 list (查看当前活跃锁定)。"
     call_template:
-      tool: ritsu_claim_file
+      tool: ritsu_file_lease
       params:
+        action: claim
         path: "{file_path}"
         span_id: "{span_id}"
     input:
-      path: { type: string, required: true }
-      span_id: { type: string, required: true }
-      ttl_ms: { type: integer, required: false, description: "Lease validity duration (default 5min)." }
+      action:
+        type: enum
+        values: [claim, release, list]
+        required: true
+      path: { type: string, required: false }
+      span_id: { type: string, required: false }
+      ttl_ms: { type: integer, required: false }
     output_schema:
       type: object
-      required: [ok, path]
-      properties:
-        ok: { type: boolean }
-        path: { type: string }
-        message: { type: string }
 
-  - name: ritsu_release_file
-    description: "释放一个文件的锁定。"
+  - name: ritsu_task_coordination
+    description: "多Agent子任务协同：支持 claim (领取任务) 与 list (获取待领取列表)。"
     call_template:
-      tool: ritsu_release_file
+      tool: ritsu_task_coordination
       params:
-        path: "{file_path}"
-        span_id: "{span_id}"
-    input:
-      path: { type: string, required: true }
-      span_id: { type: string, required: true }
-    output_schema:
-      type: object
-      required: [ok]
-      properties:
-        ok: { type: boolean }
-
-  - name: ritsu_list_leases
-    description: "查看当前所有活跃的文件锁定状态。"
-    call_template:
-      tool: ritsu_list_leases
-    input: {}
-    output_schema:
-      type: object
-      required: [leases]
-
-  - name: ritsu_claim_task
-    description: "领取一个在协调单 (coordination-sheet) 中声明的子任务。"
-    call_template:
-      tool: ritsu_claim_task
-      params:
+        action: claim
         span_id: "{span_id}"
         agent_id: "{agent_id}"
     input:
-      span_id: { type: string, required: true }
-      agent_id: { type: string, required: true }
+      action:
+        type: enum
+        values: [claim, list]
+        required: true
+      span_id: { type: string, required: false }
+      agent_id: { type: string, required: false }
     output_schema:
       type: object
-      required: [ok]
-      properties:
-        ok: { type: boolean }
-        message: { type: string }
 
-  - name: ritsu_list_pending_tasks
-    description: "从所有协调单中提取当前待领取的任务列表。"
-    call_template:
-      tool: ritsu_list_pending_tasks
-    input: {}
-    output_schema:
-      type: object
-      required: [tasks]
-      properties:
-        tasks: { type: array }
 
   - name: ritsu_verify_trace
     description: "校验 Trace 链路中所有事件的 HMAC 签名，确保数据完整性与来源可信。"

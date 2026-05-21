@@ -104,7 +104,6 @@ export function usage(): string {
     "ritsu trace --open         # 展示当前所有未关闭的 Trace",
     "ritsu trace --check-triple  # 验证最新 Trace 的三方一致性 (Design ↔ Dev ↔ Assurance)",
     "ritsu doctor               # 项目健康检查 (版本对齐、环境校验、锁文件)",
-    "ritsu doctor --hot-rules   # 离线统计 30 天内 rule_id 触发热度",
     "ritsu doctor --health      # 输出核心健康度 4 指标与趋势分析",
     "ritsu doctor --similar-violations [--since 30d] [--query text]  # 离线相似违规检索（Jaccard，无 embedding）",
     "ritsu doctor --ecosystem          # 校验 MCP/OpenSpec/ast-grep 生态可达性",
@@ -480,37 +479,7 @@ export async function runSimilarViolations(
   }
 }
 
-export async function runHotRules(since: string | null = null) {
-  const root = getProjectRoot();
-  const ritsuDir = resolve(root, ".ritsu");
-  if (!existsSync(ritsuDir)) return;
 
-  const files = readdirSync(ritsuDir).filter(f => f.startsWith("ctx-") && f.endsWith(".jsonl")).sort();
-  
-  const counts: Record<string, number> = {};
-  const limitDate = since ? since.replace(/-/g, "") : new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10).replace(/-/g, "");
-
-  for (const f of files) {
-    const events = parseJsonl(resolve(ritsuDir, f));
-    for (const e of events) {
-      if (e.status === "violation_detected" && e.violation?.rule_id) {
-        if (e.ts.slice(0, 8) >= limitDate) {
-          counts[e.violation.rule_id] = (counts[e.violation.rule_id] || 0) + 1;
-        }
-      }
-    }
-  }
-
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  if (sorted.length === 0) {
-    console.log(color("No violations detected in the specified period.", "gray"));
-  } else {
-    console.log(color(`Top Hot Rules (Since ${limitDate}):`, "cyan"));
-    for (const [rid, count] of sorted.slice(0, 10)) {
-      console.log(`  - ${color(rid, "yellow")}: ${count} times`);
-    }
-  }
-}
 
 export async function runDoctorHealth() {
   const root = getProjectRoot();
@@ -631,14 +600,7 @@ export async function runDoctor(args: string[] = []) {
     return;
   }
 
-  if (args.includes("--hot-rules")) {
-    let since = null;
-    for (let i = 0; i < args.length; i++) {
-      if (args[i] === "--since") since = args[++i];
-    }
-    await runHotRules(since);
-    return;
-  }
+
 
   if (args.includes("--health")) {
     await runDoctorHealth();

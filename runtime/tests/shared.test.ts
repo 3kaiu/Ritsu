@@ -73,4 +73,37 @@ describe("shared helpers", () => {
     expect(nodeAllowed.has("npm")).toBe(true);
     expect(nodeAllowed.has("curl")).toBe(true);
   });
+
+  it("enforces minimal secure subset when fingerprints are missing/invalid", () => {
+    // Missing, empty, or undefined fingerprints must default strictly to minimal secure binaries
+    const emptyAllowed = getAllowedBinariesForProject([]);
+    expect(emptyAllowed.has("node")).toBe(false);
+    expect(emptyAllowed.has("npx")).toBe(false);
+    expect(emptyAllowed.has("tsc")).toBe(false);
+    expect(emptyAllowed.has("mkdir")).toBe(false);
+    expect(emptyAllowed.has("git")).toBe(true);
+    expect(emptyAllowed.has("grep")).toBe(true);
+
+    const nullAllowed = getAllowedBinariesForProject(undefined);
+    expect(nullAllowed.has("node")).toBe(false);
+    expect(nullAllowed.has("git")).toBe(true);
+
+    const invalidAllowed = getAllowedBinariesForProject(["", "  "]);
+    expect(invalidAllowed.has("node")).toBe(false);
+    expect(invalidAllowed.has("git")).toBe(true);
+
+    // Python-only stack should NOT have node execution capabilities
+    const pyAllowed = getAllowedBinariesForProject(["python"]);
+    expect(pyAllowed.has("node")).toBe(false);
+    expect(pyAllowed.has("git")).toBe(true);
+    expect(pyAllowed.has("python")).toBe(true);
+
+    // nodejs stack elements must successfully elevate node/ts privileges
+    const tsAllowed = getAllowedBinariesForProject(["typescript"]);
+    expect(tsAllowed.has("node")).toBe(true);
+    expect(tsAllowed.has("npx")).toBe(true);
+    expect(tsAllowed.has("tsc")).toBe(true);
+    expect(tsAllowed.has("mkdir")).toBe(true);
+    expect(tsAllowed.has("git")).toBe(true);
+  });
 });

@@ -12,7 +12,6 @@ import {
   runDoctor,
   runDoctorHealth,
   runExport,
-  runHotRules,
   runTrace,
 } from "../src/cli.js";
 import {
@@ -119,30 +118,6 @@ describe("cli supplemental coverage", () => {
     expect(getLatestTraceId([])).toBeNull();
   });
 
-  it("prints the no-violations hot-rules message", async () => {
-    const output = captureConsole();
-    writeCtx(testRoot, [
-      {
-        ts: "20260519-100000",
-        correlation_id: "cid-1",
-        skill: "think",
-        domain: "fullstack",
-        status: "started",
-      },
-    ]);
-
-    await runHotRules("2026-05-01");
-
-    expect(output.output).toContain("No violations detected in the specified period.");
-  });
-
-  it("returns early when hot-rules has no .ritsu directory", async () => {
-    const output = captureConsole();
-
-    await runHotRules();
-
-    expect(output.output).toBe("");
-  });
 
   it("reports missing context in health mode", async () => {
     const output = captureConsole();

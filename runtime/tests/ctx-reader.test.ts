@@ -64,7 +64,7 @@ describe("ctx-reader", () => {
     const firstRead = readAllEntries(testRoot);
     const secondRead = readAllEntries(testRoot);
 
-    expect(firstRead).toHaveLength(2);
+    expect(firstRead).toHaveLength(3);
     expect(firstRead[0]).toMatchObject({
       correlation_id: "cid-20260519-7",
       trace_id: "trace-20260519-0000000000000007",
@@ -72,6 +72,10 @@ describe("ctx-reader", () => {
     });
     expect(firstRead[1]).toMatchObject({
       correlation_id: "trace-20260519-0000000000000008",
+    });
+    expect(firstRead[2]).toMatchObject({
+      event: "system_warning",
+      type: "corrupted_jsonl_line",
     });
     expect(secondRead).toBe(firstRead);
   });

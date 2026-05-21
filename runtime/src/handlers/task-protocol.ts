@@ -1,7 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { getProjectRoot, textResult } from "./_utils.js";
+import { getProjectRoot, textResult, jsonErrorResult } from "./_utils.js";
 import { readAllEntries } from "../ctx-reader.js";
 import { readJsonFile, updateLockedJsonFile } from "../locked-json.js";
 
@@ -119,4 +119,19 @@ export async function ritsu_claim_task(params: Record<string, unknown>): Promise
   );
 
   return textResult(JSON.stringify(result));
+}
+
+export async function ritsu_task_coordination(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const action = String(params.action ?? "list");
+  if (action === "claim") {
+    return ritsu_claim_task(params);
+  } else if (action === "list") {
+    return ritsu_list_pending_tasks(params);
+  }
+  return jsonErrorResult({
+    error: "INVALID_ACTION",
+    message: "Action must be claim or list.",
+  });
 }

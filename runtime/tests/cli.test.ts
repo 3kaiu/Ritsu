@@ -604,41 +604,7 @@ describe("cli utilities", () => {
     });
   });
 
-  it("runs doctor hot-rules mode with a since filter", async () => {
-    const output = captureConsole();
-    writeCtx(testRoot, [
-      {
-        ts: "20260519-100000",
-        correlation_id: "cid-1",
-        skill: "dev",
-        domain: "fullstack",
-        status: "violation_detected",
-        violation: { rule_id: "AP-1", severity: "fatal" },
-      },
-      {
-        ts: "20260518-100000",
-        correlation_id: "cid-2",
-        skill: "dev",
-        domain: "fullstack",
-        status: "violation_detected",
-        violation: { rule_id: "AP-1", severity: "fatal" },
-      },
-      {
-        ts: "20260401-100000",
-        correlation_id: "cid-3",
-        skill: "dev",
-        domain: "fullstack",
-        status: "violation_detected",
-        violation: { rule_id: "AP-9", severity: "warn" },
-      },
-    ]);
 
-    await runDoctor(["--hot-rules", "--since", "2026-05-01"]);
-
-    expect(output.output).toContain("Top Hot Rules (Since 20260501):");
-    expect(output.output).toContain("AP-1: 2 times");
-    expect(output.output).not.toContain("AP-9");
-  });
 
   it("runs doctor checks and exits on version mismatch", async () => {
     const output = captureConsole();

@@ -1,5 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { appendEvent } from "../ctx-writer.js";
+import { ritsu_close_span } from "./close-span.js";
 import { validateEvent } from "../event-validator.js";
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
 import { randomBytes } from "node:crypto";
@@ -71,10 +72,22 @@ export async function ritsu_open_span(
   }
 
   await appendEvent(root, event);
-
+ 
   return textResult(JSON.stringify({
     trace_id: traceId,
     span_id: spanId,
     status: "started",
   }));
+}
+
+export async function ritsu_span_lifecycle(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const action = String(params.action ?? "open");
+  if (action === "open") {
+    return ritsu_open_span(params);
+  } else if (action === "close") {
+    return ritsu_close_span(params);
+  }
+  return errorResult(`Invalid span lifecycle action: ${action}`);
 }

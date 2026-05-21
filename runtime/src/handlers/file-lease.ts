@@ -1,6 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { resolve } from "node:path";
-import { getProjectRoot, textResult } from "./_utils.js";
+import { getProjectRoot, textResult, jsonErrorResult } from "./_utils.js";
 import { readJsonFile, updateLockedJsonFile } from "../locked-json.js";
 
 const LEASE_FILE = ".ritsu/leases.json";
@@ -90,6 +90,18 @@ export async function ritsu_list_leases(_params: Record<string, unknown>): Promi
   const root = getProjectRoot();
   const leases = getLeases(root);
   return textResult(JSON.stringify({ leases }));
+}
+
+export async function ritsu_file_lease(params: Record<string, unknown>): Promise<CallToolResult> {
+  const action = String(params.action ?? "list");
+  if (action === "claim") {
+    return ritsu_claim_file(params);
+  } else if (action === "release") {
+    return ritsu_release_file(params);
+  } else if (action === "list") {
+    return ritsu_list_leases(params);
+  }
+  return jsonErrorResult({ error: "INVALID_ACTION", message: `Action must be claim, release or list.` });
 }
 
 export async function releaseAllForSpan(root: string, spanId: string): Promise<void> {

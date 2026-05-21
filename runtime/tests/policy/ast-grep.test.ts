@@ -120,9 +120,9 @@ describe("AstGrepDetector", () => {
 
       expect(violations.length).toBeGreaterThanOrEqual(1);
       const messages = violations.map(v => v.message);
-      expect(messages.some(m => m.includes("Avoid console.log"))).toBe(true);
-      expect(messages.some(m => m.includes("Avoid debugger"))).toBe(true);
-      expect(messages.some(m => m.includes("Avoid empty catch blocks"))).toBe(true);
+      expect(messages.some(m => m.toLowerCase().includes("console.log"))).toBe(true);
+      expect(messages.some(m => m.toLowerCase().includes("debugger"))).toBe(true);
+      expect(messages.some(m => m.toLowerCase().includes("empty catch"))).toBe(true);
       expect(violations[0].message).toContain("宿主系统未全局安装 ast-grep");
     } finally {
       if (existsSync(tempFile)) {

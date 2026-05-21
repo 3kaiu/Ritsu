@@ -103,14 +103,17 @@ export function getArtifactLayer(type: string): ArtifactLayer {
 
 // ─── 动态安全策略 (Stack-Aware Security) ───────────────────
 
-/**
- * 基础始终允许的二进制工具
- */
-const BASE_ALLOWED_BINARIES = [
+export const BASE_ALLOWED_BINARIES = [
   "git", "grep", "rg", "cat", "head", "tail", "ls", "find", "fd", "wc", "sort",
   "uniq", "diff", "echo", "pwd", "which", "env", "node", "npx", "tsc", "eslint",
   "prettier", "vitest", "jest", "jq", "yq", "make", "cmake", "sed", "awk",
   "tr", "cut", "xargs", "tee", "mkdir", "touch", "cp", "mv", "ln", "gh",
+];
+
+const MINIMAL_SECURE_BINARIES = [
+  "git", "grep", "rg", "cat", "head", "tail", "ls", "find", "fd", "wc", "sort",
+  "uniq", "diff", "echo", "pwd", "which", "env", "jq", "yq", "sed", "awk",
+  "tr", "cut", "xargs", "tee", "gh"
 ];
 
 /**
@@ -131,7 +134,29 @@ const STACK_SPECIFIC_BINARIES: Record<string, string[]> = {
  * 根据项目指纹动态获取允许的二进制列表。
  */
 export function getAllowedBinariesForProject(fingerprints: string[] = []): Set<string> {
-  const allowed = new Set(BASE_ALLOWED_BINARIES);
+  const hasValidStack = Array.isArray(fingerprints) && fingerprints.length > 0 && fingerprints.every(f => typeof f === "string" && f.trim().length > 0);
+
+  if (!hasValidStack) {
+    return new Set(MINIMAL_SECURE_BINARIES);
+  }
+
+  const allowed = new Set(MINIMAL_SECURE_BINARIES);
+
+  // If nodejs or typescript is in the fingerprints, we can elevate to allow base execution binaries
+  const hasNodeOrTs = fingerprints.some(fp => {
+    const s = fp.toLowerCase();
+    return s === "nodejs" || s === "typescript";
+  });
+
+  if (hasNodeOrTs) {
+    // Add base execution capabilities back
+    const nodeTsBase = [
+      "node", "npx", "tsc", "eslint", "prettier", "vitest", "jest",
+      "make", "cmake", "mkdir", "touch", "cp", "mv", "ln"
+    ];
+    nodeTsBase.forEach(b => allowed.add(b));
+  }
+
   for (const fp of fingerprints) {
     const stack = fp.toLowerCase();
     if (STACK_SPECIFIC_BINARIES[stack]) {

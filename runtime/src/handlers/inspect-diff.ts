@@ -1,6 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { inspectDiff, type InspectDiffMode } from "../orchestration/diff-inspect.js";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
+import { ritsu_get_changed_files } from "./get-changed-files.js";
 
 function parseMode(value: unknown): InspectDiffMode {
   const m = String(value ?? "full").toLowerCase();
@@ -35,4 +36,14 @@ export async function ritsu_diff_chunks(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
   return ritsu_inspect_diff({ ...params, mode: "chunks" });
+}
+
+export async function ritsu_inspect_git_changes(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const mode = String(params.mode ?? "full").toLowerCase();
+  if (mode === "status") {
+    return ritsu_get_changed_files(params);
+  }
+  return ritsu_inspect_diff(params);
 }

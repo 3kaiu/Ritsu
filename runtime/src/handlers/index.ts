@@ -15,19 +15,20 @@ import {
   ritsu_inspect_diff,
   ritsu_get_diff,
   ritsu_diff_chunks,
+  ritsu_inspect_git_changes,
 } from "./inspect-diff.js";
 import { ritsu_run_quality_gates } from "./run-quality-gates.js";
 import {
   ritsu_read_preferences,
   ritsu_write_preference,
 } from "./preferences.js";
-import { ritsu_open_span } from "./open-span.js";
+import { ritsu_open_span, ritsu_span_lifecycle } from "./open-span.js";
 import { ritsu_close_span } from "./close-span.js";
 import { ritsu_join_trace } from "./join-trace.js";
 import { ritsu_init_trust_key } from "./init-trust-key.js";
-import { ritsu_claim_task, ritsu_list_pending_tasks } from "./task-protocol.js";
+import { ritsu_claim_task, ritsu_list_pending_tasks, ritsu_task_coordination } from "./task-protocol.js";
 import { ritsu_verify_trace } from "./verify-trace.js";
-import { ritsu_claim_file, ritsu_release_file, ritsu_list_leases } from "./file-lease.js";
+import { ritsu_claim_file, ritsu_release_file, ritsu_list_leases, ritsu_file_lease } from "./file-lease.js";
 import { ritsu_sync_openspec_contracts } from "./sync-openspec-contracts.js";
 import { ritsu_bootstrap_ecosystem } from "./bootstrap-ecosystem.js";
 import { ritsu_preflight } from "./preflight.js";
@@ -65,4 +66,8 @@ export const registerHandlers: Record<
   ritsu_sync_openspec_contracts,
   ritsu_bootstrap_ecosystem,
   ritsu_preflight,
+  ritsu_inspect_git_changes,
+  ritsu_span_lifecycle,
+  ritsu_file_lease,
+  ritsu_task_coordination,
 };

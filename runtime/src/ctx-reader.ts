@@ -6,8 +6,8 @@
  * P2-1 优化：内存占用优化，避免大文件 split('\n')。
  */
 
-import { existsSync, readFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
-// removed unused resolve, dirname
+import { existsSync, readFileSync, statSync, openSync, readSync, closeSync, appendFileSync, mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { getCtxPath } from "./ctx-path.js";
 import { legacyCidToTraceId, legacyCidToSpanId } from "./correlation.js";
 
@@ -15,6 +15,121 @@ let cachedEntries: Record<string, unknown>[] | null = null;
 let lastMtime: number = 0;
 let lastSize: number = 0;
 let lastPath: string = "";
+
+function tryHealJsonLine(line: string): string | null {
+  let trimmed = line.trim();
+  if (!trimmed) return null;
+
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inQuote = false;
+  let escaped = false;
+
+  for (let i = 0; i < trimmed.length; i++) {
+    const char = trimmed[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (!inQuote) {
+      if (char === "{") openBraces++;
+      else if (char === "}") openBraces--;
+      else if (char === "[") openBrackets++;
+      else if (char === "]") openBrackets--;
+    }
+  }
+
+  if (inQuote) {
+    trimmed += '"';
+  }
+
+  while (openBrackets > 0) {
+    trimmed += "]";
+    openBrackets--;
+  }
+
+  while (openBraces > 0) {
+    trimmed += "}";
+    openBraces--;
+  }
+
+  try {
+    JSON.parse(trimmed);
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function quarantineLine(projectRoot: string, line: string): void {
+  try {
+    const dir = resolve(projectRoot, ".ritsu");
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+    appendFileSync(resolve(dir, "corrupted.jsonl"), line + "\n", "utf-8");
+  } catch {
+    // fail-safe
+  }
+}
+
+function processLine(
+  line: string,
+  projectRoot: string,
+  entries: Record<string, unknown>[],
+  skippedCountRef: { value: number }
+): void {
+  try {
+    const parsed = JSON.parse(line);
+    if (parsed.correlation_id && !parsed.trace_id) {
+      parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
+      parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
+    }
+    if (!parsed.correlation_id && parsed.trace_id) {
+      parsed.correlation_id = parsed.trace_id;
+    }
+    entries.push(parsed);
+  } catch (err) {
+    if (process.env.RITSU_STRICT_JSONL === "1") {
+      throw new Error(`JSONL Parse Error: ${(err as Error).message} on line: ${line}`);
+    }
+
+    const healed = tryHealJsonLine(line);
+    if (healed) {
+      try {
+        const parsed = JSON.parse(healed);
+        if (parsed.correlation_id && !parsed.trace_id) {
+          parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
+          parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
+        }
+        if (!parsed.correlation_id && parsed.trace_id) {
+          parsed.correlation_id = parsed.trace_id;
+        }
+        entries.push(parsed);
+        return;
+      } catch {
+        // fallback to quarantine
+      }
+    }
+
+    skippedCountRef.value++;
+    quarantineLine(projectRoot, line);
+    entries.push({
+      event: "system_warning",
+      type: "corrupted_jsonl_line",
+      message: `Corrupted line quarantined: ${line.slice(0, 100)}`,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
 
 /**
  * 核心读取逻辑：优先使用缓存，若文件变动则重新解析。
@@ -33,11 +148,9 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
     }
 
     const entries: Record<string, unknown>[] = [];
-    let skippedCount = 0;
+    const skippedCountRef = { value: 0 };
 
     if (existsSync(ctxPath)) {
-      // 优化：使用流式思想或 Buffer 扫描换行符
-      // 这里采用 readFileSync 但手动遍历以减少中间大数组开销
       const content = readFileSync(ctxPath, "utf-8");
       let start = 0;
       let end = content.indexOf("\n");
@@ -45,45 +158,20 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
       while (end !== -1) {
         const line = content.slice(start, end).trim();
         if (line) {
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.correlation_id && !parsed.trace_id) {
-              parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
-              parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
-            }
-            if (!parsed.correlation_id && parsed.trace_id) {
-              parsed.correlation_id = parsed.trace_id;
-            }
-            entries.push(parsed);
-          } catch {
-            skippedCount++;
-          }
+          processLine(line, projectRoot, entries, skippedCountRef);
         }
         start = end + 1;
         end = content.indexOf("\n", start);
       }
       
-      // handle last line without newline
       const lastLine = content.slice(start).trim();
       if (lastLine) {
-        try {
-          const parsed = JSON.parse(lastLine);
-          if (parsed.correlation_id && !parsed.trace_id) {
-            parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
-            parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
-          }
-          if (!parsed.correlation_id && parsed.trace_id) {
-            parsed.correlation_id = parsed.trace_id;
-          }
-          entries.push(parsed);
-        } catch {
-          skippedCount++;
-        }
+        processLine(lastLine, projectRoot, entries, skippedCountRef);
       }
     }
 
-    if (skippedCount > 0) {
-      console.warn(`[ritsu-mcp-server] ⚠️  Skipped ${skippedCount} malformed/corrupted JSON lines in ctx file.`);
+    if (skippedCountRef.value > 0) {
+      console.warn(`[ritsu-mcp-server] ⚠️  Skipped ${skippedCountRef.value} malformed/corrupted JSON lines in ctx file.`);
     }
 
     lastMtime = currentMtime;
@@ -92,6 +180,9 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
     cachedEntries = entries;
     return entries;
   } catch (e) {
+    if (process.env.RITSU_STRICT_JSONL === "1") {
+      throw e;
+    }
     return [];
   }
 }
@@ -124,30 +215,24 @@ export function readRecentEntries(
     
     const content = buffer.toString("utf-8");
     const lines = content.split("\n").filter(l => l.trim());
-    let skippedCount = 0;
-    const recent = lines.slice(-limit).map(l => {
-      try {
-        const parsed = JSON.parse(l);
-        if (parsed.correlation_id && !parsed.trace_id) {
-          parsed.trace_id = legacyCidToTraceId(parsed.correlation_id);
-          parsed.span_id = legacyCidToSpanId(parsed.correlation_id);
-        }
-        if (!parsed.correlation_id && parsed.trace_id) {
-          parsed.correlation_id = parsed.trace_id;
-        }
-        return parsed;
-      } catch {
-        skippedCount++;
-        return null;
-      }
-    }).filter(Boolean) as Record<string, unknown>[];
+    const skippedCountRef = { value: 0 };
+    const entries: Record<string, unknown>[] = [];
 
-    if (skippedCount > 0) {
-      console.warn(`[ritsu-mcp-server] ⚠️  Skipped ${skippedCount} malformed/corrupted JSON lines in recent ctx block.`);
+    // process recent lines
+    const recentLines = lines.slice(-limit);
+    for (const line of recentLines) {
+      processLine(line, projectRoot, entries, skippedCountRef);
     }
 
-    return recent;
+    if (skippedCountRef.value > 0) {
+      console.warn(`[ritsu-mcp-server] ⚠️  Skipped ${skippedCountRef.value} malformed/corrupted JSON lines in recent ctx block.`);
+    }
+
+    return entries;
   } catch (e) {
+    if (process.env.RITSU_STRICT_JSONL === "1") {
+      throw e;
+    }
     return readAllEntries(projectRoot).slice(-limit);
   } finally {
     closeSync(fd);
