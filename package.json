@@ -2,7 +2,7 @@
   "name": "ritsu",
   "version": "7.0.0",
   "ritsu_protocol_version": "7.0.0",
-  "description": "Ritsu — AI Delivery Workflow Skill Engine. Skills + policy + quality gates + cross-session memory.",
+  "description": "Ritsu \u2014 AI Delivery Workflow Skill Engine. Skills + policy + quality gates + cross-session memory.",
   "packageManager": "bun@1.3.5",
   "private": true,
   "type": "module",
@@ -13,9 +13,7 @@
     "lint": "bun run --cwd runtime lint",
     "test": "bun run --cwd runtime test",
     "doctor": "bun run --cwd runtime dist/cli.js doctor",
-    "bootstrap": "bun run --cwd runtime dist/cli.js bootstrap",
-    "setup": "bun scripts/setup.js",
-    "update": "bun scripts/update.js"
+    "bootstrap": "bun run --cwd runtime dist/cli.js bootstrap"
   },
   "engines": {
     "bun": ">=1.3.0"
@@ -29,5 +27,12 @@
     "url": "https://github.com/3kaiu/Ritsu/issues"
   },
   "homepage": "https://github.com/3kaiu/Ritsu#readme",
-  "keywords": ["ai", "mcp", "claude-code", "workflow", "policy", "quality-gates"]
+  "keywords": [
+    "ai",
+    "mcp",
+    "claude-code",
+    "workflow",
+    "policy",
+    "quality-gates"
+  ]
 }
