@@ -18,6 +18,7 @@ export async function runDoctor(args: string[] = []) {
   if (args.includes("--ecosystem")) { runDoctorEcosystem(); return; }
   if (args.includes("--health")) { await runDoctorHealth(); return; }
   if (args.includes("--signals")) { runSignals(root); return; }
+  if (args.includes("--ai")) { runDoctorAi(root); return; }
 
   if (args.includes("--similar-violations")) {
     let sinceDays = 30;
@@ -167,6 +168,55 @@ status: PASS`);
   } catch { /* skip if module unavailable */ }
 
   console.log(signals.join("\n\n"));
+}
+
+/**
+ * AI 工具配置检查 — 确保所有主流 AI 工具都能正确读取项目上下文。
+ * 当前支持: Claude Code, Codex CLI, Cursor
+ */
+function runDoctorAi(root: string): void {
+  console.log(color("Ritsu Doctor — AI Configuration Check", "cyan"));
+
+  const checks: Array<{ name: string; file: string; status: string }> = [];
+
+  // Claude Code
+  const hasClaude = existsSync(resolve(root, "CLAUDE.md"));
+  checks.push({ name: "Claude Code", file: "CLAUDE.md", status: hasClaude ? "ok" : "missing" });
+
+  // Codex CLI
+  const hasCodex = existsSync(resolve(root, "CODEX.md"));
+  checks.push({ name: "Codex CLI", file: "CODEX.md", status: hasCodex ? "ok" : "missing" });
+
+  // Cursor
+  const hasCursor = existsSync(resolve(root, ".cursor/rules/ritsu.mdc"));
+  checks.push({ name: "Cursor", file: ".cursor/rules/ritsu.mdc", status: hasCursor ? "ok" : "missing" });
+
+  // Ritsu MCP
+  const hasMcpJson = existsSync(resolve(root, ".mcp.json"));
+  checks.push({ name: "Ritsu MCP", file: ".mcp.json", status: hasMcpJson ? "ok" : "missing" });
+
+  // AGENTS.md
+  const hasAgents = existsSync(resolve(root, "AGENTS.md"));
+  checks.push({ name: "Ritsu Config", file: "AGENTS.md", status: hasAgents ? "ok" : "missing" });
+
+  for (const c of checks) {
+    const icon = c.status === "ok" ? "✔" : "✖";
+    const colorFn = c.status === "ok" ? "green" : "red";
+    console.log(color(`  ${icon} [${c.name}] ${c.file}`, colorFn));
+  }
+
+  const allOk = checks.every((c) => c.status === "ok");
+  console.log(color(`\nSummary: ${allOk ? "ALL AI TOOLS CONFIGURED" : "SOME CONFIGURATION MISSING"}`, allOk ? "green" : "yellow"));
+
+  if (!allOk) {
+    console.log(color("\nRun 'ritsu bootstrap' to set up MCP. Create missing config files manually.", "dim"));
+  }
+
+  console.log(color("\nAI session 启动顺序:", "dim"));
+  console.log(color("  1. AI 读取 CLAUDE.md (或 CODEX.md / .cursor/rules)", "dim"));
+  console.log(color("  2. AI 运行 ritsu doctor 确认状态", "dim"));
+  console.log(color("  3. AI 运行 ritsu_preflight 获取当前阶段上下文", "dim"));
+  console.log(color("  4. AI 执行对应 skill (/r-think /r-dev /r-review /r-hunt)", "dim"));
 }
 
 async function runSimilarViolations(sinceDays = 30, query = "") {

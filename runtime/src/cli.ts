@@ -34,6 +34,7 @@ export function usage(detailed = false): string {
     "  ritsu doctor       # 项目健康检查",
     "  ritsu doctor --ecosystem # MCP 生态验证",
     "  ritsu doctor --signals   # 结构化审计信号 (PASS/WARN/FAIL)",
+    "  ritsu doctor --ai        # AI 工具配置检查",
     "",
     "Ritsu CLI — 4 阶段工作流: think → dev → review → hunt",
     "",
