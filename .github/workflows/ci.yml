@@ -12,58 +12,84 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: [22, 24]
-    
+        bun-version: [1.3]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - name: Setup Bun ${{ matrix.bun-version }}
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'npm'
-          cache-dependency-path: runtime/package-lock.json
+          bun-version: ${{ matrix.bun-version }}
 
       - name: Install dependencies
         run: |
           cd runtime
-          npm install
+          bun install
 
       - name: Version Consistency Check
         run: |
           cd runtime
-          node version-check.js
+          bun version-check.js
 
       - name: Lint Check
         run: |
           cd runtime
-          npm run lint
+          bun run lint
 
       - name: Type Check
         run: |
           cd runtime
-          npx tsc --noEmit
+          bunx tsc --noEmit
 
-      - name: Run Tests with Coverage
+      - name: Run Tests
         run: |
           cd runtime
-          npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          directory: runtime/coverage
-          fail_ci_if_error: false # Don't fail CI if codecov fails
-          token: ${{ secrets.CODECOV_TOKEN }}
+          bun run test
 
       - name: Build Check
         run: |
           cd runtime
-          npm run build
+          bun run build
+
+  build-native:
+    name: Build native (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: .so
+            output: ritsu-native.linux-x64.node
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            ext: .so
+            output: ritsu-native.linux-arm64.node
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build native addon
+        run: |
+          cd runtime/native
+          cargo build --release --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/libritsu_native${{ matrix.ext }} ${{ matrix.output }}
+
+      - name: Upload native addon
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.output }}
+          path: runtime/native/${{ matrix.output }}
+          if-no-files-found: warn
 
   release:
     name: Release
-    needs: lint-and-test
+    needs: [lint-and-test, build-native]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -73,24 +99,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # semantic-release needs full history
+          fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: 'npm'
-          cache-dependency-path: runtime/package-lock.json
+          bun-version: 1.3
 
       - name: Install dependencies
         run: |
           cd runtime
-          npm install
+          bun install
+
+      - name: Download native addons
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ritsu-native.*
+          path: runtime/native/
+          merge-multiple: true
 
       - name: Build
         run: |
           cd runtime
-          npm run build
+          bun run build
 
       - name: Release
         env:
@@ -98,4 +129,4 @@ jobs:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           cd runtime
-          npx semantic-release
+          bunx semantic-release

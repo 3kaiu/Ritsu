@@ -1,60 +1,63 @@
-# Ritsu Architecture (v6.1)
+# Ritsu Architecture (v7.0)
 
-Claude Code 为默认主机；编排单入口；Policy 单内核；MCP 面受控收缩。
-
-## 三层
+## 六层架构
 
 ```text
-Skills (Claude marketplace)  →  ritsu_preflight  →  Core (policy / ctx / artifacts)
+Skills (Markdown 协议)        ─→  7 个 SKILL.md (think/dev/review/hunt/augment/init/freestyle)
+Orchestration                 ─→  preflight-runner, diff-inspect, superpowers-bridge
+MCP Handler Layer             ─→  22 个 handler (合并后)
+Policy Engine                 ─→  plugin-loader + 8 detectors (含 codegraph)
+Storage Layer                 ─→  ctx-reader/writer, ctx-db (SQLite), session-memory
+Native Engine                 ─→  Rust napi-rs: vector_store (sqlite-vec cosine)
+CLI Layer                     ─→  cli/: doctor, cat, trace, export, sync, mine, bootstrap
 ```
 
-| 层 | 职责 | 对外入口 |
-| --- | --- | --- |
-| **Skills** | 阶段剧本（think/dev/hunt/review） | `/r-*` 指令 |
-| **Orchestration** | 按 stage 串联 ctx、diff、policy、OpenSpec | `ritsu_preflight` |
-| **Core** | 证据链、策略引擎、质量门禁 | handlers + CLI |
+| 层 | 职责 | 技术 |
+|---|---|---|
+| **Skills** | 阶段剧本，AI 可读的 Markdown 协议 | `skills/<stage>/SKILL.md` |
+| **Orchestration** | 按 stage 串联 ctx、diff、policy、图上下文 | `orchestration/` |
+| **Handlers** | 22 个 MCP 工具实现，全部收敛 | `handlers/` |
+| **Policy** | 策略引擎，8 个检测器 + 插件系统 | `policy/` |
+| **Storage** | JSONL + SQLite 双写，向量记忆 | `ctx-*.ts`, `session-memory.ts` |
+| **Native** | Rust napi-rs，向量搜索 | `native/` (Rust) |
+| **CLI** | doctor, cat, trace, mine, sync | `cli/` |
 
-实现目录：`runtime/src/orchestration/`（preflight-runner、policy-preflight、diff-inspect）。
+## 运行时
 
-## 主机矩阵
+- **包管理器**: Bun 1.3+（已迁移，移除 npm）
+- **构建**: `bun run build` → tsc + copy-resources
+- **测试**: vitest — `bun run test`（314 tests, 56 files）
+- **原生插件**: Rust napi-rs，可选，纯 JS 回退
 
-| 主机 | 必需文件 | 可选 |
-| --- | --- | --- |
-| **Claude Code** | 项目根 `.mcp.json`、`.ritsu/ecosystem.json` | `claude mcp add` 等价于 bootstrap |
-| **Claude Desktop** | 用户级 MCP 配置（见 `docs/mcp-claude-desktop.example.json`） | — |
-| **Cursor** | `.cursor/mcp.json`（`ritsu bootstrap --host all`） | hooks（`--include-cursor-hooks`） |
+## 外部集成
 
-默认 `ritsu bootstrap` 仅写 **`.mcp.json`**，`host_profile: claude-code`。
+| 项目 | 集成方式 | 状态 |
+|---|---|---|
+| **Superpowers** | `superpowers-bridge.ts` — 阶段映射 + preflight 路由 | ✅ 自动检测 |
+| **CodeGraph** | `codegraph` 检测器 + preflight 图上下文 + MCP bootstrap | ✅ CLI fallback |
+| **OpenSpec** | `openspec-bridge.ts` — /opsx: 命令 + contract 提取 | ✅ |
+| **Waza** | 反模式目录 + Gotchas 表 + 验证优先硬停止 | ✅ CLAUDE.md |
+| **Claude-Mem** | `session-memory.ts` — 3 层渐进式记忆 + auto-capture | ✅ native 引擎 |
 
-## Policy 双触发
+## Policy 引擎
 
-1. **写入时**：`ritsu_write_artifact` → `evaluatePolicies`
-2. **交付前**：`ritsu_preflight` / `run_quality_gates` → `runPolicyPreflight`（30s worktree 缓存去重）
-
-`ritsu_policy_check` 不对外暴露（见 `_shared/mcp-tools-internal.yaml`）。
-
-## Diff 检视
-
-统一工具 **`ritsu_inspect_diff`**：`mode=stat|chunks|full`。  
-`ritsu_get_diff` / `ritsu_diff_chunks` 仅保留 handler 别名，不在 MCP 清单注册。
-
-## 禁止清单（反指标 R-15）
-
-不纳入 Ritsu core：
-
-- 第二套编排框架（LangGraph 等）
-- LiteLLM / 模型路由层
-- IDE 本体或 Cursor hooks 默认生成
-- 与 preflight 重复的 SKILL 手工步骤
-
-新增 MCP 工具须 **删一增一** 或合并旧工具；当前对外约 **25** 个，目标 ≤23（lease 三件套合并留 v6.2）。
-
-## 用户旅程（Claude-first）
-
-```text
-npx skills add 3kaiu/Ritsu -a claude-code -g -y
-/r-init  →  ritsu_bootstrap_ecosystem  →  .mcp.json
-重载 Claude Code MCP
-ritsu doctor --ecosystem
-/r-think | /r-dev | /r-hunt | /r-review  （每阶段一步 ritsu_preflight）
 ```
+写入时: ritsu_write_artifact → evaluatePolicies (plugin-loader)
+交付前: preflight / quality-gates → runPolicyPreflight (30s worktree 缓存去重)
+```
+
+8 个内置检测器: regex, cross_file, scope_diff, contract_coverage, preference_lint, ast_grep, ast, codegraph
+用户插件: `rules/detectors/*.js` + `manifest.json`
+
+## 存储
+
+- **事件日志**: JSONL + SQLite 双写（bun:sqlite 优先）
+- **向量记忆**: Rust napi-rs 引擎 + JSONL 回退
+- **偏好**: `.ritsu/preferences.yaml` → AST-grep 规则编译
+
+## 关键设计决策
+
+- **22 个 MCP 工具** — 已合并 10 个旧工具，不新增
+- **不嵌入**: 通过 MCP 组合而非内部重写（CodeGraph、Codex++ 插件模式）
+- **Claude Code 优先**: CLAUDE.md + `.claude/rules/` + `.claudeignore`
+- **渐进式 Token 控制**: ritsu_read_ctx 支持 token_budget 参数
