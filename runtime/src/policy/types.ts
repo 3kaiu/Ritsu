@@ -24,7 +24,8 @@ export type DetectorType =
   | "contract_coverage"
   | "preference_lint"
   | "ast_grep"
-  | "ast";
+  | "ast"
+  | "codegraph";
 
 export interface DetectorConfig {
   type: DetectorType;

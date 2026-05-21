@@ -52,6 +52,21 @@ bun run --cwd runtime dist/cli.js doctor
 - Use `readAllEntries` / `readRecentEntries` / `readLastIncomplete` / `readLastCompleted` from `ctx-reader.ts`
 - SQLite is preferred for reads when available (tryOpenSqlite lazy init)
 
+## Decision Table: Skill vs Rule vs Script
+
+When adding new functionality to Ritsu, use this table to decide where it belongs:
+
+| Question | Yes → | No → |
+|----------|-------|------|
+| Does the user need judgment, adaptation, or follow-up questions? | **Skill** (`skills/<name>/SKILL.md`) | Script or Rule |
+| Does the same input always produce the same output? | **Script** (`runtime/src/cli/` or deterministic tool) | Skill or Rule |
+| Does behavior shift with conversation context? | **Skill** | Script or Rule |
+| Is it an always-on behavioral guardrail for the AI? | **Rule** (`rules/anti-patterns.yaml`) | Skill or Script |
+
+- **Skills**: Adaptive, AI-judgment-driven Markdown prompts. Live in `skills/<stage>/SKILL.md`.
+- **Scripts/Handlers**: Deterministic code. Live in `runtime/src/` (handlers, CLI commands).
+- **Rules**: Always-on constraints in `rules/anti-patterns.yaml`. Add WRONG/RIGHT examples.
+
 ### Policy Engine
 - Built-in detectors are in `runtime/src/policy/detectors/`
 - User-defined detectors go in `<project-root>/rules/detectors/*.js` exporting `createDetector()`

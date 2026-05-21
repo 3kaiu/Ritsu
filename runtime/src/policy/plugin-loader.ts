@@ -15,6 +15,7 @@ import { ContractCoverageDetector } from "./detectors/contract-coverage.js";
 import { PreferenceLintDetector } from "./detectors/preference-lint.js";
 import { AstGrepDetector } from "./detectors/ast-grep.js";
 import { AstDetector } from "./detectors/ast.js";
+import { CodeGraphDetector } from "./detectors/codegraph.js";
 import { getProjectRoot } from "../handlers/_utils.js";
 
 const BUILT_IN_DETECTORS: Record<string, DetectorPlugin> = {
@@ -25,6 +26,7 @@ const BUILT_IN_DETECTORS: Record<string, DetectorPlugin> = {
   preference_lint: new PreferenceLintDetector(),
   ast_grep: new AstGrepDetector(),
   ast: new AstDetector(),
+  codegraph: new CodeGraphDetector(),
 };
 
 let _cachedPlugins: Record<string, DetectorPlugin> | null = null;

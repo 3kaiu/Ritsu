@@ -2,6 +2,9 @@
 # 这些规则是不可跨越的底线，无论你当前正在执行哪个技能，都必须无条件遵守。
 # 每条规则有唯一 ID，AI 在输出中必须引用 ID 而非模糊描述。
 # violation 事件格式见 _shared/ctx-protocol.md violation 字段定义。
+#
+# examples 字段提供 WRONG/RIGHT 示例，将机器规则升级为团队学习文档。
+# story 字段记录该规则被加入的真实触发案例。
 
 global:
   - id: AP-1
@@ -9,6 +12,11 @@ global:
     pattern: "执行文件修改或生成方案前，未通过 pwd/package.json 确认环境"
     enforcement: "必须通过 pwd 确认路径，通过读取 package.json/.env 确认真实配置。严禁依赖记忆"
     severity: FATAL
+    examples:
+      - wrong: "直接修改 src/config.ts 但实际项目在 packages/server/src/config.ts"
+        right: "先 pwd → ls → 查看 package.json workspaces 确定目标子包路径"
+        story: "AI 在 monorepo 根目录直接创建文件，但运行时找不到路径——未确认工作目录就行动"
+
   - id: AP-2
     name: Hallucinate paths
     pattern: "引用或调用函数前，未 grep 验证其真实存在"
@@ -17,11 +25,21 @@ global:
     detector:
       type: ast
       target: diff
+    examples:
+      - wrong: "import { parseXML } from './parser' 但 parser.ts 实际只导出了 parseCSV"
+        right: "先 grep 'export.*parse' src/parser.ts 确认导出了什么，再写 import"
+        story: "AI 假设模块导出名称，导致 ts 编译失败，三次反复才 grep 确认"
+
   - id: AP-3
     name: Serial interrogation
     pattern: "遇到不清晰的需求，分成多次对话追问"
     enforcement: "必须将所有选项打包在一次回复中抛出"
     severity: FATAL
+    examples:
+      - wrong: "→ '你用什么数据库？' ← 'PostgreSQL'\n→ 'ORM 呢？' ← 'Prisma'\n→ '表结构有定义了吗？'"
+        right: "→ '请提供数据库选型、ORM、表结构定义，一次说清以便给出完整方案'"
+        story: "用户反馈一次对话中 AI 连续问了 7 个问题，每个问题只等一次回答"
+
   - id: AP-4
     name: Scope creep
     pattern: "用户让修 Bug A，顺手重构了旁边的代码 B"
@@ -30,11 +48,21 @@ global:
     detector:
       type: scope_diff
       target: diff
+    examples:
+      - wrong: "修复 IndexOutOfBounds → 同时也重构了相邻循环的变量命名和注释"
+        right: "只改越界检查那一行，附带加的注释专门说明为什么加这个边界条件"
+        story: "AI 修 bug 时无警告地改动了 14 个文件，PR review 发现其中一半与 bug 无关"
+
   - id: AP-5
     name: Confidence without evidence
     pattern: "回复'这应该能工作'但不提供任何运行日志"
     enforcement: "必须主动运行验证脚本，并直接抛出运行结果"
     severity: FATAL
+    examples:
+      - wrong: "'这应该能工作' → 实际上语法错误，TypeError: Cannot read property"
+        right: "'运行 node test.js 输出: PASS (3/3)' → 附上实际输出截图"
+        story: "AI 声称修复完成但未运行测试；用户运行后发现 3 个语法错误，信任度受损"
+
   - id: AP-6
     name: Placeholder promises
     pattern: "在交付的代码或设计方案中留下 TODO/TBD/后续实现字样"
@@ -50,16 +78,30 @@ global:
         - "待定|暂不处理|后续完善"
       exemption:
         - when: { skill: init, target_file: "AGENTS.md" }
+    examples:
+      - wrong: "// TODO: add error handling for edge cases"
+        right: "try { ... } catch (e) { logger.error(e); return fallbackValue; }"
+        story: "AI 生成了包含 12 个 TODO 的代码文件；用户不得不手动逐条跟踪，耗时超过自己重写"
+
   - id: AP-7
     name: Silent failures
     pattern: "命令执行报错了，假装没看见继续下一步"
     enforcement: "必须停下来，分析报错，或将报错直接反馈给用户"
     severity: FATAL
+    examples:
+      - wrong: "npm install 报 404 → 继续写 import 该包的代码"
+        right: "npm install 报 404 → 检查包名拼写是否正确 → 搜索正确的包名 → 安装成功后再写 import"
+        story: "AI 连续忽略 5 个编译错误继续往下写；用户运行后获得 200 行毫无意义的错误日志"
+
   - id: AP-8
     name: Unsolicited version bump
     pattern: "未经用户明确要求主动修改 version 字段或生成 CHANGELOG"
     enforcement: "除非用户明确要求发版，否则绝不主动修改"
     severity: WARN
+    examples:
+      - wrong: "修改代码后将 version: 1.2.0 → 1.3.0 并追加 CHANGELOG 条目"
+        right: "只改动业务代码，version 和 CHANGELOG 保持原样"
+
   - id: AP-9
     name: Attribution leak
     pattern: "在提交的代码、PR 评论或 Issue 回复中加上 Co-authored-by: Claude/AI"
@@ -70,17 +112,27 @@ global:
       target: diff
       patterns:
         - "Co-authored-by:\\s*(Claude|GPT|AI|Anthropic)"
+    examples:
+      - wrong: "Co-authored-by: Claude <ai@anthropic.com>"
+        right: "不添加任何 Co-authored-by 行"
+
   - id: AP-10
     name: State skip (Critical tasks)
     pattern: "对于 Critical (P2) 级别任务，跳过 think 直接进入 dev。"
     enforcement: "P2 任务必须遵循完整路径。Micro/Standard 级别允许直接路由。"
     severity: ERROR
+    examples:
+      - wrong: "用户报告生产事故 → AI 直接修代码，未分析根因和影响范围"
+        right: "先走 think 分析根因、影响范围、回滚方案 → 确认范围后再 dev"
 
   - id: AP-11
     name: Domain assumption
     pattern: "未确认领域角色就硬编码前端/后端分支逻辑"
     enforcement: "必须先通过角色探针确认领域，再引用 domains/ 下对应的领域配置"
     severity: FATAL
+    examples:
+      - wrong: "假设是全栈项目直接写前后端通信代码，实际项目只是纯后端 API"
+        right: "先查看 AGENTS.md 中 domain 字段 → 确认是 backend → 只写 API 代码"
 
   - id: AP-12
     name: Project preference violation
@@ -90,6 +142,9 @@ global:
     detector:
       type: preference_lint
       target: artifact_content
+    examples:
+      - wrong: "项目偏好 const over let，但新代码仍然用的 let"
+        right: "读取 .ritsu/preferences.yaml → 发现 pref-auto-const → 新代码用 const"
 
   - id: AP-13
     name: Structural smell (ast-grep)
@@ -101,6 +156,9 @@ global:
       target: diff
       rule_dir: rules/ast-grep
       languages: [typescript, javascript]
+    examples:
+      - wrong: "console.log('debug:', result) 留在提交的代码中"
+        right: "确认日志用 logger.info() 而非 console.log，且仅在需要日志时才加"
 
 review:
   - id: R-1
@@ -108,6 +166,10 @@ review:
     pattern: "代码中引入了找不到定义的变量或组件"
     severity: HARD_STOP
     note: "ref AP-2：本条为 review 阶段的 HARD_STOP 特化，只提升严重度与拦截策略，不新增规则语义"
+    examples:
+      - wrong: "const result = processData(input) 但 processData 未在任何地方定义"
+        right: "const result = processData(input) 且 processData 有对应 import 或定义"
+
   - id: R-2
     name: 版本号不同步
     pattern: "package.json 等多处版本号出现割裂"
@@ -115,6 +177,10 @@ review:
     detector:
       type: cross_file
       target: diff
+    examples:
+      - wrong: "根 package.json version 1.2.0 但 runtime/package.json version 1.3.0"
+        right: "两处 version 保持一致，或确认是 monorepo 设计的合理差异"
+
   - id: R-3
     name: 明文凭证泄露
     pattern: "存在硬编码的 Token、Key、或敏感日志全量打印"
@@ -124,21 +190,40 @@ review:
       target: diff
       patterns:
         - "(?i)(api_key|token|password)\\s*=\\s*['\"][^'\"]+['\"]"
+    examples:
+      - wrong: "const API_KEY = 'sk-1234567890abcdef'"
+        right: "const API_KEY = process.env.API_KEY"
+
   - id: R-4
     name: 破坏性契约变更
     pattern: "修改了现有 API/数据格式但不向后兼容，且无双写/迁移方案"
     severity: HARD_STOP
+    examples:
+      - wrong: "将 getUser(id) 签名改为 getUser(id, options) → 所有调用方 break"
+        right: "getUser(id, options?) 保留向后兼容 → 或提供迁移脚本 → 或通知所有调用方"
+
   - id: R-5
     name: 数据迁移不可逆
     pattern: "迁移脚本无法回滚，或没有回滚测试"
     severity: HARD_STOP
+    examples:
+      - wrong: "ALTER TABLE users DROP COLUMN old_name — 无法恢复数据"
+        right: "迁移分三步：ADD COLUMN new_name → 双写 → 确认稳定后 DROP old_name"
+
   - id: R-6
     name: 安全漏洞引入
     pattern: "新增依赖存在已知 CVE，或代码中存在注入/越权风险"
     severity: HARD_STOP
+    examples:
+      - wrong: "npm install package@1.0.0 该版本有已知 RCE 漏洞"
+        right: "npm install package@1.2.1 (最新安全版本) 或用 npm audit 确认后再安装"
+
   - id: R-7
     name: 高风险发布无建议
     pattern: "变更已涉及高发布风险、灰度放量、复杂回滚窗口或跨角色协作，但 assure 未给出 release-advice 或未明确回滚条件"
     severity: HARD_STOP
+    examples:
+      - wrong: "涉及数据库 schema 变更的发布没有回滚方案"
+        right: "发布计划包含：灰度比例、回滚条件、回滚脚本、验证步骤"
 
 dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"
