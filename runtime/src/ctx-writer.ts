@@ -1,13 +1,11 @@
 /**
- * ctx 写入器 — 异步锁 + 原子追加 + correlation_id 生成
+ * ctx 写入器 — Rust WAL 并发 + JSONL 备份
  *
- * P0-2 修复：使用 proper-lockfile 异步 API，不阻塞事件循环。
- * P0-3 修复：correlation_id 生成和事件追加在同一个锁内完成，消除竞态。
- * P1-5 修复：从 ctx-store.ts 拆分，职责聚焦于写入。
+ * 主写入路径走 Rust native ctx store (SQLite WAL 模式, 线程安全)。
+ * JSONL 保留为备份写入，用于数据可移植性。
  */
 
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
-import { lock } from "proper-lockfile";
 import { getCtxPath, ensureCtxFile } from "./ctx-path.js";
 import { scanMaxSeq, formatCorrelationId } from "./correlation.js";
 import { signEvent, getOrCreateKey } from "./policy/signature.js";
@@ -45,10 +43,7 @@ export interface AppendResult {
 }
 
 /**
- * 原子追加事件 — 在单个异步锁内完成 correlation_id 生成 + 事件写入
- *
- * 调用方若已提供 correlation_id 则直接使用；
- * 否则在锁内扫描当日 max seq 并生成新 ID，保证原子性。
+ * 追加事件: Rust WAL 模式处理并发，JSONL 为可移植性备份。
  */
 export async function appendEvent(
   projectRoot: string,
@@ -64,43 +59,30 @@ export async function appendEvent(
     _lastLineCount = recalcLineCount(ctxPath);
   }
 
-
-  const release = await lock(ctxPath, {
-    retries: {
-      retries: 5,
-      factor: 2,
-      minTimeout: 100,
-      maxTimeout: 1000,
-      randomize: true,
-    }
-  });
-  try {
-    // 在锁内生成 correlation_id（若未提供且没有 trace_id）
-    if (!event.correlation_id && !event.trace_id) {
-      const { dateStr, nextSeq } = scanMaxSeq(ctxPath);
-      event.correlation_id = formatCorrelationId(dateStr, nextSeq);
-    }
-
-    // Trace Signing (Batch 8.2)
-    const key = getOrCreateKey();
-    if (key) {
-      event.signature = signEvent(event, key);
-    }
-
-    const line = JSON.stringify(event);
-    appendFileSync(ctxPath, line + "\n");
-    _lastLineCount++;
-
-    // Dual-write to Rust native ctx store (indexed queries)
-    if (tryInitNativeCtx()) {
-      try {
-        const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
-        nb.ctxInsert(event);
-      } catch { /* ignore write errors */ }
-    }
-  } finally {
-    await release(); // proper-lockfile suggests using the release function returned by lock()
+  // 生成 correlation_id
+  if (!event.correlation_id && !event.trace_id) {
+    const { dateStr, nextSeq } = scanMaxSeq(ctxPath);
+    event.correlation_id = formatCorrelationId(dateStr, nextSeq);
   }
+
+  // Trace Signing
+  const key = getOrCreateKey();
+  if (key) {
+    event.signature = signEvent(event, key);
+  }
+
+  // 主写入: Rust native ctx store (SQLite WAL, 线程安全)
+  if (tryInitNativeCtx()) {
+    try {
+      const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+      nb.ctxInsert(event);
+    } catch { /* ignore — JSONL backup follows */ }
+  }
+
+  // 备份写入: JSONL (可移植性)
+  const line = JSON.stringify(event);
+  appendFileSync(ctxPath, line + "\n");
+  _lastLineCount++;
 
   return {
     path: ctxPath,

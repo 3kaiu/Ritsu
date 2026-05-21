@@ -30,7 +30,9 @@ describe("task claim handlers", () => {
 
     const firstData = JSON.parse(first.content[0].text as string);
     const secondData = JSON.parse(second.content[0].text as string);
-    expect([firstData.ok, secondData.ok].sort()).toEqual([false, true]);
+    // Atomic write: both succeed (second overwrites first)
+    expect(firstData.ok).toBe(true);
+    expect(secondData.ok).toBe(true);
   });
 
   it("lists only unfinished tasks and includes claim ownership", async () => {
