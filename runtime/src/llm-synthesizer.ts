@@ -21,7 +21,7 @@ interface LLMConfig {
   enabled: boolean;
 }
 
-function getConfig(): LLMConfig {
+export function getConfig(): LLMConfig {
   return {
     endpoint: process.env.RITSU_LLM_ENDPOINT ?? "https://api.openai.com/v1/chat/completions",
     apiKey: process.env.RITSU_LLM_API_KEY ?? "",
@@ -101,7 +101,7 @@ Each rule must have: id, match_regex, scope (coding_style|type_safety|performanc
   }
 }
 
-function buildSynthesisPrompt(input: SynthesisInput): string {
+export function buildSynthesisPrompt(input: SynthesisInput): string {
   const parts: string[] = [
     `# Human Corrections Analysis`,
     `Analyze the following human edits to AI-written code and extract coding preference rules.`,
@@ -139,7 +139,7 @@ function buildSynthesisPrompt(input: SynthesisInput): string {
   return parts.join("\n");
 }
 
-function parseLLMResponse(content: string): PreferenceRule[] {
+export function parseLLMResponse(content: string): PreferenceRule[] {
   // Strip markdown fences if present
   const cleaned = content
     .replace(/^```ya?ml\s*/m, "")
