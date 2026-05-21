@@ -2,6 +2,10 @@
 name: freestyle
 version: "6.5.0"
 description: "Ritsu 默认响应模式。处理不需要进入流程的快速交互。"
+author: "3kaiu"
+license: "MIT"
+homepage: "https://github.com/3kaiu/Ritsu"
+tags: ["chat", "q&a", "utility", "freestyle"]
 when_to_use: "/r-freestyle, 快速问答, 解释概念, 格式化代码, 计算, 翻译, 随便聊聊, 读代码, 解释逻辑, 调研"
 total_steps: 1
 hard_constraints:

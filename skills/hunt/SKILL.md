@@ -2,6 +2,10 @@
 name: hunt
 version: "6.5.0"
 description: "Ritsu 技术诊断入口。通过取证与假设验证锁定根因，并给出修复建议。"
+author: "3kaiu"
+license: "MIT"
+homepage: "https://github.com/3kaiu/Ritsu"
+tags: ["debug", "troubleshooting", "mcp-server", "diagnostics"]
 when_to_use: "/r-hunt, 报错了, 排障, 诊断, debug, 找不到问题在哪"
 total_steps: 4
 ---

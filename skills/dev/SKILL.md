@@ -2,6 +2,10 @@
 name: dev
 version: "6.5.0"
 description: "Ritsu 开发实现入口。根据任务等级自动选择最优执行路径。"
+author: "3kaiu"
+license: "MIT"
+homepage: "https://github.com/3kaiu/Ritsu"
+tags: ["coding", "implementation", "mcp-server", "quality-gates"]
 when_to_use: "/r-dev, 写代码, 开发, 修复 bug, 开始实现, 改一下, 调整"
 total_steps: 5
 ---

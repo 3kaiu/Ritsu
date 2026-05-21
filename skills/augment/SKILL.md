@@ -2,6 +2,10 @@
 name: augment
 version: "6.5.0"
 description: "Ritsu 补测引擎。分析设计契约与覆盖率缺口，智能补全测试用例。"
+author: "3kaiu"
+license: "MIT"
+homepage: "https://github.com/3kaiu/Ritsu"
+tags: ["testing", "coverage", "mcp-server", "assertions"]
 when_to_use: "/r-augment, 补测试, 提高覆盖率"
 total_steps: 4
 ---

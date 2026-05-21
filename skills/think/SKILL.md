@@ -2,6 +2,10 @@
 name: think
 version: "6.5.0"
 description: "Ritsu 需求分析入口。根据任务等级产出对应深度的设计文档。"
+author: "3kaiu"
+license: "MIT"
+homepage: "https://github.com/3kaiu/Ritsu"
+tags: ["design", "architecture", "mcp-server", "openspec"]
 when_to_use: "/r-think, 需求审核, 方案判断, 怎么做, 看看这个需求"
 total_steps: 4
 ---

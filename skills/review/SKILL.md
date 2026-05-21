@@ -2,6 +2,10 @@
 name: review
 version: "6.5.0"
 description: "Ritsu 最终验收入口。产出《验收单 (Assurance Sheet)》，决定是否可合并、可上线。"
+author: "3kaiu"
+license: "MIT"
+homepage: "https://github.com/3kaiu/Ritsu"
+tags: ["review", "assurance", "mcp-server", "audit"]
 when_to_use: "/r-review, review, code review, 审查代码, 最终验收"
 total_steps: 4
 ---
