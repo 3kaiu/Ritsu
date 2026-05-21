@@ -68,11 +68,69 @@ describe("AstGrepDetector", () => {
       context: { scan_files: ["runtime/package.json"], skill: "dev" },
     });
 
-    expect(execFileSync).toHaveBeenCalledTimes(1);
-    const args = vi.mocked(execFileSync).mock.calls[0][1] as string[];
+    expect(execFileSync).toHaveBeenCalledTimes(2);
+    const args = vi.mocked(execFileSync).mock.calls[1][1] as string[];
     const langIndex = args.indexOf("--lang");
     expect(langIndex).not.toBe(-1);
     const languagesArg = args[langIndex + 1];
     expect(languagesArg).toContain("json");
+  });
+
+  it("falls back to native parsing when ast-grep binary throws ENOENT", () => {
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error("ENOENT: no such file or directory, spawn 'ast-grep'");
+    });
+
+    const detector = new AstGrepDetector();
+    const rule: PolicyRule = {
+      id: "AP-13",
+      name: "ast-grep",
+      severity: "warn",
+      detector: { type: "ast_grep", rule_dir: "rules/ast-grep" },
+    };
+
+    // Create a temporary file with a debugger and a console.log statement
+    const { writeFileSync, mkdtempSync, rmSync, existsSync } = require("node:fs");
+    const { tmpdir } = require("node:os");
+    const { join } = require("node:path");
+
+    const tempDir = mkdtempSync(join(tmpdir(), "ritsu-ast-grep-fallback-"));
+    const tempFile = join(tempDir, "test-fallback.ts");
+    
+    try {
+      writeFileSync(
+        tempFile,
+        `
+        function test() {
+          console.log("hello");
+          debugger;
+          try {
+            doSomething();
+          } catch (e) {
+          }
+        }
+        `,
+        "utf-8"
+      );
+
+      const violations = detector.detect(rule, {
+        action: "commit_diff",
+        context: { scan_files: [tempFile], skill: "dev" },
+      });
+
+      expect(violations.length).toBeGreaterThanOrEqual(1);
+      const messages = violations.map(v => v.message);
+      expect(messages.some(m => m.includes("Avoid console.log"))).toBe(true);
+      expect(messages.some(m => m.includes("Avoid debugger"))).toBe(true);
+      expect(messages.some(m => m.includes("Avoid empty catch blocks"))).toBe(true);
+      expect(violations[0].message).toContain("宿主系统未全局安装 ast-grep");
+    } finally {
+      if (existsSync(tempFile)) {
+        rmSync(tempFile, { force: true });
+      }
+      if (existsSync(tempDir)) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
   });
 });

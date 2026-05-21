@@ -56,6 +56,10 @@ describe("shared helpers", () => {
   });
 
   it("adds stack-specific binaries on top of the base allowlist", () => {
+    const baseAllowed = getAllowedBinariesForProject([]);
+    expect(baseAllowed.has("npm")).toBe(false);
+    expect(baseAllowed.has("curl")).toBe(false);
+
     const allowed = getAllowedBinariesForProject(["Python", "mobile", "unknown"]);
 
     expect(allowed.has("git")).toBe(true);
@@ -63,5 +67,10 @@ describe("shared helpers", () => {
     expect(allowed.has("pytest")).toBe(true);
     expect(allowed.has("fastlane")).toBe(true);
     expect(allowed.has("adb")).toBe(true);
+    expect(allowed.has("curl")).toBe(true);
+
+    const nodeAllowed = getAllowedBinariesForProject(["nodejs"]);
+    expect(nodeAllowed.has("npm")).toBe(true);
+    expect(nodeAllowed.has("curl")).toBe(true);
   });
 });

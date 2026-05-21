@@ -49,9 +49,12 @@ async function main() {
     const schemaContent = readFileSync(schemaPath, "utf-8");
     const schemaVersionMatch = schemaContent.match(/v(\d+\.\d+\.\d+)/);
     if (schemaVersionMatch && schemaVersionMatch[1] !== SERVER_VERSION) {
-      console.warn(
-        `[ritsu-mcp-server] ⚠️  version mismatch: package.json=${SERVER_VERSION} schema=${schemaVersionMatch[1]}`,
-      );
+      const message = `[ritsu-mcp-server] ⚠️  version mismatch: package.json=${SERVER_VERSION} schema=${schemaVersionMatch[1]}`;
+      if (process.env.RITSU_STRICT === '1') {
+        throw new Error(message);
+      } else {
+        console.warn(message);
+      }
     }
   }
 

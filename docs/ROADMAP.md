@@ -6,15 +6,7 @@
 > 上一版（治理优先）见 git 历史；本版重排为"以生成时刻为起点向外辐射"。
 >
 > **配套文档**：
-> - [inventory.md](./inventory.md) — 项目当前状态全景盘点（v5.6.0 健康度评分）
 > - [risk-register.md](./risk-register.md) — 18 项开放风险登记册
-> - [v2-stress-test.md](./v2-stress-test.md) — 本路线的压力测试与修正建议（执行前必读）
-> - [v2-execution-priority.md](./v2-execution-priority.md) — 基于已落地交叉重排的 7 个执行 batch
->
-> **RFC 索引**：
-> - [RFC-001](./rfc/001-multi-agent-trace.md) — Multi-Agent Trace Protocol (v6.0)
-> - [RFC-002](./rfc/003-multi-agent-collaboration.md) — Cross-Agent Collaboration Protocol (v6.1)
-> - [RFC-003](./rfc/004-advanced-coordination.md) — Advanced Coordination & Observability (v6.2)
 
 ---
 
@@ -189,8 +181,8 @@ Phase E 启动期间收集的后续候选已沉淀，详见 [decision-log.md](./
 | 候选 | 决策 | 落地 |
 | --- | --- | --- |
 | RFC-002 路线压力测试 | 暂缓（设计成熟度足够） | — |
-| RFC-002 拆解整合 execution-priority | 接受 | Batch 8 见 [v2-execution-priority.md](./v2-execution-priority.md) |
-| RFC-003 v6.2 议题起草 | 接受 | [RFC-003](./rfc/004-advanced-coordination.md) + Batch 9 |
+| RFC-002 拆解整合 execution-priority | 接受 | Batch 8（已归档） |
+| RFC-003 v6.2 议题起草 | 接受 | RFC-003（已归档） + Batch 9 |
 
 ---
 

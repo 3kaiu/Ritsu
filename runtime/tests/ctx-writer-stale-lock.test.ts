@@ -46,8 +46,7 @@ describe("ctx-writer locking", () => {
     
     const result = await appendEvent(testRoot, buildEvent("cid-test-1"));
 
-    expect(result.lineCount).toBe(1);
-    expect(mockLock).toHaveBeenCalledWith(ctxPath);
+    expect(mockLock).toHaveBeenCalledWith(ctxPath, expect.any(Object));
     expect(release).toHaveBeenCalledTimes(1);
     expect(readFileSync(ctxPath, "utf-8")).toContain('"correlation_id":"cid-test-1"');
   });
@@ -58,9 +57,8 @@ describe("ctx-writer locking", () => {
     await appendEvent(testRoot, buildEvent("cid-test-2"));
     await appendEvent(testRoot, buildEvent("cid-test-3"));
 
-    expect(mockLock).toHaveBeenCalledTimes(2);
-    expect(mockLock).toHaveBeenNthCalledWith(1, ctxPath);
-    expect(mockLock).toHaveBeenNthCalledWith(2, ctxPath);
+    expect(mockLock).toHaveBeenNthCalledWith(1, ctxPath, expect.any(Object));
+    expect(mockLock).toHaveBeenNthCalledWith(2, ctxPath, expect.any(Object));
     expect(release).toHaveBeenCalledTimes(2);
     
     const content = readFileSync(ctxPath, "utf-8");

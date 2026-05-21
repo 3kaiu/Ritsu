@@ -51,7 +51,15 @@ export async function appendEvent(
   }
 
 
-  const release = await lock(ctxPath);
+  const release = await lock(ctxPath, {
+    retries: {
+      retries: 5,
+      factor: 2,
+      minTimeout: 100,
+      maxTimeout: 1000,
+      randomize: true,
+    }
+  });
   try {
     // 在锁内生成 correlation_id（若未提供且没有 trace_id）
     if (!event.correlation_id && !event.trace_id) {

@@ -14,6 +14,9 @@ global:
     pattern: "引用或调用函数前，未 grep 验证其真实存在"
     enforcement: "引用前必须 grep 验证，禁止制造 Unknown identifiers 导致编译失败"
     severity: FATAL
+    detector:
+      type: ast
+      target: diff
   - id: AP-3
     name: Serial interrogation
     pattern: "遇到不清晰的需求，分成多次对话追问"

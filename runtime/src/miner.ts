@@ -189,12 +189,14 @@ export function minePreferences(days: number): string | null {
     }
 
     let globalLogOutput = "";
-    if (earliestSinceMs !== Infinity) {
+    if (earliestSinceMs !== Infinity && latestWrites.size > 0) {
       try {
         const since = new Date(earliestSinceMs).toISOString();
-        globalLogOutput = execSync(`git log -p --date=raw --since="${since}"`, {
+        const fileLimiters = Array.from(latestWrites.keys()).map(f => `"${f}"`).join(" ");
+        globalLogOutput = execSync(`git log -p --date=raw --since="${since}" -- ${fileLimiters}`, {
           cwd: root,
           stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: 10 * 1024 * 1024,
         }).toString();
       } catch {
         // Ignore git errors
@@ -202,13 +204,17 @@ export function minePreferences(days: number): string | null {
     }
 
     let globalDiffOutput = "";
-    try {
-      globalDiffOutput = execSync(`git diff`, {
-        cwd: root,
-        stdio: ["ignore", "pipe", "ignore"],
-      }).toString();
-    } catch {
-      // Ignore git errors
+    if (latestWrites.size > 0) {
+      try {
+        const fileLimiters = Array.from(latestWrites.keys()).map(f => `"${f}"`).join(" ");
+        globalDiffOutput = execSync(`git diff -- ${fileLimiters}`, {
+          cwd: root,
+          stdio: ["ignore", "pipe", "ignore"],
+          maxBuffer: 10 * 1024 * 1024,
+        }).toString();
+      } catch {
+        // Ignore git errors
+      }
     }
 
     // Parse git log output

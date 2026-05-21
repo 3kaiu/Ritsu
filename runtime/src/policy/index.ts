@@ -7,6 +7,7 @@ import { ScopeDiffDetector } from "./detectors/scope-diff.js";
 import { ContractCoverageDetector } from "./detectors/contract-coverage.js";
 import { PreferenceLintDetector } from "./detectors/preference-lint.js";
 import { AstGrepDetector } from "./detectors/ast-grep.js";
+import { AstDetector } from "./detectors/ast.js";
 import { reconcilePreferences } from "./detectors/ast-grep-reconciler.js";
 
 export { reconcilePreferences };
@@ -18,6 +19,7 @@ const detectors: Record<string, DetectorPlugin> = {
   contract_coverage: new ContractCoverageDetector(),
   preference_lint: new PreferenceLintDetector(),
   ast_grep: new AstGrepDetector(),
+  ast: new AstDetector(),
 };
 
 export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; violations: PolicyViolation[] } {
@@ -54,7 +56,7 @@ export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; vi
       // commit_diff -> diff
       if (rule.detector.target === "artifact_content" && ctx.action !== "write_artifact") continue;
       if (rule.detector.target === "diff" && ctx.action !== "commit_diff") {
-        if (rule.detector.type !== "ast_grep") continue;
+        if (rule.detector.type !== "ast_grep" && rule.detector.type !== "ast") continue;
       }
 
       const ruleViolations = detector.detect(rule, ctx);

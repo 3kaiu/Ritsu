@@ -407,4 +407,103 @@ describe("ritsu_run_quality_gates", () => {
     data = JSON.parse(result.content[0].text as string);
     expect(data.coverage.summary.lines.pct).toBe(90.0);
   });
+
+  it("parses Python coverage.json format correctly", async () => {
+    writeFileSync(
+      resolve(root, "package.json"),
+      JSON.stringify({ scripts: { "test:coverage": "pytest" } }),
+    );
+    writeFileSync(
+      resolve(root, "coverage.json"),
+      JSON.stringify({
+        totals: {
+          percent_covered: 75.0,
+          covered_lines: 75,
+          num_statements: 100,
+        },
+        files: {
+          "src/module.py": {
+            summary: {
+              percent_covered: 75.0,
+              covered_lines: 75,
+              num_statements: 100,
+            }
+          }
+        }
+      }),
+      "utf-8",
+    );
+
+    mockSpawnSequence((child) => completeChild(child, 0, "pytest ok"));
+
+    const result = await ritsu_run_quality_gates({ skip_lint: true, timeout_ms: 1000 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.coverage.summary.lines.pct).toBe(75.0);
+    expect(data.coverage.summary.statements.pct).toBe(75.0);
+    expect(data.coverage.per_file["src/module.py"].lines.pct).toBe(75.0);
+  });
+
+  it("parses Python coverage.xml format correctly", async () => {
+    writeFileSync(
+      resolve(root, "package.json"),
+      JSON.stringify({ scripts: { "test:coverage": "pytest" } }),
+    );
+    writeFileSync(
+      resolve(root, "coverage.xml"),
+      `<?xml version="1.0" ?>
+<coverage line-rate="0.80" lines-valid="100" lines-covered="80" branch-rate="0.70">
+  <sources>
+    <source>/src</source>
+  </sources>
+  <packages>
+    <package name="src">
+      <classes>
+        <class name="module.py" filename="src/module.py" line-rate="0.80">
+        </class>
+      </classes>
+    </package>
+  </packages>
+</coverage>`,
+      "utf-8",
+    );
+
+    mockSpawnSequence((child) => completeChild(child, 0, "pytest xml ok"));
+
+    const result = await ritsu_run_quality_gates({ skip_lint: true, timeout_ms: 1000 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.coverage.summary.lines.pct).toBe(80.0);
+    expect(data.coverage.summary.lines.total).toBe(100);
+    expect(data.coverage.summary.lines.covered).toBe(80);
+    expect(data.coverage.summary.branches.pct).toBe(70.0);
+    expect(data.coverage.per_file["src/module.py"].lines.pct).toBe(80.0);
+  });
+
+  it("parses Go cover.out format correctly", async () => {
+    writeFileSync(
+      resolve(root, "package.json"),
+      JSON.stringify({ scripts: { "test:coverage": "go test" } }),
+    );
+    writeFileSync(
+      resolve(root, "cover.out"),
+      `mode: set
+github.com/user/project/file1.go:1.10,5.20 2 1
+github.com/user/project/file1.go:6.10,10.20 3 0
+github.com/user/project/file2.go:1.10,5.20 5 2`,
+      "utf-8",
+    );
+
+    mockSpawnSequence((child) => completeChild(child, 0, "go test ok"));
+
+    const result = await ritsu_run_quality_gates({ skip_lint: true, timeout_ms: 1000 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.coverage.summary.lines.pct).toBe(70.0);
+    expect(data.coverage.summary.lines.total).toBe(10);
+    expect(data.coverage.summary.lines.covered).toBe(7);
+
+    expect(data.coverage.per_file["github.com/user/project/file1.go"].lines.pct).toBe(40.0);
+    expect(data.coverage.per_file["github.com/user/project/file2.go"].lines.pct).toBe(100.0);
+  });
 });

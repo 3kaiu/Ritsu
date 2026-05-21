@@ -23,7 +23,8 @@ export type DetectorType =
   | "scope_diff"
   | "contract_coverage"
   | "preference_lint"
-  | "ast_grep";
+  | "ast_grep"
+  | "ast";
 
 export interface DetectorConfig {
   type: DetectorType;

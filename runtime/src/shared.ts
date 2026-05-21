@@ -108,22 +108,23 @@ export function getArtifactLayer(type: string): ArtifactLayer {
  */
 const BASE_ALLOWED_BINARIES = [
   "git", "grep", "rg", "cat", "head", "tail", "ls", "find", "fd", "wc", "sort",
-  "uniq", "diff", "echo", "pwd", "which", "env", "node", "npx", "npm", "yarn",
-  "pnpm", "tsc", "eslint", "prettier", "vitest", "jest", "jq", "yq", "make",
-  "cmake", "sed", "awk", "tr", "cut", "xargs", "tee", "mkdir", "touch", "cp",
-  "mv", "ln", "curl", "wget", "gh",
+  "uniq", "diff", "echo", "pwd", "which", "env", "node", "npx", "tsc", "eslint",
+  "prettier", "vitest", "jest", "jq", "yq", "make", "cmake", "sed", "awk",
+  "tr", "cut", "xargs", "tee", "mkdir", "touch", "cp", "mv", "ln", "gh",
 ];
 
 /**
  * 技术栈专项允许的二进制工具
  */
 const STACK_SPECIFIC_BINARIES: Record<string, string[]> = {
-  flutter: ["flutter", "dart", "pub"],
-  go: ["go", "golangci-lint"],
-  python: ["python", "python3", "pip", "poetry", "pytest"],
-  java: ["java", "javac", "mvn", "gradle"],
-  rust: ["cargo", "rustc", "rustup"],
-  mobile: ["adb", "xcrun", "fastlane"],
+  nodejs: ["npm", "yarn", "pnpm", "curl", "wget"],
+  typescript: ["npm", "yarn", "pnpm", "curl", "wget"],
+  flutter: ["flutter", "dart", "pub", "curl", "wget"],
+  go: ["go", "golangci-lint", "curl", "wget"],
+  python: ["python", "python3", "pip", "poetry", "pytest", "curl", "wget"],
+  java: ["java", "javac", "mvn", "gradle", "curl", "wget"],
+  rust: ["cargo", "rustc", "rustup", "curl", "wget"],
+  mobile: ["adb", "xcrun", "fastlane", "curl", "wget"],
 };
 
 /**

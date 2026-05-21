@@ -166,46 +166,53 @@ export function loadPolicies(): PolicyRule[] {
 
   // 1. Load baseline anti-patterns
   let rules: PolicyRule[] = [];
-  if (existsSync(apPath)) {
-    const raw = readFileSync(apPath, "utf-8");
-    const doc = yaml.load(raw) as AntiPatternsDoc | null;
-    if (doc) {
-      rules.push(...normalizeRules(doc.global));
-      rules.push(...normalizeRules(doc.review));
+  try {
+    if (existsSync(apPath)) {
+      const raw = readFileSync(apPath, "utf-8");
+      const doc = yaml.load(raw) as AntiPatternsDoc | null;
+      if (doc) {
+        rules.push(...normalizeRules(doc.global));
+        rules.push(...normalizeRules(doc.review));
+      }
     }
-  }
 
-  // 2. Load overrides from AGENTS.md
-  const profile = getAgentsProfile();
-  const overrides = profile?.rules_overrides;
-  if (overrides) {
-    const disabledIds = Array.isArray(overrides.disable)
-      ? overrides.disable.filter((id): id is string => typeof id === "string")
-      : [];
-    if (disabledIds.length > 0) {
-      rules = rules.filter((rule) => !disabledIds.includes(rule.id));
-    }
-    const downgrades = Array.isArray(overrides.downgrade)
-      ? overrides.downgrade
-          .filter(isDowngradeOverride)
-          .map((override) => ({
-            id: override.id,
-            severity: normalizeSeverity(override.severity) ?? "warn",
-          }))
-      : [];
-    if (downgrades.length > 0) {
-      for (const dg of downgrades) {
-        const rule = rules.find((candidate) => candidate.id === dg.id);
-        if (rule) {
-          rule.severity = dg.severity;
+    // 2. Load overrides from AGENTS.md
+    const profile = getAgentsProfile();
+    const overrides = profile?.rules_overrides;
+    if (overrides) {
+      const disabledIds = Array.isArray(overrides.disable)
+        ? overrides.disable.filter((id): id is string => typeof id === "string")
+        : [];
+      if (disabledIds.length > 0) {
+        rules = rules.filter((rule) => !disabledIds.includes(rule.id));
+      }
+      const downgrades = Array.isArray(overrides.downgrade)
+        ? overrides.downgrade
+            .filter(isDowngradeOverride)
+            .map((override) => ({
+              id: override.id,
+              severity: normalizeSeverity(override.severity) ?? "warn",
+            }))
+        : [];
+      if (downgrades.length > 0) {
+        for (const dg of downgrades) {
+          const rule = rules.find((candidate) => candidate.id === dg.id);
+          if (rule) {
+            rule.severity = dg.severity;
+          }
         }
       }
     }
-  }
 
-  cachedRules = rules;
-  lastApMtime = apMtime;
-  lastAgentsMtime = agentsMtime;
+    cachedRules = rules;
+    lastApMtime = apMtime;
+    lastAgentsMtime = agentsMtime;
+  } catch (err) {
+    if (cachedRules) {
+      return JSON.parse(JSON.stringify(cachedRules));
+    }
+    // If no cachedRules are available, we still return whatever rules were loaded successfully
+  }
 
   return JSON.parse(JSON.stringify(rules));
 }

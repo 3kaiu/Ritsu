@@ -33,6 +33,7 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
     }
 
     const entries: Record<string, unknown>[] = [];
+    let skippedCount = 0;
 
     if (existsSync(ctxPath)) {
       // 优化：使用流式思想或 Buffer 扫描换行符
@@ -55,7 +56,7 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
             }
             entries.push(parsed);
           } catch {
-            // ignore malformed line
+            skippedCount++;
           }
         }
         start = end + 1;
@@ -76,9 +77,13 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
           }
           entries.push(parsed);
         } catch {
-          // ignore invalid json
+          skippedCount++;
         }
       }
+    }
+
+    if (skippedCount > 0) {
+      console.warn(`[ritsu-mcp-server] ⚠️  Skipped ${skippedCount} malformed/corrupted JSON lines in ctx file.`);
     }
 
     lastMtime = currentMtime;
@@ -119,6 +124,7 @@ export function readRecentEntries(
     
     const content = buffer.toString("utf-8");
     const lines = content.split("\n").filter(l => l.trim());
+    let skippedCount = 0;
     const recent = lines.slice(-limit).map(l => {
       try {
         const parsed = JSON.parse(l);
@@ -130,8 +136,15 @@ export function readRecentEntries(
           parsed.correlation_id = parsed.trace_id;
         }
         return parsed;
-      } catch { return null; }
-    }).filter(Boolean);
+      } catch {
+        skippedCount++;
+        return null;
+      }
+    }).filter(Boolean) as Record<string, unknown>[];
+
+    if (skippedCount > 0) {
+      console.warn(`[ritsu-mcp-server] ⚠️  Skipped ${skippedCount} malformed/corrupted JSON lines in recent ctx block.`);
+    }
 
     return recent;
   } catch (e) {

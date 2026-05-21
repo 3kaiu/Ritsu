@@ -92,6 +92,27 @@ export function formatCorrelationId(dateStr: string, seq: number): string {
 /** 完整生成流程：扫描 -> 计算 -> 格式化 */
 export function generateCorrelationId(projectRoot: string): string {
   const ctxPath = getCtxPath(projectRoot);
-  const { dateStr, nextSeq } = scanMaxSeq(ctxPath);
+  const scanResult = scanMaxSeq(ctxPath);
+  const dateStr = scanResult.dateStr;
+  let nextSeq = scanResult.nextSeq;
+  
+  if (existsSync(ctxPath)) {
+    try {
+      const content = readFileSync(ctxPath, "utf-8");
+      let cid = formatCorrelationId(dateStr, nextSeq);
+      while (content.includes(`"correlation_id":"${cid}"`)) {
+        console.warn(`[ritsu-mcp-server] ⚠️  Collision detected for CID '${cid}'. Auto-incrementing sequence.`);
+        nextSeq++;
+        cid = formatCorrelationId(dateStr, nextSeq);
+      }
+      if (_seqCache && _seqCache.dateStr === dateStr) {
+        _seqCache.maxSeq = nextSeq;
+      }
+      return cid;
+    } catch {
+      // fallback
+    }
+  }
+
   return formatCorrelationId(dateStr, nextSeq);
 }
