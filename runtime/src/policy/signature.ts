@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { getProjectRoot } from "../handlers/_utils.js";
@@ -35,9 +35,7 @@ export function initKey(): string {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  const key = createHmac("sha256", "ritsu-seed-" + Math.random())
-    .update(Date.now().toString())
-    .digest("hex");
+  const key = randomBytes(32).toString("hex");
     
   writeFileSync(path, key, "utf-8");
   return key;
