@@ -1,12 +1,8 @@
 import { spawn } from "node:child_process";
 import {
-  DANGEROUS_ARGS,
-  RESIDUAL_BLACKLIST,
-  SHELL_META_REJECT,
   MAX_BUFFER_MB_HARD_LIMIT,
   MAX_TIMEOUT_MS_HARD_LIMIT,
 } from "../shared.js";
-import { getAllowedBinariesForProject } from "../shared.js";
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentsProfile } from "../agents-parser.js";
@@ -59,44 +55,6 @@ export function parseCommand(cmd: string): ParsedCommand | null {
 
   if (tokens.length === 0) return null;
   return { binary: tokens[0], args: tokens.slice(1) };
-}
-
-export function validateCommandSafety(command: string): { ok: boolean; error?: string } {
-  const trimmedCmd = command.trim();
-
-  for (const pattern of SHELL_META_REJECT) {
-    if (pattern.test(trimmedCmd)) {
-      return {
-        ok: false,
-        error:
-          `shell metacharacter blocked: only single direct commands supported. Matched: ${pattern.source}`,
-      };
-    }
-  }
-
-  const parsed = parseCommand(trimmedCmd);
-  if (!parsed) return { ok: false, error: "empty command after parsing" };
-
-  if (!getAllowedBinariesForProject([]).has(parsed.binary)) {
-    return {
-      ok: false,
-      error: `command blocked: '${parsed.binary}' is not in the allowed binaries list`,
-    };
-  }
-
-  for (const pattern of DANGEROUS_ARGS) {
-    if (pattern.test(trimmedCmd)) {
-      return { ok: false, error: `dangerous argument blocked: ${pattern.source}` };
-    }
-  }
-
-  for (const pattern of RESIDUAL_BLACKLIST) {
-    if (pattern.test(trimmedCmd)) {
-      return { ok: false, error: `dangerous command blocked: ${pattern.source}` };
-    }
-  }
-
-  return { ok: true };
 }
 
 export async function runCmdWithCwd(

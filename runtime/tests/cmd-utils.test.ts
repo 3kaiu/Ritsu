@@ -3,7 +3,6 @@ import {
   detectStackFingerprints,
   parseCommand,
   runCmdWithCwd,
-  validateCommandSafety,
 } from "../src/handlers/_cmd-utils.js";
 import {
   existsSync,
@@ -37,26 +36,6 @@ describe("_cmd-utils", () => {
       args: ["-e", 'console.log("x")'],
     });
     expect(parseCommand("   ")).toBeNull();
-  });
-
-  it("validates command safety for meta characters, blocked binaries, dangerous args, and safe commands", () => {
-    expect(validateCommandSafety("echo hi | cat")).toMatchObject({
-      ok: false,
-    });
-    expect(validateCommandSafety("   ")).toEqual({
-      ok: false,
-      error: "empty command after parsing",
-    });
-    expect(validateCommandSafety("python script.py")).toMatchObject({
-      ok: false,
-    });
-    expect(validateCommandSafety(`node -e "console.log('x')"`)).toMatchObject({
-      ok: false,
-    });
-    expect(validateCommandSafety("git reset --hard")).toMatchObject({
-      ok: false,
-    });
-    expect(validateCommandSafety("git status")).toEqual({ ok: true });
   });
 
   it("runs commands successfully and truncates long output", async () => {

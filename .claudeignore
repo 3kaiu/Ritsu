@@ -1,0 +1,22 @@
+# Build output
+runtime/dist/
+runtime/native/target/
+
+# Dependencies
+runtime/node_modules/
+node_modules/
+
+# Context storage
+.ritsu/
+
+# Coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# Generated files
+*.lock
+!bun.lock
+!native/Cargo.lock
