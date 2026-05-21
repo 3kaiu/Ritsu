@@ -9,7 +9,6 @@ import { existsSync, rmSync } from "node:fs";
 
 /**
  * In-process Ritsu MCP handlers demo (trace, lease, task claim).
- * For optional Cursor Agent SDK example, see examples/cursor-agent-sdk/
  */
 async function runDemo() {
   console.log("🚀 Starting Multi-Agent Collaboration Demo...");

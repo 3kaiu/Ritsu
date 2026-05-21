@@ -4,7 +4,7 @@ First off, thank you for considering contributing to Ritsu! It's people like you
 
 ## OSS Integrations
 
-See [docs/integrations.md](docs/integrations.md) for Claude-first MCP, OpenSpec, and ast-grep. Optional Cursor Agent SDK example: [examples/cursor-agent-sdk/README.md](examples/cursor-agent-sdk/README.md) (not part of core runtime).
+See [docs/integrations.md](docs/integrations.md) for Claude-first MCP, OpenSpec, and ast-grep.
 
 ## Development Setup
 

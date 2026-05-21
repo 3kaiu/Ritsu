@@ -73,7 +73,6 @@ Claude Desktop： [mcp-claude-desktop.example.json](./mcp-claude-desktop.example
 ## 6. 多 Agent
 
 - Ritsu：trace、lease、task claim（主机无关）
-- **Cursor SDK（可选）**： [examples/cursor-agent-sdk/README.md](../examples/cursor-agent-sdk/README.md)
 
 ---
 
