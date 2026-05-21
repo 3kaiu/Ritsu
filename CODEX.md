@@ -1,14 +1,14 @@
-# Ritsu — AI Delivery Workflow Engine
+# Ritsu — AI Delivery Skill Engine
 
-See `CLAUDE.md` for the complete AI onboarding guide. This file exists for Codex CLI compatibility — all relevant content is in `CLAUDE.md`.
+See `CLAUDE.md` for the complete guide.
 
-## 快速参考
+Ritsu 是一个 **skill + engine**：表现为 6 个 skill 指令，底层自动编排其他工具和协议。
 
 ```bash
 bun run --cwd runtime build   # 编译
-bun run --cwd runtime test    # 测试 (342 tests)
+bun run --cwd runtime test    # 测试
 ```
 
 工作流: `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
-
-Ritsu 的 MCP 服务器提供 22 个工具。启动后运行 `ritsu doctor` 检查状态。
+安装: `npx skills add 3kaiu/Ritsu -a claude-code -g -y`
+检查: `ritsu doctor`
