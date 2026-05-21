@@ -89,7 +89,7 @@ jobs:
 
   release:
     name: Release
-    needs: [lint-and-test, build-native]
+    needs: [lint-and-test]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
@@ -110,13 +110,6 @@ jobs:
         run: |
           cd runtime
           bun install
-
-      - name: Download native addons
-        uses: actions/download-artifact@v4
-        with:
-          pattern: ritsu-native.*
-          path: runtime/native/
-          merge-multiple: true
 
       - name: Build
         run: |
