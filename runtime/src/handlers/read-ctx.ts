@@ -367,7 +367,7 @@ export async function ritsu_read_ctx(
   const root = getProjectRoot();
   const ctxPath = getCtxPath(root);
   const isDetail = !!params.detail;
-  const tokenBudget = typeof params.token_budget === "number" ? params.token_budget : undefined;
+  const tokenBudget = typeof params.token_budget === "number" ? params.token_budget : 2000;
 
   const data: Record<string, unknown> = {
     last_incomplete: null,
