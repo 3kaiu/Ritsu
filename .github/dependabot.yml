@@ -4,25 +4,33 @@ updates:
     directory: "/runtime"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
+    labels: ["dependencies"]
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "zod"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "cargo"
     directory: "/runtime/native"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-    commit-message:
-      prefix: "chore"
-      include: "scope"
+    labels: ["dependencies"]
+    open-pull-requests-limit: 3
+    ignore:
+      - dependency-name: "napi"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "napi-derive"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "rusqlite"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
-    labels:
-      - "ci"
+    labels: ["ci"]
+    open-pull-requests-limit: 3
