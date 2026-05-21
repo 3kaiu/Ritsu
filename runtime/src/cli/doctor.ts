@@ -8,6 +8,7 @@ import {
   findLatestCtxFile, parseJsonl, parseLooseJsonl, color,
   readCoveragePct, readRuntimeMetadata, countTripleVerifiedTraces,
 } from "./shared.js";
+import { buildArchitectureSignals } from "../orchestration/architecture-analyzer.js";
 
 export async function runDoctor(args: string[] = []) {
   const root = detectProjectRoot();
@@ -158,6 +159,12 @@ status: PASS`); // Graceful fallback — not a failure
   signals.push(`[signal:mcp-tools]
 mcp_json: ${existsSync(resolve(root, ".mcp.json")) ? "present" : "missing"}
 status: PASS`);
+
+  // Signal 8: Architecture drift analysis
+  try {
+    const archSignals = buildArchitectureSignals(root);
+    signals.push(archSignals.join("\n"));
+  } catch { /* skip if module unavailable */ }
 
   console.log(signals.join("\n\n"));
 }

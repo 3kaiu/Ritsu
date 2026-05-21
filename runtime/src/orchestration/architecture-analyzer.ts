@@ -264,21 +264,43 @@ export function buildArchitectureReport(root: string): string {
   const fingerprint = buildArchitectureFingerprint(root);
 
   const parts = [
-    "# Architecture Report (Ritsu)",
+    "## Architecture Context (Ritsu)",
     "",
-    `## Modules (${fingerprint.modules.length})`,
-    ...fingerprint.modules.map((m) => `- ${m.name} (depth ${m.depth})`),
+    `### Modules (${fingerprint.modules.length})`,
+    "```",
+    ...fingerprint.modules.map((m) => `${m.name}`),
+    "```",
     "",
-    `## Dependencies (${fingerprint.dependencies.length})`,
-    ...fingerprint.dependencies.map((d) => `- ${d.fromModule} → ${d.toModule} (${d.count}x)`),
+    `### Cross-Module Dependencies (${fingerprint.dependencies.length})`,
+    "```",
+    ...fingerprint.dependencies.map((d) => `${d.fromModule} → ${d.toModule} (${d.count}x)`),
+    "```",
   ];
 
   if (fingerprint.rules.length > 0) {
-    parts.push("", `## Architecture Rules (${fingerprint.rules.length})`);
+    parts.push(`\n### Active Architecture Rules (${fingerprint.rules.length})`);
     for (const rule of fingerprint.rules) {
       parts.push(`- [${rule.severity}] ${rule.message}`);
     }
   }
 
   return parts.join("\n");
+}
+
+export function buildArchitectureSignals(root: string): string[] {
+  const fingerprint = buildArchitectureFingerprint(root);
+  const totalDeps = fingerprint.dependencies.length;
+  const uniqueFrom = new Set(fingerprint.dependencies.map((d) => d.fromModule)).size;
+  const uniqueTo = new Set(fingerprint.dependencies.map((d) => d.toModule)).size;
+
+  return [
+    `[signal:architecture]`,
+    `modules: ${fingerprint.modules.length}`,
+    `cross_module_deps: ${totalDeps}`,
+    `dependency_sources: ${uniqueFrom}`,
+    `dependency_targets: ${uniqueTo}`,
+    `rules: ${fingerprint.rules.length}`,
+    `circular_deps: ${fingerprint.rules.filter((r) => r.type === "circular_dependency").length}`,
+    `status: PASS`,
+  ];
 }

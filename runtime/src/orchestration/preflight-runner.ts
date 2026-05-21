@@ -43,6 +43,8 @@ export type PreflightContextPack = Record<string, unknown> & {
   _architecture?: import("./architecture-analyzer.js").LayerRule[];
   /** Architecture drift violations (detected during dev/review preflight) */
   _architecture_drift?: import("./architecture-analyzer.js").LayerRule[];
+  /** Architecture context report (learned during think preflight) */
+  _architecture_context?: string;
 };
 
 function inferTier(
@@ -108,6 +110,9 @@ async function runThinkPreflight(
     if (fingerprint.rules.length > 0) {
       pack._architecture = fingerprint.rules;
     }
+    // Inject architecture context for AI reasoning
+    const report = buildArchitectureReport(projectRoot);
+    pack._architecture_context = report;
   } catch { /* non-critical */ }
 
   const hasOpenSpec = existsSync(resolve(projectRoot, "openspec"));
