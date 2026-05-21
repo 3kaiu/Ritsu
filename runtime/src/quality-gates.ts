@@ -130,7 +130,7 @@ function isWorktreeState(value: unknown): value is QualityGateWorktreeState {
   );
 }
 
-function computeOverallStatus(
+export function computeOverallStatus(
   lintStatus: QualityGateStepStatus,
   testStatus: QualityGateStepStatus,
 ): { passed: boolean; status: QualityGateOverallStatus } {
@@ -147,7 +147,7 @@ function computeOverallStatus(
  * Scans output for unverified claims like "tests pass" / "已验证"
  * when there's no actual test result available.
  */
-function checkVerificationClaims(input: {
+export function checkVerificationClaims(input: {
   lint: { status: QualityGateStepStatus; output: string };
   test: {
     status: QualityGateStepStatus;
@@ -161,7 +161,7 @@ function checkVerificationClaims(input: {
     /\b(?:tests?|all)\s+(?:pass|passed|绿色|通过)\b/i,
     /\bverified\b/i,
     /\b验证通过\b/,
-    /\b(?:测试|检查)\s*全部通过\b/,
+    /(?:测试|检查)\s*全部通过/,
     /\bno\s+(?:issues|errors|failures)\b/i,
   ];
 
