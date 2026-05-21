@@ -2,52 +2,42 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [6.5.0] - 2026-05-15
-
-### Added
-- **Multi-Agent Coordination**: `coordination-sheet` and span inheritance via `RITSU_TRACE_PARENT`.
-- **HMAC Trace Signing**: Centralized event signing for distributed trust.
-- **File Lease Protocol**: `claim_file` and `release_file` for multi-agent concurrency control.
-- **Task Claiming**: `claim_task` and `list_pending_tasks` for coordinated execution.
-
-## [6.0.0] - 2026-05-15
+## [7.0.0] - 2026-05-22
 
 ### Added
-- **AST Detector**: Structural analysis for identifier validation and structural integrity.
-- **Preference Detection**: Automated project convention enforcement via `preference_lint`.
-- **Triple Verification CI**: Protocol for Design ↔ Dev ↔ Assurance alignment.
-- **Health Dashboard**: 4 key metrics (interception rate, promotion rate, coverage, process completeness).
-- **Strict Mode**: `RITSU_STRICT_OUTPUT` default-on for dev environment.
+- Rust napi-rs native engine: vector search + ctx storage (sqlite-vec)
+- Architecture drift detection: module discovery, dependency extraction, preflight comparison
+- Cross-session memory: 3-tier progressive disclosure
+- Superpowers workflow bridge: internal brainstorming and phase mapping
+- CodeGraph integration: codegraph detector, preflight context
+- OpenSpec /opsx: command support
+- Policy plugin system: manifest.json + custom detector hot-reload
+- Waza patterns: anti-pattern examples, Gotchas tables, verification-first hard stop
+- Token budget control: ritsu_read_ctx token_budget parameter
+- Phase-aware artifact validation
+- doctor --signals and doctor --ai commands
 
-## [5.6.0] - 2026-05-15
-
-### Added
-- MIT License.
-- Root `.gitignore` and comprehensive CI workflow.
-- `CONTRIBUTING.md`, `SECURITY.md`, and issue/PR templates.
-- Unit tests for `list-artifacts`, `get-diff`, `get-changed-files`, and more.
-- `ritsu doctor` and `ritsu export` CLI commands.
+### Changed
+- Migrated from npm to Bun 1.3+
+- MCP tools consolidated from 28 to 22
+- CLI split into 9 submodules
+- Error format unified (RitsuToolError)
+- proper-lockfile removed (Rust WAL concurrency)
+- domains/ removed (AGENTS.md sufficient)
 
 ### Fixed
-- TypeScript compilation error in `read-ctx.ts`.
-- Ghost plugin references in `marketplace.json`.
+- Shell injection in Git commands
+- Version number alignment
+- Unicode regex for Chinese claims
 
-## [5.1.0] - 2026-05-15
-
-### Added
-- **Compact Context Delivery**: `ritsu_read_ctx` now supports a compact mode to save tokens.
-- **Tail-Read Optimization**: High-efficiency context reading for large history files.
-- **Decision Rationale**: Mandatory section in `design-sheet` to capture technical trade-offs.
-- **Circuit Breaker**: Detection of consecutive failures with automatic redirection to `think` stage.
-- Comprehensive unit tests for core handlers.
-
-## [5.0.0] - 2026-05-13
+## [6.5.0] - 2026-05-21
 
 ### Added
-- Initial release of Ritsu v5 architecture.
-- Explicit Staging: `think`, `dev`, `hunt`, `review`. (Note: `test` is merged into `dev`).
-- MCP-based toolset.
-- `AGENTS.md` project baseline.
+- Adaptive preference mining
+- Self-contained npx installer
+- Skills CLI metadata
+
+[7.0.0]: https://github.com/3kaiu/Ritsu/compare/v6.5.0...v7.0.0
+[6.5.0]: https://github.com/3kaiu/Ritsu/releases/tag/v6.5.0

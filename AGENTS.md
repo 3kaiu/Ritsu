@@ -1,8 +1,7 @@
-# Project Baseline: Ritsu v6.5.0
-# Created by Antigravity AI Engineering Framework
+# Project Baseline: Ritsu v7.0.0
 
 <!-- Ritsu Configuration Block -->
-ritsu-version: 6.5.0
+ritsu-version: 7.0.0
 domain: fullstack
 host_profile: claude-code
 tech_fingerprints:
@@ -11,8 +10,8 @@ tech_fingerprints:
 rules_overrides:
   disable: []
   downgrade: []
-lint_cmd: npm --prefix runtime run lint
-test_cmd: npm --prefix runtime run test:coverage
+lint_cmd: bun run --cwd runtime lint
+test_cmd: bun run --cwd runtime test
 <!-- End Ritsu Block -->
 
 ## Technical Stack

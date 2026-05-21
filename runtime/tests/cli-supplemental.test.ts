@@ -154,7 +154,7 @@ describe("cli supplemental coverage", () => {
     await expect(runDoctor()).rejects.toThrow("process.exit:1");
 
     expect(output.output).toContain("Failed to parse ctx file");
-    expect(output.output).toContain("Summary: 1 Errors, 0 Warnings");
+    expect(output.output).toContain("Summary: 2 Errors, 0 Warnings");
   });
 
   it("exits export when no context file exists", async () => {

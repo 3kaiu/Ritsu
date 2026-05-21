@@ -633,7 +633,7 @@ describe("cli utilities", () => {
     expect(output.output).toContain("AGENTS.md found");
     expect(output.output).toContain(".ritsu/ directory found");
     expect(output.output).toContain("Stale lock files found: stale.lock");
-    expect(output.output).toContain("AGENTS.md ritsu-version mismatch: 0.0.0 != 6.5.0");
+    expect(output.output).toContain("AGENTS.md ritsu-version mismatch: 0.0.0 != 7.0.0");
     expect(output.output).toContain("Summary: 1 Errors, 1 Warnings");
   });
 
