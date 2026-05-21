@@ -5,7 +5,6 @@ import yaml from "js-yaml";
 import { getProjectRoot } from "./handlers/_utils.js";
 import { reconcilePreferences } from "./policy/detectors/ast-grep-reconciler.js";
 import { isRecord } from "./shared.js";
-import { synthesizeWithLLM } from "./llm-synthesizer.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -654,7 +653,7 @@ export function synthesizeRulesFromCorrections(
   return rules;
 }
 
-export async function autoApplyMinedRules(days: number): Promise<{ addedCount: number; rules: PreferenceRule[] }> {
+export function autoApplyMinedRules(days: number): { addedCount: number; rules: PreferenceRule[] } {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, RITSU_DIR);
   const prefPath = resolve(root, ".ritsu/preferences.yaml");
@@ -663,13 +662,6 @@ export async function autoApplyMinedRules(days: number): Promise<{ addedCount: n
 
   const { corrections, violations } = scanHumanCorrections(root, days);
   const synthesizedRules = synthesizeRulesFromCorrections(corrections);
-
-  // LLM-driven rule synthesis (supplements heuristic rules when enabled)
-  const llmRules = await synthesizeWithLLM({
-    corrections,
-    violations,
-    existingRules: [],
-  });
 
   let currentRules: PreferenceRule[] = [];
   let shouldRewriteCanonicalDoc = false;
@@ -686,7 +678,7 @@ export async function autoApplyMinedRules(days: number): Promise<{ addedCount: n
   }
 
   let addedCount = 0;
-  const allNewRules = [...synthesizedRules, ...llmRules];
+  const allNewRules = synthesizedRules;
   for (const syn of allNewRules) {
     const exists = currentRules.some(
       (existing) =>

@@ -54,8 +54,6 @@ export function usage(detailed = false): string {
   lines.push(
     "ENV:",
     "  RITSU_PROJECT_ROOT       # 项目根目录（默认当前目录）",
-    "  RITSU_LLM_ENABLED=1      # 启用 LLM 规则合成",
-    "  RITSU_LLM_API_KEY        # LLM API 密钥",
     "",
     "Use 'ritsu help' for all commands.",
   );

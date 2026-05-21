@@ -112,9 +112,6 @@ bun dist/cli.js sync push/pull      # Git 同步
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
 | `RITSU_PROJECT_ROOT` | `process.cwd()` | 项目根目录 |
-| `RITSU_LLM_ENABLED` | `0` | 启用 LLM 驱动规则合成 |
-| `RITSU_LLM_API_KEY` | `""` | LLM API 密钥 |
-| `RITSU_LLM_ENDPOINT` | `https://api.openai.com/v1` | LLM API 端点 |
 | `RITSU_STRICT_OUTPUT` | `warn` | 输出严格模式 |
 
 项目基线配置见 `AGENTS.md`，CLI 配置见 `CLAUDE.md`。
