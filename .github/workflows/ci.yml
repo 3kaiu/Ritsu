@@ -15,7 +15,7 @@ jobs:
         bun-version: [1.3]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Bun ${{ matrix.bun-version }}
         uses: oven-sh/setup-bun@v2
@@ -52,7 +52,7 @@ jobs:
             ext: .so
             output: ritsu-native.linux-arm64.node
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
