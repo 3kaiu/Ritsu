@@ -25,6 +25,42 @@ export { runTrace } from "./cli/trace.js";
 export { runMine } from "./cli/mine.js";
 export { runBootstrap } from "./cli/bootstrap.js";
 
+export function runStatus() {
+  const { existsSync } = require("node:fs");
+  const { resolve } = require("node:path");
+  const { detectProjectRoot } = require("./project-root.js");
+  const { readLastIncomplete, readLastCompleted } = require("./ctx-reader.js");
+
+  const root = detectProjectRoot();
+  const ritsuDir = resolve(root, ".ritsu");
+  const hasRitsu = existsSync(ritsuDir);
+
+  console.log("Ritsu Status");
+  console.log("============");
+  console.log(`Project: ${root}`);
+  console.log(`Initialized: ${hasRitsu ? "✅" : "❌ (run /r-init first)"}`);
+  console.log("");
+
+  if (hasRitsu) {
+    const lastComplete = readLastCompleted(root);
+    const lastIncomplete = readLastIncomplete(root);
+    const hasPrefs = existsSync(resolve(root, ".ritsu/preferences.yaml"));
+    const hasKey = existsSync(resolve(root, ".ritsu/secret.key"));
+
+    console.log(`Last completed: ${lastComplete?.skill ?? "none"} (${lastComplete?.status ?? "n/a"})`);
+    console.log(`Last incomplete: ${lastIncomplete?.skill ?? "none"} (${String(lastIncomplete?.status ?? "n/a")})`);
+    console.log(`Preferences: ${hasPrefs ? "✅" : "—"}`);
+    console.log(`Trust key: ${hasKey ? "✅" : "—"}`);
+    console.log("");
+
+    if (lastIncomplete) {
+      console.log(`Breakpoint: ${lastIncomplete.step ?? "?"} — ${String(lastIncomplete.recovery_context?.resume_hint ?? "")}`);
+      console.log(`Suggestion: ${String(lastIncomplete.recovery_context?.recommended_next_step ?? "none")}`);
+    }
+  }
+}
+
+
 export function usage(detailed = false): string {
   const lines = [
     "Usage: ritsu <command> [options]",
@@ -37,6 +73,8 @@ export function usage(detailed = false): string {
     "  ritsu doctor --ai        # AI 工具配置检查",
     "  ritsu trust        # 初始化/覆盖 HMAC 密钥",
     "  ritsu verify <id>  # 校验指定 Trace 的 HMAC 签名",
+    "  ritsu mine --auto   # 自动偏好学习",
+    "  ritsu status        # 当前项目状态一览",
     "",
     "Ritsu CLI — 4 阶段工作流: think → dev → review → hunt",
     "",
@@ -94,7 +132,8 @@ export function main() {
     return;
   }
   if (cmd === "sync") { runSync(cmdArgs[0]); return; }
-  if (cmd === "mine") { runMine(cmdArgs); return; }
+  if (cmd === "mine" || cmd === "learn") { runMine(cmdArgs); return; }
+  if (cmd === "status") { runStatus(); return; }
   if (cmd === "cat") { runCat(cmdArgs); return; }
 
   if (cmd === "trust") {
