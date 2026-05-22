@@ -648,6 +648,11 @@ function artifactWriteErrorResult(
 export async function ritsu_write_artifact(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
+  // Route to patch if action is "patch"
+  if (params.action === "patch") {
+    return ritsu_patch_artifact(params);
+  }
+
   const type = String(params.type ?? "");
   const filename = String(params.filename ?? "");
   const content = String(params.content ?? "");

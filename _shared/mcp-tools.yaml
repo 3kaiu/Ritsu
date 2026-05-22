@@ -79,7 +79,7 @@ tools:
         recovery_context: { type: object }
 
   - name: ritsu_write_artifact
-    description: 写入产物到 .ritsu/
+    description: "写入/修补产物到 .ritsu/。action=patch 时进行增量替换（提供 target_content 和 replacement_content）。"
     call_template:
       tool: ritsu_write_artifact
       params:
@@ -87,32 +87,20 @@ tools:
         filename: "{filename}"
         content: "{content}"
     input:
+      action:
+        type: enum
+        values: [write, patch]
+        required: false
+        description: "write (default) or patch for incremental replacement"
       type:
         type: enum
         values: [design-sheet, design-brief, dev-report, assurance-sheet, diagnosis, coordination-sheet]
-        required: true
+        required: false
       filename: { type: string, required: true }
-      content: { type: string, required: true }
+      content: { type: string, required: false }
+      target_content: { type: string, required: false, description: "Text to replace (action=patch)" }
+      replacement_content: { type: string, required: false, description: "Replacement text (action=patch)" }
       artifact_meta: { type: object, required: false }
-    output_schema:
-      type: object
-      required: [path, size_bytes]
-      properties:
-        path: { type: string }
-        size_bytes: { type: integer }
-
-  - name: ritsu_patch_artifact
-    description: "增量替换 Markdown 内容"
-    call_template:
-      tool: ritsu_patch_artifact
-      params:
-        filename: "{filename}"
-        target_content: "{old}"
-        replacement_content: "{new}"
-    input:
-      filename: { type: string, required: true }
-      target_content: { type: string, required: true }
-      replacement_content: { type: string, required: true }
     output_schema:
       type: object
       required: [path, size_bytes]
