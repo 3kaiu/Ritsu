@@ -14,11 +14,11 @@ Ritsu 自动帮你处理以下所有事情，你不需要直接调用它们：
 | 进入 think 前拉取设计上下文 | Superpowers brainstorming (如有) |
 | preflight 时分析代码影响 | CodeGraph 代码图 |
 | 设计阶段自动同步规格 | OpenSpec 协议 |
-| 写入 artifact 时拦截违规 | 9 个策略检测器 + 用户插件 |
-| diff 时检测架构漂移 | architecture-analyzer 模块 |
-| 完成时质量门禁 | lint + test + 工作树指纹 |
-| 跨会话记忆 | 向量引擎存储 + 语义检索 |
-| 从你的修正中学习 | 偏好挖掘 + 自动规则合成 |
+| 写入 artifact 时拦截违规 | 11 个策略检测器 + 用户插件 |
+| diff 时检测架构漂移 | architecture-analyzer + blast-radius |
+| 完成时质量门禁 | lint + test + adaptive coverage |
+| 跨会话记忆 | bun:sqlite + 向量存储 + 语义检索 |
+| 从你的修正中学习 | 启发式 + LLM 规则合成 (5 patterns) |
 
 ## 你的接口
 
@@ -88,7 +88,7 @@ AI **必须**将 _suffix pack 的内容整体放置在 Prompt 最末尾（Stage 
 
 - `skills/<stage>/SKILL.md` — 技能指令 + Gotchas
 - `runtime/src/orchestration/` — 引擎编排层 (preflight, internal tools, architecture)
-- `runtime/src/handlers/` — 22 个 MCP 工具
-- `runtime/src/policy/` — 策略引擎 + 9 个检测器
-- `runtime/native/` — Rust 原生引擎 (向量搜索 + ctx 存储)
-- `_shared/mcp-tools.yaml` — 全部 MCP 工具定义
+- `runtime/src/handlers/` — 8 个 MCP 工具 (整合后)
+- `runtime/src/policy/` — 策略引擎 + 11 个检测器 + blast-radius + import-graph
+- `runtime/src/similarity.ts` — 统一 Jaccard/Cosine 相似度
+- `_shared/mcp-tools.yaml` — MCP 工具 Schema 声明

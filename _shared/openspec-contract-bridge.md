@@ -1,4 +1,4 @@
-# OpenSpec ↔ Ritsu Contract Bridge v6.1.0
+# OpenSpec ↔ Ritsu Contract Bridge v8.0.0
 
 > 机器可读映射：OpenSpec 负责长期规格叙事；Ritsu `design-sheet.contracts[]` 负责验收与 `contract_coverage` detector。
 

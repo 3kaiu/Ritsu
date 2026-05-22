@@ -1,11 +1,11 @@
-# Project Baseline: Ritsu v7.0.0
+# Project Baseline: Ritsu v8.0.0
 
 <!-- Ritsu Configuration Block -->
-ritsu-version: 7.0.0
+ritsu-version: 8.0.0
 domain: fullstack
 host_profile: claude-code
 tech_fingerprints:
-  - nodejs
+  - bun
   - typescript
 rules_overrides:
   disable: []
@@ -15,15 +15,18 @@ test_cmd: bun run --cwd runtime test
 <!-- End Ritsu Block -->
 
 ## Technical Stack
-- Language: TypeScript / JavaScript
-- Core: MCP Server (Node.js)
-- Skills: Markdown-based Protocol
+- Language: TypeScript
+- Runtime: Bun 1.3+
+- Core: MCP Server (bun:sqlite storage)
+- Skills: Markdown-based protocol (7 stages)
 
 ## Active Rules
-- Tiered Delivery: Enabled
-- Intent Routing: Enabled
-- Adaptive Memory: Ready
+- Tiered Delivery: Enabled (P0/P1/P2)
+- Intent Routing: Enabled (7 skills)
+- Adaptive Memory: Ready (3-tier progressive disclosure)
+- Policy Engine: 11 detectors / 20 anti-patterns
 
 ## Environment Config
-- Ctx Storage: .ritsu/ctx/
+- Ctx Storage: .ritsu/ctx-YYYY-MM.jsonl
 - Artifact Storage: .ritsu/
+- Vector Store: .ritsu/vectors.db

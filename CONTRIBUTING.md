@@ -3,9 +3,6 @@
 ## Prerequisites
 
 - [Bun](https://bun.sh) >= 1.3.0
-- [Rust](https://rustup.rs) (optional, for native addon)
-- Node.js >= 22 (optional, for semantic-release)
-
 ## Setup
 
 ```bash
@@ -19,7 +16,7 @@ bun install
 # Build
 bun run build
 
-# Test (60 files, 344 tests)
+# Test (61 files, 316 tests)
 bun run test
 
 # Test single file

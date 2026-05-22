@@ -2,13 +2,13 @@
 
 See `CLAUDE.md` for the complete guide.
 
-Ritsu 是一个 **skill + engine**：表现为 6 个 skill 指令，底层自动编排其他工具和协议。
+Ritsu is a **skill + engine**: 7 skill commands, backed by an 11-detector policy engine and 8 MCP tools.
 
 ```bash
-bun run --cwd runtime build   # 编译
-bun run --cwd runtime test    # 测试
+bun run --cwd runtime build   # Build
+bun run --cwd runtime test    # Test (316 tests)
 ```
 
-工作流: `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
-安装: `npx skills add 3kaiu/Ritsu -a claude-code -g -y`
-检查: `ritsu doctor`
+Workflow: `/r-init` → `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
+Install: `npx skills add 3kaiu/Ritsu -a claude-code -g -y`
+Check: `ritsu doctor`

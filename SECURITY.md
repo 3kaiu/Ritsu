@@ -23,15 +23,19 @@ We aim to acknowledge receipt within 48 hours and provide a fix within 7 days fo
 
 Ritsu's security boundary includes:
 
-- `ritsu_exec` command execution and shell injection protections
-- Path traversal in artifact operations
-- HMAC signature verification in trace events
+- `ritsu_exec` command execution protections (binary allow-list, shell metachar rejection)
+- Path traversal prevention in artifact operations
+- HMAC signature verification (ts, correlation_id, trace_id, span_id, skill, domain, status, artifact, violation)
 - Git branch name injection in sync operations
-- Policy engine integrity (anti-pattern enforcement)
+- Code security detection: `security_smell` detector (eval, XSS, command injection, SQL injection, path traversal)
+- Credential leak detection: `regex` detector (API keys, tokens, passwords in diffs)
+- Policy engine integrity (11 detectors, anti-pattern enforcement)
+- `sandbox` mode for high-risk MCP tool operations
 
 ## Supported Versions
 
 | Version | Supported |
 |---------|-----------|
-| ≥ 1.3.0 | ✅ |
-| < 1.3.0 | ❌ |
+| ≥ 8.0.0 | ✅ |
+| ≥ 7.3.0 | ✅ |
+| < 7.3.0 | ❌ |
