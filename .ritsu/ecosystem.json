@@ -1,0 +1,13 @@
+{
+  "version": "1",
+  "profile": "default",
+  "host_profile": "all",
+  "openspec": "auto",
+  "ast_grep": true,
+  "optional_mcp": {
+    "context7": {
+      "enabled": false,
+      "disabled_reason": "Add Context7 to .mcp.json manually — see docs/integrations.md"
+    }
+  }
+}
