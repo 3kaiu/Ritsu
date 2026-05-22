@@ -11,11 +11,29 @@ import { getCtxPath } from "../ctx-path.js";
 import { getStageForSkill } from "../shared.js";
 import { getProjectRoot, textResult, warnResult, errorResult } from "./_utils.js";
 import { verifyEvent, getOrCreateKey } from "../policy/signature.js";
+import { estimateTokens, trimToBudget } from "../token-budget.js";
 
 // ─── read-ctx constants ───
 
 const SUMMARY_THRESHOLD = 50;
 const PRUNED_RECENT_LIMIT = 10;
+
+/** read_ctx 字段优先级: 数字越小越优先保留 */
+const CTX_PRIORITY = [
+  "last_incomplete",
+  "last_completed",
+  "recommended_next_step",
+  "breakpoint_summary",
+  "summary",
+  "recovery_context",
+  "circuit_breaker_status",
+  "reality_check",
+  "recent_entries",
+  "failed_count",
+  "_budget",
+  "recent_entries_pruned",
+  "failed_summary",
+];
 
 function attachStage(entry: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!entry) return null;
@@ -292,7 +310,8 @@ export async function ritsu_read_ctx(
     data.recommended_next_step = nextStep.recommended_next_step;
     data.breakpoint_summary = nextStep.breakpoint_summary;
     data._budget = "low";
-    return textResult(JSON.stringify(data));
+    const trimmedLow = trimToBudget(data, tokenBudget, CTX_PRIORITY);
+    return textResult(JSON.stringify(trimmedLow));
   }
 
   data.last_incomplete = attachStage(lastIncomplete);
@@ -337,6 +356,11 @@ export async function ritsu_read_ctx(
     data.summary = computeSummary(allEntries);
   }
 
+  // Token Squeezer: 仅当调用方显式设置了 token_budget 时才裁剪
+  if (params.token_budget !== undefined && estimateTokens(data) > tokenBudget) {
+    const trimmed = trimToBudget(data, tokenBudget, CTX_PRIORITY);
+    return textResult(JSON.stringify(trimmed));
+  }
   return textResult(JSON.stringify(data));
 }
 
