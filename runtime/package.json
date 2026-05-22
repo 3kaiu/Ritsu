@@ -1,7 +1,7 @@
 {
   "name": "ritsu-mcp-server",
-  "version": "7.0.0",
-  "ritsu_protocol_version": "7.0.0",
+  "version": "8.0.0",
+  "ritsu_protocol_version": "8.0.0",
   "description": "Ritsu — AI Delivery Workflow Skill Engine. MCP server with policy, quality gates, and cross-session memory.",
   "packageManager": "bun@1.3.5",
   "type": "module",
