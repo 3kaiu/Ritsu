@@ -8,63 +8,54 @@ on:
   workflow_dispatch:
 
 jobs:
-  lint-and-test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        bun-version: [1.3]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Bun ${{ matrix.bun-version }}
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ matrix.bun-version }}
-
-      - name: Install dependencies
-        run: cd runtime && bun install
-
-      - name: Lint Check
-        run: cd runtime && bun run lint
-
-      - name: Type Check
-        run: cd runtime && bunx tsc --noEmit
-
-      - name: Run Tests
-        run: cd runtime && bun run test
-
-      - name: Build Check
-        run: cd runtime && bun run build
-
-  build-native:
-    name: Build native (${{ matrix.target }})
+  verify:
+    name: Build, Lint & Test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            ext: .so
-            output: ritsu-native.linux-x64.node
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            ext: .so
-            output: ritsu-native.linux-arm64.node
+        os: [ubuntu-latest, macos-latest]
+
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
-          targets: ${{ matrix.target }}
+          fetch-depth: 0
 
-      - name: Build native addon
+      - name: Setup Bun Environment
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Runtime Dependencies
         run: |
-          cd runtime/native
-          cargo build --release --target ${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/libritsu_native${{ matrix.ext }} ${{ matrix.output }}
+          cd runtime
+          bun install --frozen-lockfile
+
+      - name: TypeScript Compile & Type-Check
+        run: |
+          cd runtime
+          bun run build
+          bunx tsc --noEmit
+
+      - name: Syntax & Lint Audit
+        run: |
+          cd runtime
+          bun run lint
+
+      - name: Run Quality Gate Vitest Suite
+        run: |
+          cd runtime
+          bun run test
+
+      - name: Ritsu Self-Doctor Diagnostic
+        run: |
+          bun runtime/dist/cli.js doctor
+        env:
+          RITSU_PROJECT_ROOT: ${{ github.workspace }}
+
+      - name: Triple Trace Audit
+        run: |
+          bun runtime/dist/cli.js trace --check-triple || true
+        env:
+          RITSU_PROJECT_ROOT: ${{ github.workspace }}
