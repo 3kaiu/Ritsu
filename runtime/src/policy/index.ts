@@ -6,6 +6,7 @@ import type { PolicyCheckContext, PolicyViolation } from "./types.js";
 import { loadPolicies } from "./loader.js";
 import { reconcilePreferences } from "./detectors/ast-grep-reconciler.js";
 import { getDetector, clearPluginCache } from "./plugin-loader.js";
+import { expandScanFilesWithBlastRadius } from "./blast-radius.js";
 
 export { reconcilePreferences };
 export { clearPluginCache };
@@ -59,6 +60,27 @@ export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; vi
     }
   }
 
+  // Blast radius: expand scan_files with transitive dependency consumers,
+  // then warm AST cache for newly discovered files
+  if (ctx.context?.scan_files && ctx.context.scan_files.length > 0) {
+    try {
+      const expanded = expandScanFilesWithBlastRadius(ctx.context.scan_files, root, ctx.astCache);
+      if (expanded.length > ctx.context.scan_files.length) {
+        ctx.context.scan_files = expanded;
+        for (const relPath of expanded) {
+          const absPath = resolve(root, relPath);
+          if (!ctx.astCache.has(absPath) && existsSync(absPath) && /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(absPath)) {
+            try {
+              const content = readFileSync(absPath, "utf-8");
+              ctx.astCache.set(absPath, { content, sourceFile: ts.createSourceFile(absPath, content, ts.ScriptTarget.Latest, true) });
+            } catch {}
+          }
+        }
+      }
+    } catch {
+      // blast radius expansion is best-effort; fall back to original scan_files
+    }
+  }
 
   for (const rule of rules) {
     // 1. Check exemptions
