@@ -11,6 +11,8 @@
 
 import { execFileSync } from "node:child_process";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
+import { ImportGraph } from "../import-graph.js";
+import { getProjectRoot } from "../../handlers/_utils.js";
 
 const CODEGRAPH_CMD = "codegraph";
 
@@ -57,8 +59,6 @@ export class CodeGraphDetector implements DetectorPlugin {
   type = "codegraph" as const;
 
   detect(rule: PolicyRule, ctx: PolicyCheckContext): PolicyViolation[] {
-    if (!isCodeGraphAvailable()) return [];
-
     const violations: PolicyViolation[] = [];
 
     // Collect target files from context
@@ -68,7 +68,20 @@ export class CodeGraphDetector implements DetectorPlugin {
 
     if (allFiles.length === 0) return [];
 
-    const affected = queryAffected(allFiles);
+    // Prefer external CodeGraph CLI; fallback to in-process ImportGraph
+    let affected: AffectedNode[];
+    if (isCodeGraphAvailable()) {
+      affected = queryAffected(allFiles);
+    } else if (ctx.astCache && ctx.astCache.size > 0) {
+      try {
+        const graph = new ImportGraph(ctx.astCache, getProjectRoot());
+        affected = graph.getAffectedBy(allFiles);
+      } catch {
+        affected = [];
+      }
+    } else {
+      return [];
+    }
 
     // Rule-specific checks
     switch (rule.id) {
