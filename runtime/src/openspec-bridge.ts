@@ -105,7 +105,7 @@ export function buildMinimalDesignSheet(
   const rows = contracts
     .map(
       (c) =>
-        `| ${c.id} | ${c.description.replace(/\|/g, "\\|")} | \`${c.test_file_hint}\` |`,
+        `| ${c.id} | ${c.description.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")} | \`${c.test_file_hint}\` |`,
     )
     .join("\n");
 
