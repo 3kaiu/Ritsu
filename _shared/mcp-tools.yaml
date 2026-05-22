@@ -136,40 +136,23 @@ tools:
         lint: { type: object }
         test: { type: object }
 
-  - name: ritsu_file_lease
-    description: "文件锁定: claim/release/list"
+  - name: ritsu_coordination
+    description: "Multi-agent coordination: claim/release/list files and tasks. Prevents two agents from modifying the same file simultaneously."
     call_template:
-      tool: ritsu_file_lease
+      tool: ritsu_coordination
       params:
-        action: claim
+        action: claim_file
         path: "{file_path}"
         span_id: "{span_id}"
     input:
       action:
         type: enum
-        values: [claim, release, list]
+        values: [claim_file, release_file, list_files, claim_task, list_tasks]
         required: true
-      path: { type: string, required: false }
+      path: { type: string, required: false, description: "File path (claim_file, release_file)" }
       span_id: { type: string, required: false }
-      ttl_ms: { type: integer, required: false }
-    output_schema:
-      type: object
-
-  - name: ritsu_task_coordination
-    description: "任务协同: claim/list"
-    call_template:
-      tool: ritsu_task_coordination
-      params:
-        action: claim
-        span_id: "{span_id}"
-        agent_id: "{agent_id}"
-    input:
-      action:
-        type: enum
-        values: [claim, list]
-        required: true
-      span_id: { type: string, required: false }
-      agent_id: { type: string, required: false }
+      agent_id: { type: string, required: false, description: "Agent ID (claim_task)" }
+      ttl_ms: { type: integer, required: false, description: "Lease TTL in ms (claim_file)" }
     output_schema:
       type: object
 

@@ -33,6 +33,7 @@ import { ritsu_bootstrap_ecosystem } from "./bootstrap-ecosystem.js";
 import { ritsu_preflight } from "./preflight.js";
 import { ritsu_learn } from "./learn.js";
 import { ritsu_agent_status } from "./agent-status.js";
+import { ritsu_coordination } from "./coordination.js";
 
 // ─── Handler Registry ───────
 
@@ -59,6 +60,7 @@ export const registerHandlers: Record<
   ritsu_preflight,
   ritsu_learn,
   ritsu_agent_status,
+  ritsu_coordination,
   ritsu_inspect_git_changes,
   ritsu_span_lifecycle,
   ritsu_file_lease,
