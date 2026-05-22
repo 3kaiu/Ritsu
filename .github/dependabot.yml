@@ -13,19 +13,9 @@ updates:
         update-types: ["version-update:semver-major"]
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
-
-  - package-ecosystem: "cargo"
-    directory: "/runtime/native"
-    schedule:
-      interval: "weekly"
-    labels: ["dependencies"]
-    open-pull-requests-limit: 3
-    ignore:
-      - dependency-name: "napi"
+      - dependency-name: "@typescript-eslint/eslint-plugin"
         update-types: ["version-update:semver-major"]
-      - dependency-name: "napi-derive"
-        update-types: ["version-update:semver-major"]
-      - dependency-name: "rusqlite"
+      - dependency-name: "@typescript-eslint/parser"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
@@ -33,4 +23,4 @@ updates:
     schedule:
       interval: "monthly"
     labels: ["ci"]
-    open-pull-requests-limit: 3
+    open-pull-requests-limit: 2

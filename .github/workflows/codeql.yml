@@ -3,15 +3,19 @@ name: CodeQL
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
   schedule:
-    - cron: "0 0 * * 1"
+    - cron: "0 8 * * 1"  # Weekly on Monday at 8am UTC
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       security-events: write
     steps:

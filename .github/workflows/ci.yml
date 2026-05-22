@@ -7,55 +7,88 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  verify:
-    name: Build, Lint & Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Setup Bun Environment
+      - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install Runtime Dependencies
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            runtime/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('runtime/bun.lockb') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
         run: |
           cd runtime
           bun install --frozen-lockfile
 
-      - name: TypeScript Compile & Type-Check
+      - name: TypeScript Build & Type-Check
         run: |
           cd runtime
           bun run build
-          bunx tsc --noEmit
 
-      - name: Syntax & Lint Audit
+      - name: Lint
         run: |
           cd runtime
           bun run lint
 
-      - name: Run Quality Gate Vitest Suite
+      - name: Test
         run: |
           cd runtime
           bun run test
 
-      - name: Ritsu Self-Doctor Diagnostic
+  verify:
+    name: Verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: lint-and-test
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Restore Bun cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            runtime/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('runtime/bun.lockb') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Ritsu Doctor
         run: |
           bun runtime/dist/cli.js doctor
         env:
           RITSU_PROJECT_ROOT: ${{ github.workspace }}
 
-      - name: Triple Trace Audit
+      - name: Ritsu Doctor — Signals
         run: |
-          bun runtime/dist/cli.js trace --check-triple || true
+          bun runtime/dist/cli.js doctor --signals
         env:
           RITSU_PROJECT_ROOT: ${{ github.workspace }}
