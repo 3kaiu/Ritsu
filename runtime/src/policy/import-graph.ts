@@ -37,6 +37,7 @@ function isProjectFile(absPath: string, root: string): boolean {
 }
 
 function hasExportModifier(node: ts.Node): boolean {
+  if (!ts.canHaveModifiers(node)) return false;
   const modifiers = ts.getModifiers(node);
   return modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
 }
