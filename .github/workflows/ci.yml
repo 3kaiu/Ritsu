@@ -32,7 +32,7 @@ jobs:
           path: |
             ~/.bun/install/cache
             runtime/node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('runtime/bun.lockb') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('runtime/bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
 
@@ -87,9 +87,15 @@ jobs:
           path: |
             ~/.bun/install/cache
             runtime/node_modules
-          key: bun-${{ runner.os }}-${{ hashFiles('runtime/bun.lockb') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('runtime/bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
+
+      - name: Install & Build
+        run: |
+          cd runtime
+          bun install --frozen-lockfile
+          bun run build
 
       - name: Ritsu Doctor
         run: |
