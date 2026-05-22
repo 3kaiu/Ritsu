@@ -9,6 +9,7 @@
 import { resolve } from "node:path";
 import { Database } from "bun:sqlite";
 import { detectProjectRoot } from "./project-root.js";
+import { jaccardSimilarity, cosineSimilarity } from "./similarity.js";
 
 type SearchResult = {
   id: string;
@@ -140,7 +141,7 @@ export function searchSimilarViolations(
         // 如果 text 为空，则降级为老的余弦相似度计算
         let score = 0;
         if (text) {
-          score = calculateJaccard(queryText, text);
+          score = jaccardSimilarity(queryText, text);
         } else {
           const queryEmbedding = computeSimpleEmbedding(queryText);
           const emb = JSON.parse(row.embedding) as number[];
@@ -435,24 +436,7 @@ export function ctxQueryAll(limit = 10000): Record<string, unknown>[] {
   }
 }
 
-// ─── Mathematical Utility Functions ───────────────────────────
-
-function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length || a.length === 0) return 0;
-  
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  
-  if (normA === 0 || normB === 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-}
+// ─── Embedding ────────────────────────────────────────────────
 
 /**
  * 简单嵌入向量计算 — 基于字符 n-gram 的哈希特征。
@@ -494,28 +478,6 @@ export function computeSimpleEmbedding(text: string, dimensions = 128): number[]
   }
 
   return vec;
-}
-
-function tokenize(text: string): Set<string> {
-  return new Set(
-    text
-      .toLowerCase()
-      .replace(/[^a-z0-9_一-鿿]+/gi, " ")
-      .split(/\s+/)
-      .filter((t) => t.length > 2),
-  );
-}
-
-function calculateJaccard(a: string, b: string): number {
-  const setA = tokenize(a);
-  const setB = tokenize(b);
-  if (setA.size === 0 && setB.size === 0) return 0;
-  let intersection = 0;
-  for (const t of setA) {
-    if (setB.has(t)) intersection++;
-  }
-  const union = new Set([...setA, ...setB]).size;
-  return union === 0 ? 0 : intersection / union;
 }
 
 function tryHealJsonLine(line: string): string | null {

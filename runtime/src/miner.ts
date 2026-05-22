@@ -6,6 +6,7 @@ import { getProjectRoot } from "./handlers/_utils.js";
 import { reconcilePreferences } from "./policy/detectors/ast-grep-reconciler.js";
 import { isRecord } from "./shared.js";
 import { synthesizeWithLLM } from "./llm-synthesizer.js";
+import { jaccardSimilarity } from "./similarity.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -418,24 +419,6 @@ const HEURISTIC_PATTERNS: HeuristicPattern[] = [
     }),
   },
 ];
-
-function tokenize(text: string): Set<string> {
-  return new Set(
-    text.toLowerCase().split(/[^a-z0-9_]+/).filter((t) => t.length > 2),
-  );
-}
-
-function jaccardSimilarity(a: string, b: string): number {
-  const setA = tokenize(a);
-  const setB = tokenize(b);
-  if (setA.size === 0 && setB.size === 0) return 0;
-  let intersection = 0;
-  for (const t of setA) {
-    if (setB.has(t)) intersection++;
-  }
-  const union = new Set([...setA, ...setB]).size;
-  return union === 0 ? 0 : intersection / union;
-}
 
 function clusterCorrections(corrections: Array<{ file: string; diff: string }>): Map<string, number> {
   const clusters = new Map<string, number>();
