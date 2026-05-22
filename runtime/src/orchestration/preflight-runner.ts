@@ -228,7 +228,7 @@ async function runDevReviewPreflight(
     if (chText?.type === "text") {
       try {
         changed = JSON.parse(chText.text) as Record<string, unknown>;
-      } catch {}
+      } catch { /* skip */ }
     }
     if (Array.isArray(changed?.files)) {
       codegraphFiles = changed.files.filter((f): f is string => typeof f === "string");

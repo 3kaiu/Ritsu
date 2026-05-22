@@ -11,7 +11,7 @@
 
 import ts from "typescript";
 import { existsSync } from "node:fs";
-import { resolve, dirname, relative } from "node:path";
+import { resolve, dirname } from "node:path";
 
 const JS_TS_EXT = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
 

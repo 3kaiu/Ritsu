@@ -1,6 +1,6 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { getProjectRoot, textResult, errorResult } from "./_utils.js";
-import { autoApplyMinedRules, extractHeuristicRules } from "../miner.js";
+import { textResult, errorResult } from "./_utils.js";
+import { autoApplyMinedRules } from "../miner.js";
 
 function getDays(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -10,7 +10,6 @@ function getDays(value: unknown): number {
 export async function ritsu_learn(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
-  const root = getProjectRoot();
   const days = getDays(params.days);
 
   try {

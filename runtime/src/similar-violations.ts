@@ -33,7 +33,7 @@ function ensureNativeIndex(records: ViolationRecord[]): void {
       } finally {
         db.close();
       }
-    } catch {}
+    } catch { /* skip */ }
 
     for (const r of records) {
       indexViolationEmbedding(r.ts, `${r.rule_id} ${r.evidence}`, {

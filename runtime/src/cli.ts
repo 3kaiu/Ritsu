@@ -26,9 +26,13 @@ export { runMine } from "./cli/mine.js";
 export { runBootstrap } from "./cli/bootstrap.js";
 
 export function runStatus() {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { existsSync } = require("node:fs");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { resolve } = require("node:path");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { detectProjectRoot } = require("./project-root.js");
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { readLastIncomplete, readLastCompleted } = require("./ctx-reader.js");
 
   const root = detectProjectRoot();
@@ -138,6 +142,7 @@ export function main() {
 
   if (cmd === "trust") {
     const force = cmdArgs.includes("--force");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { initKey, getOrCreateKey } = require("./policy/signature.js");
     const existing = getOrCreateKey();
     if (existing && !force) {
@@ -155,8 +160,11 @@ export function main() {
       console.error(color("❌ Missing trace ID. Usage: ritsu verify <trace_id>", "red"));
       process.exit(1);
     }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getOrCreateKey, verifyEvent } = require("./policy/signature.js");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { readAllEntries } = require("./ctx-reader.js");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { getProjectRoot } = require("./handlers/_utils.js");
 
     const key = getOrCreateKey();

@@ -11,7 +11,6 @@ import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
 import {
   ritsu_get_changed_files,
-  ritsu_inspect_diff,
   ritsu_inspect_git_changes,
 } from "./diff-analyzer.js";
 import { ritsu_run_quality_gates } from "./run-quality-gates.js";
@@ -20,8 +19,6 @@ import {
   ritsu_write_preference,
 } from "./preferences.js";
 import {
-  ritsu_open_span,
-  ritsu_close_span,
   ritsu_span_lifecycle,
   ritsu_join_trace,
 } from "./span-orchestrator.js";

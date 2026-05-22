@@ -39,12 +39,13 @@ export function initNativeStore(customRoot?: string): boolean {
   if (vectorDb) {
     try {
       vectorDb.close();
-    } catch {}
+    } catch { /* skip */ }
     vectorDb = null;
   }
 
   try {
     const dir = resolve(root, ".ritsu");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { mkdirSync, existsSync } = require("node:fs");
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -78,7 +79,7 @@ export function closeNativeStore(): void {
   if (vectorDb) {
     try {
       vectorDb.close();
-    } catch {}
+    } catch { /* skip */ }
     vectorDb = null;
   }
 }
@@ -153,7 +154,7 @@ export function searchSimilarViolations(
           id: row.id,
           metadata: row.metadata ?? "",
         });
-      } catch {}
+      } catch { /* skip */ }
     }
 
     // 按得分降序排列
@@ -192,12 +193,13 @@ export function initCtxStore(customRoot?: string): boolean {
   if (ctxDb) {
     try {
       ctxDb.close();
-    } catch {}
+    } catch { /* skip */ }
     ctxDb = null;
   }
 
   try {
     const dir = resolve(root, ".ritsu");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { mkdirSync, existsSync, readFileSync } = require("node:fs");
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true });
@@ -263,7 +265,7 @@ export function initCtxStore(customRoot?: string): boolean {
             if (healed) {
               try {
                 parsed = JSON.parse(healed);
-              } catch {}
+              } catch { /* skip */ }
             }
           }
 
@@ -307,7 +309,7 @@ export function closeCtxStore(): void {
   if (ctxDb) {
     try {
       ctxDb.close();
-    } catch {}
+    } catch { /* skip */ }
     ctxDb = null;
     currentCtxDbPath = null;
   }

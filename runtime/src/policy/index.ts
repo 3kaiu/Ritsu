@@ -56,7 +56,7 @@ export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; vi
           true
         );
         ctx.astCache.set(absTarget, { sourceFile, content: ctx.content });
-      } catch {}
+      } catch { /* skip */ }
     }
   }
 
@@ -73,7 +73,7 @@ export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; vi
             try {
               const content = readFileSync(absPath, "utf-8");
               ctx.astCache.set(absPath, { content, sourceFile: ts.createSourceFile(absPath, content, ts.ScriptTarget.Latest, true) });
-            } catch {}
+            } catch { /* skip */ }
           }
         }
       }

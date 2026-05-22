@@ -357,7 +357,7 @@ const HEURISTIC_PATTERNS: HeuristicPattern[] = [
   {
     name: "prefer-const",
     confidence: 0.85,
-    test: (diff) => /^\-.*\blet\b.*=.*\n^\+.*\bconst\b.*=.*/m.test(diff),
+    test: (diff) => /^-.*\blet\b.*=.*\n^\+.*\bconst\b.*=.*/m.test(diff),
     build: () => ({
       id: "pref-prefer-const",
       match_regex: "\\blet\\s+\\w+\\s*=",
@@ -370,7 +370,7 @@ const HEURISTIC_PATTERNS: HeuristicPattern[] = [
     name: "prefer-arrow-function",
     confidence: 0.7,
     test: (diff) =>
-      /^\-.*\bfunction\s+\w+\s*\(/.test(diff) &&
+      /^-.*\bfunction\s+\w+\s*\(/.test(diff) &&
       /^\+.*\bconst\s+\w+\s*=\s*(?:\(.*\)|\w+)\s*=>/.test(diff),
     build: () => ({
       id: "pref-arrow-function",
@@ -384,7 +384,7 @@ const HEURISTIC_PATTERNS: HeuristicPattern[] = [
     name: "prefer-template-literal",
     confidence: 0.7,
     test: (diff) =>
-      /^\-.*['"][^'"]*['"]\s*\+/.test(diff) &&
+      /^-.*['"][^'"]*['"]\s*\+/.test(diff) &&
       /^\+.*`/.test(diff),
     build: () => ({
       id: "pref-template-literal",
@@ -397,7 +397,7 @@ const HEURISTIC_PATTERNS: HeuristicPattern[] = [
   {
     name: "prefer-strict-equality",
     confidence: 0.9,
-    test: (diff) => /^\-.*==[^=].*\n^\+.*===/m.test(diff) || /^\-.*!=[^=].*\n^\+.*!==/m.test(diff),
+    test: (diff) => /^-.*==[^=].*\n^\+.*===/m.test(diff) || /^-.*!=[^=].*\n^\+.*!==/m.test(diff),
     build: () => ({
       id: "pref-strict-equality",
       match_regex: "(?<!!)={2}(?!=)|(?<!!)={2}(?!=)",
@@ -409,7 +409,7 @@ const HEURISTIC_PATTERNS: HeuristicPattern[] = [
   {
     name: "prefer-async-await",
     confidence: 0.65,
-    test: (diff) => /^\-.*\.then\s*\(/.test(diff) && /^\+.*await\b/.test(diff),
+    test: (diff) => /^-.*\.then\s*\(/.test(diff) && /^\+.*await\b/.test(diff),
     build: () => ({
       id: "pref-async-await",
       match_regex: "\\.then\\s*\\(",

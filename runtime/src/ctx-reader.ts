@@ -56,7 +56,7 @@ function tryInitRustCtx(projectRoot: string): boolean {
           } catch {
             const healed = tryHealJsonLine(lastLine);
             if (healed) {
-              try { lastLineParsed = JSON.parse(healed); } catch {}
+              try { lastLineParsed = JSON.parse(healed); } catch { /* skip */ }
             }
           }
         }
@@ -439,5 +439,5 @@ export function _resetReaderCache(): void {
   try {
     const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
     nb.closeCtxStore();
-  } catch {}
+  } catch { /* skip */ }
 }

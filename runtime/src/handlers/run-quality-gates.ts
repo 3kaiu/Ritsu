@@ -491,7 +491,7 @@ export function detectTestRunner(command: { binary: string; args: string[]; cwd:
         if (scriptCmd.includes("jest")) return "jest";
       }
     }
-  } catch {}
+  } catch { /* skip */ }
 
   return null;
 }
@@ -695,7 +695,7 @@ export async function ritsu_run_quality_gates(
           if (existsSync(reportPath)) {
             unlinkSync(reportPath);
           }
-        } catch {}
+        } catch { /* skip */ }
       }
     }
 

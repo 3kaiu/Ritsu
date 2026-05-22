@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { getSharedDir } from "./shared.js";
 import yaml from "js-yaml";
 import { z as zodType } from "zod";
+// eslint-disable-next-line @typescript-eslint/no-var-requires
 const zodModule = require("zod");
 const z = (zodModule.z || zodModule.default?.z || zodType) as typeof zodType;
 
