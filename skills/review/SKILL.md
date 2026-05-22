@@ -12,7 +12,7 @@ total_steps: 4
 
 # Review: 自适应架构级质量验收
 
-> **⚡️ Prompt Topology** — 三段式不可交叉：`anti-patterns.yaml` + `mcp-tools.yaml`（Stage 1）→ this file（Stage 2）→ `_suffix: true` 数据（Stage 3，末尾）。
+> **⚡️ Prompt Topology** — 三段式不可交叉：`anti-patterns.yaml` + `mcp-tools.yaml` + `rules/review-redlines.yaml`（Stage 1）→ this file（Stage 2）→ `_suffix: true` 数据（Stage 3，末尾）。
 
 **触发条件**：用户输入 `/r-review`。
 

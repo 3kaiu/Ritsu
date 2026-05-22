@@ -1,0 +1,38 @@
+# Review Redlines — 仅在 /r-review 阶段加载
+# 这些规则与 anti-patterns.yaml 的 global 段分离，
+# 避免在无关阶段（think/dev/hunt）占用缓存前缀。
+#
+# 当 review 阶段 active 时，在 anti-patterns.yaml 之后加载。
+
+review:
+  - ref: R-1
+    note: "使用 anti-patterns.yaml AP-2 的 ast 检测器"
+
+  - ref: R-2
+    note: "cross_file 检测器已在 anti-patterns.yaml 定义"
+
+  - ref: R-3
+    note: "regex 检测器已在 anti-patterns.yaml 定义"
+
+  - ref: R-4
+    note: "contract_drift 检测器已在 anti-patterns.yaml 定义"
+
+  - ref: R-5
+    note: "regex 检测器已在 anti-patterns.yaml 定义"
+
+  - ref: R-6
+    note: "security_smell 检测器已在 anti-patterns.yaml 定义"
+
+  - ref: R-7
+    note: "人工审核规则。检测 assurance-sheet 中是否缺少 release-advice 段。"
+
+  - ref: R-8
+    note: "architecture 检测器已在 anti-patterns.yaml 定义"
+
+triple_check_policy:
+  description: "三方对账：design.contracts ↔ dev.gates ↔ assurance.verdict"
+  enforced_by: "SKILL.md 中的 review 流水线 Step 2"
+  fields:
+    - design_contracts
+    - quality_gates_snapshot
+    - assurance_verdict

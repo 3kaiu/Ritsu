@@ -1,0 +1,36 @@
+# Dev Guardrails — 仅在 /r-dev 阶段加载
+# 与 global anti-patterns.yaml 分离，dev 专属约束。
+
+dev_constraints:
+  - id: DG-1
+    name: "质量门禁阻断"
+    rule: "ritsu_run_quality_gates 未通过前禁止交付"
+    enforcement: "SKILL.md Step 4 强制执行"
+    severity: HARD_STOP
+
+  - id: DG-2
+    name: "设计对账"
+    rule: "开始编码前必须读取对应的 design-sheet 或 design-brief"
+    enforcement: "SKILL.md Step 2"
+    severity: ERROR
+
+  - id: DG-3
+    name: "范围蔓延保护"
+    rule: "只修改 scan_files 范围内的文件。超出范围的文件变更触发 AP-4。"
+    enforcement: "scope_diff 检测器 (anti-patterns.yaml AP-4)"
+    severity: HARD_STOP
+
+  - id: DG-4
+    name: "偏好合规"
+    rule: "新代码必须符合 .ritsu/preferences.yaml 中的项目偏好"
+    enforcement: "preference_lint 检测器 (anti-patterns.yaml AP-12)"
+    severity: WARN
+
+code_standards:
+  prefer_const_over_let: true
+  prefer_arrow_functions: true
+  prefer_template_literals: true
+  no_console_log_in_production: true
+  no_debugger_statements: true
+  no_empty_catch_blocks: true
+  strict_equality: true

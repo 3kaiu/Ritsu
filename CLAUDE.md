@@ -47,9 +47,18 @@ npx skills add 3kaiu/Ritsu -a claude-code -g -y
 
 为最大化 Anthropic/DeepSeek 缓存命中率（降低 90% 成本，缩短 80% 延迟），你必须严格遵循以下 **Prompt 缓存加载顺序**：
 
-1. **第 1 步：加载静态底座 (Static Prefix)**：在会话启动时，**最前端**必须以静态方式加载极其稳定的 `rules/anti-patterns.yaml`（全局底线规则）和 `_shared/mcp-tools.yaml`（工具 Schema 定义）。这建立了 > 1024/2048 字节的缓存块。
-2. **第 2 步：加载静态技能指令**：随后读取当前指令对应的 `skills/<stage>/SKILL.md`。
-3. **第 3 步：加载易变动态上下文 (Suffix Zone)**：最后在 Prompt 尾部追加极易变动的 `task_summary`、`changed_files`、`git diff` 或者是 `ritsu_preflight` 轻量级 JIT 运行上下文。
+1. **第 1 步：加载静态底座 (Static Prefix)**：在会话启动时，**最前端**必须以静态方式加载：
+   - `rules/anti-patterns.yaml`（全局底线，所有阶段共享）
+   - `_shared/mcp-tools.yaml`（工具 Schema 定义）
+   - 仅当阶段为 `think` 时：`_shared/skill-common-steps.md` 的 Step -2（缓存对齐协议）
+
+   这建立了 > 1024/2048 字节的缓存块。
+
+2. **第 2 步：加载阶段技能指令 + 阶段专属规则**：随后读取当前指令对应的 `skills/<stage>/SKILL.md`，以及阶段专属规则文件：
+   - `dev` 阶段额外加载 `rules/dev-guardrails.yaml`（DG-1 至 DG-4）
+   - `review` 阶段额外加载 `rules/review-redlines.yaml`（R-1 至 R-8，三方对账）
+
+3. **第 3 步：加载易变动态上下文 (Suffix Zone)**：最后在 Prompt 尾部追加极易变动的数据。
 
 ⚠️ **绝对禁止**：在加载静态底座前或加载中间，夹杂任何易变/动态数据（如当前任务描述或具体 diff 文件内容），否则会导致前面的 Prompt 缓存失效！
 
