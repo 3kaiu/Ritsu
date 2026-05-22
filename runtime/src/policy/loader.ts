@@ -149,9 +149,12 @@ export function loadPolicies(): PolicyRule[] {
   // If preferences.yaml changed, reconcile AST-Grep rules automatically!
   if (prefMtime !== lastPrefMtime) {
     try {
-      reconcilePreferences();
+      const ok = reconcilePreferences();
+      if (!ok) {
+        console.warn("[ritsu] preferences reconciliation failed — AST-grep rules may be stale");
+      }
     } catch {
-      // fail-safe
+      console.warn("[ritsu] preferences reconciliation threw — AST-grep rules may be stale");
     }
     lastPrefMtime = prefMtime;
     cachedRules = null; // Clear cached rules to force reload

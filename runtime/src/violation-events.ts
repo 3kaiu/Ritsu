@@ -22,6 +22,7 @@ export async function emitViolationEvent(
 
   const validation = validateEvent(event);
   if (!validation.valid) {
+    console.warn("[ritsu] violation event validation failed, dropping:", validation.errors?.join(", "));
     return;
   }
 

@@ -7,8 +7,11 @@ const KEY_FILE = ".ritsu/secret.key";
 
 interface SignableEvent {
   ts?: unknown;
+  correlation_id?: unknown;
   trace_id?: unknown;
   span_id?: unknown;
+  skill?: unknown;
+  domain?: unknown;
   status?: unknown;
   artifact?: unknown;
   violation?: unknown;
@@ -44,8 +47,11 @@ export function initKey(): string {
 export function signEvent(event: SignableEvent, key: string): string {
   const payload = JSON.stringify({
     ts: event.ts,
+    correlation_id: event.correlation_id,
     trace_id: event.trace_id,
     span_id: event.span_id,
+    skill: event.skill,
+    domain: event.domain,
     status: event.status,
     artifact: event.artifact,
     violation: event.violation,
