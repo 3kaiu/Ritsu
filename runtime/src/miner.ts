@@ -5,6 +5,7 @@ import yaml from "js-yaml";
 import { getProjectRoot } from "./handlers/_utils.js";
 import { reconcilePreferences } from "./policy/detectors/ast-grep-reconciler.js";
 import { isRecord } from "./shared.js";
+import { synthesizeWithLLM } from "./llm-synthesizer.js";
 
 const RITSU_DIR = ".ritsu";
 
@@ -195,7 +196,13 @@ function scanHumanCorrections(root: string, days: number): ScanResult {
         const since = new Date(earliestSinceMs).toISOString();
         const fileNames = Array.from(latestWrites.keys());
         globalLogOutput = execFileSync("git", [
-          "log", "-p", "--date=raw", `--since=${since}`, "--", ...fileNames,
+          "log",
+          "-p",
+          "--date=raw",
+          `--since=${since}`,
+          "--format=<RITSU_COMMIT_START>%ncommit %H%nAuthor: %an <%ae>%nDate: %ct%n%n%B",
+          "--",
+          ...fileNames,
         ], {
           cwd: root,
           stdio: ["ignore", "pipe", "ignore"],
@@ -226,106 +233,80 @@ function scanHumanCorrections(root: string, days: number): ScanResult {
     };
 
     const commits: CommitBlock[] = [];
-    let currentCommit: CommitBlock | null = null;
-    let currentFile: string | null = null;
-    let currentFileDiffLines: string[] = [];
-    let currentHeaderLines: string[] = [];
-    let isParsingDiff = false;
+    const fileNames = Array.from(latestWrites.keys());
 
-    const logLines = globalLogOutput.split(/\r?\n/);
-    for (const line of logLines) {
-      if (line.startsWith("commit ")) {
-        if (currentCommit && currentFile && currentFileDiffLines.length > 0) {
-          currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
-        }
-        if (currentCommit) {
-          commits.push(currentCommit);
-        }
-        currentCommit = {
-          header: "",
-          timestamp: 0,
-          fileDiffs: new Map(),
-        };
-        currentFile = null;
-        currentFileDiffLines = [];
-        currentHeaderLines = [line];
-        isParsingDiff = false;
-        continue;
-      }
+    if (globalLogOutput) {
+      const commitChunks = globalLogOutput.split(/<RITSU_COMMIT_START>\r?\n/);
+      for (const chunk of commitChunks) {
+        if (!chunk.trim()) continue;
 
-      if (currentCommit && !isParsingDiff) {
-        if (line.startsWith("diff --git ")) {
-          isParsingDiff = true;
-          currentCommit.header = currentHeaderLines.join("\n").trimEnd() + "\n\n";
-          const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-          if (match) {
-            currentFile = match[2];
-          } else {
-            currentFile = null;
-          }
-          currentFileDiffLines = [line];
+        // Find the first diff --git line
+        const diffIndex = chunk.indexOf("diff --git ");
+        let header = "";
+        let diffsBlock = "";
+        if (diffIndex !== -1) {
+          header = chunk.substring(0, diffIndex).trimEnd() + "\n\n";
+          diffsBlock = chunk.substring(diffIndex);
         } else {
-          currentHeaderLines.push(line);
-          const dateMatch = line.match(/^Date:\s+(\d+)/);
-          if (dateMatch) {
-            currentCommit.timestamp = parseInt(dateMatch[1], 10) * 1000;
+          header = chunk.trimEnd() + "\n\n";
+        }
+
+        // Extract timestamp from Date: raw line
+        let timestamp = 0;
+        const dateMatch = header.match(/^Date:\s+(\d+)/m);
+        if (dateMatch) {
+          timestamp = parseInt(dateMatch[1], 10) * 1000;
+        }
+
+        const fileDiffs = new Map<string, string>();
+        if (diffsBlock) {
+          const fileDiffChunks = diffsBlock.split(/\r?\n(?=diff --git )/);
+          for (const fileChunk of fileDiffChunks) {
+            if (!fileChunk.startsWith("diff --git ")) continue;
+            const firstLine = fileChunk.split(/\r?\n/)[0];
+            let matchedFile: string | null = null;
+            for (const file of fileNames) {
+              const escapedFile = file.replace(/\\/g, "/");
+              if (firstLine.includes(` b/${escapedFile}`) || firstLine.includes(` "b/${escapedFile}"`)) {
+                matchedFile = file;
+                break;
+              }
+            }
+            if (matchedFile) {
+              fileDiffs.set(matchedFile, fileChunk);
+            }
           }
         }
-        continue;
-      }
 
-      if (currentCommit && isParsingDiff) {
-        if (line.startsWith("diff --git ")) {
-          if (currentFile && currentFileDiffLines.length > 0) {
-            currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
-          }
-          const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-          if (match) {
-            currentFile = match[2];
-          } else {
-            currentFile = null;
-          }
-          currentFileDiffLines = [line];
-        } else {
-          currentFileDiffLines.push(line);
-        }
+        commits.push({
+          header,
+          timestamp,
+          fileDiffs,
+        });
       }
-    }
-
-    if (currentCommit) {
-      if (currentFile && currentFileDiffLines.length > 0) {
-        currentCommit.fileDiffs.set(currentFile, currentFileDiffLines.join("\n"));
-      }
-      commits.push(currentCommit);
     }
 
     // Parse git diff output
     const uncommittedDiffs = new Map<string, string[]>();
-    const diffLines = globalDiffOutput.split(/\r?\n/);
-    let currentDiffFile: string | null = null;
-    let currentDiffFileLines: string[] = [];
-
-    for (const line of diffLines) {
-      if (line.startsWith("diff --git ")) {
-        if (currentDiffFile && currentDiffFileLines.length > 0) {
-          uncommittedDiffs.set(currentDiffFile, currentDiffFileLines);
+    if (globalDiffOutput) {
+      const uncommittedDiffChunks = globalDiffOutput.split(/\r?\n(?=diff --git )/);
+      for (const chunk of uncommittedDiffChunks) {
+        if (!chunk.startsWith("diff --git ")) continue;
+        const firstLine = chunk.split(/\r?\n/)[0];
+        let matchedFile: string | null = null;
+        for (const file of fileNames) {
+          const escapedFile = file.replace(/\\/g, "/");
+          if (firstLine.includes(` b/${escapedFile}`) || firstLine.includes(` "b/${escapedFile}"`)) {
+            matchedFile = file;
+            break;
+          }
         }
-        const match = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
-        if (match) {
-          currentDiffFile = match[2];
-        } else {
-          currentDiffFile = null;
-        }
-        currentDiffFileLines = [line];
-      } else {
-        if (currentDiffFile) {
-          currentDiffFileLines.push(line);
+        if (matchedFile) {
+          uncommittedDiffs.set(matchedFile, chunk.split(/\r?\n/));
         }
       }
     }
-    if (currentDiffFile && currentDiffFileLines.length > 0) {
-      uncommittedDiffs.set(currentDiffFile, currentDiffFileLines);
-    }
+
 
     // Reconstruct per-file diff strings
     for (const [file, event] of latestWrites.entries()) {
@@ -469,199 +450,14 @@ export function promotePreference(prefId: string): boolean {
   return false;
 }
 
-// ─── Auto-apply mined rules ───────────────────────────────────
-
-type DiffHunk = {
-  deletedLines: string[];
-  addedLines: string[];
-};
-
-function parseDiffHunksFromDiff(diffText: string): DiffHunk[] {
-  const hunks: DiffHunk[] = [];
-  const lines = diffText.split(/\r?\n/);
-
-  let currentDeleted: string[] = [];
-  let currentAdded: string[] = [];
-
-  const flushHunk = () => {
-    if (currentDeleted.length > 0 || currentAdded.length > 0) {
-      hunks.push({
-        deletedLines: [...currentDeleted],
-        addedLines: [...currentAdded]
-      });
-      currentDeleted = [];
-      currentAdded = [];
-    }
-  };
-
-  for (const line of lines) {
-    if (
-      line.startsWith("diff --git ") ||
-      line.startsWith("@@ ") ||
-      line.startsWith("commit ") ||
-      line.startsWith("[Uncommitted ") ||
-      line.startsWith("index ") ||
-      line.startsWith("--- ") ||
-      line.startsWith("+++ ")
-    ) {
-      flushHunk();
-      continue;
-    }
-
-    if (line.startsWith("-")) {
-      if (currentAdded.length > 0) {
-        flushHunk();
-      }
-      currentDeleted.push(line.slice(1));
-    } else if (line.startsWith("+")) {
-      currentAdded.push(line.slice(1));
-    } else {
-      flushHunk();
-    }
-  }
-  flushHunk();
-  return hunks;
-}
-
-function hashString(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0;
-  }
-  return Math.abs(hash).toString(36).slice(0, 6);
-}
-
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export function synthesizeRulesFromCorrections(
-  corrections: Array<{ file: string; diff: string }>
-): PreferenceRule[] {
-  const rules: PreferenceRule[] = [];
-  const genericDeletedFreqs = new Map<string, number>();
-
-  for (const corr of corrections) {
-    const hunks = parseDiffHunksFromDiff(corr.diff);
-    for (const hunk of hunks) {
-      // Heuristic 1: Logger Substitution
-      const hasConsole = hunk.deletedLines.some(line =>
-        /console\.(log|warn|error|info)\b/.test(line)
-      );
-      const hasLogger = hunk.addedLines.some(line =>
-        /(?:logger|log)\.(info|warn|error|debug|log)\b/.test(line) && !/console\./.test(line)
-      );
-      if (hasConsole && hasLogger) {
-        if (!rules.some(r => r.id === "pref-auto-logger")) {
-          rules.push({
-            id: "pref-auto-logger",
-            match_regex: "console\\.(log|warn|error|info)",
-            scope: "coding_style",
-            auto_inject_to: ["think", "dev"],
-            message: "Use project logger instead of console.log/warn/error/info."
-          });
-        }
-      }
-
-      // Heuristic 2: Variable Declaration Tightening
-      for (let i = 0; i < Math.min(hunk.deletedLines.length, hunk.addedLines.length); i++) {
-        const delLine = hunk.deletedLines[i];
-        const addLine = hunk.addedLines[i];
-        const letMatch = delLine.match(/\blet\s+([a-zA-Z_]\w*)\b/);
-        const constMatch = addLine.match(/\bconst\s+([a-zA-Z_]\w*)\b/);
-        if (letMatch && constMatch && letMatch[1] === constMatch[1]) {
-          if (!rules.some(r => r.id === "pref-auto-const")) {
-            rules.push({
-              id: "pref-auto-const",
-              match_regex: "\\blet\\s+([a-zA-Z_]\\w*)\\b",
-              scope: "coding_style",
-              auto_inject_to: ["think", "dev"],
-              message: "Prefer const over let for variables that are not reassigned."
-            });
-          }
-        }
-      }
-
-      // Heuristic 3: Strong Type Safety
-      const hasAny = hunk.deletedLines.some(line => /:\s*any\b/.test(line));
-      const hasStrongType = hunk.addedLines.some(line =>
-        /:\s*(?:string|number|boolean|Record|object|unknown|void|[A-Z][a-zA-Z0-9_]*)\b/.test(line) && !/:\s*any\b/.test(line)
-      );
-      if (hasAny && hasStrongType) {
-        if (!rules.some(r => r.id === "pref-auto-no-any")) {
-          rules.push({
-            id: "pref-auto-no-any",
-            match_regex: ":\\s*any\\b",
-            scope: "type_safety",
-            auto_inject_to: ["think", "dev"],
-            message: "Avoid using 'any' type; prefer explicit strong TypeScript typing."
-          });
-        }
-      }
-
-      // Heuristic 4: Imports Sanitization
-      const hasLodash = hunk.deletedLines.some(line => /from\s+['"]lodash['"]/.test(line));
-      const hasLodashEs = hunk.addedLines.some(line => /from\s+['"]lodash-es['"]/.test(line));
-      if (hasLodash && hasLodashEs) {
-        if (!rules.some(r => r.id === "pref-auto-lodash-es")) {
-          rules.push({
-            id: "pref-auto-lodash-es",
-            match_regex: "import\\s+.*\\s+from\\s+['\"]lodash['\"]",
-            scope: "performance",
-            auto_inject_to: ["think", "dev"],
-            message: "Prefer 'lodash-es' over 'lodash' for better tree-shaking and modern bundles."
-          });
-        }
-      }
-
-      // Collect generic deleted lines for frequency analysis
-      for (const line of hunk.deletedLines) {
-        const trimmed = line.trim();
-        if (
-          trimmed.length >= 6 &&
-          !trimmed.startsWith("//") &&
-          !trimmed.startsWith("/*") &&
-          !trimmed.startsWith("*")
-        ) {
-          genericDeletedFreqs.set(trimmed, (genericDeletedFreqs.get(trimmed) ?? 0) + 1);
-        }
-      }
-    }
-  }
-
-  // Heuristic 5: Generic Recurring Correction Mining
-  for (const [trimmedLine, freq] of genericDeletedFreqs.entries()) {
-    if (freq >= 2) {
-      const escaped = escapeRegExp(trimmedLine);
-      const hash = hashString(trimmedLine);
-      const ruleId = `pref-auto-mined-${hash}`;
-
-      if (!rules.some(r => r.id === ruleId)) {
-        rules.push({
-          id: ruleId,
-          match_regex: escaped,
-          scope: "coding_style",
-          auto_inject_to: ["think", "dev"],
-          message: `Avoid using pattern: "${trimmedLine}". Multiple human corrections substituted this pattern.`
-        });
-      }
-    }
-  }
-
-  return rules;
-}
-
-export function autoApplyMinedRules(days: number): { addedCount: number; rules: PreferenceRule[] } {
+export async function autoApplyMinedRules(days: number): Promise<{ addedCount: number; rules: PreferenceRule[] }> {
   const root = getProjectRoot();
   const ritsuDir = resolve(root, RITSU_DIR);
   const prefPath = resolve(root, ".ritsu/preferences.yaml");
 
   if (!existsSync(ritsuDir)) mkdirSync(ritsuDir, { recursive: true });
 
-  const { corrections } = scanHumanCorrections(root, days);
-  const synthesizedRules = synthesizeRulesFromCorrections(corrections);
+  const { corrections, violations } = scanHumanCorrections(root, days);
 
   let currentRules: PreferenceRule[] = [];
   let shouldRewriteCanonicalDoc = false;
@@ -677,9 +473,15 @@ export function autoApplyMinedRules(days: number): { addedCount: number; rules: 
     }
   }
 
+  // LLM-Driven preference rules synthesis
+  const synthesizedRules = await synthesizeWithLLM({
+    corrections,
+    violations,
+    existingRules: currentRules,
+  });
+
   let addedCount = 0;
-  const allNewRules = synthesizedRules;
-  for (const syn of allNewRules) {
+  for (const syn of synthesizedRules) {
     const exists = currentRules.some(
       (existing) =>
         existing.id === syn.id || existing.match_regex === syn.match_regex
@@ -700,3 +502,4 @@ export function autoApplyMinedRules(days: number): { addedCount: number; rules: 
     rules: synthesizedRules
   };
 }
+

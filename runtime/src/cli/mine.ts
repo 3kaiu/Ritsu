@@ -19,7 +19,7 @@ export async function runMine(args: string[]) {
 
   if (auto) {
     console.log(color(`Ritsu Preference Miner — Auto-mining & reconciling preferences from past ${days} days...`, "cyan"));
-    const result = autoApplyMinedRules(days);
+    const result = await autoApplyMinedRules(days);
     console.log(color(`✔ Self-evolution complete. Learned and applied ${result.addedCount} new preference rules.`, "green"));
     if (result.rules.length > 0) {
       console.log(color("\nMined rules summary:", "dim"));

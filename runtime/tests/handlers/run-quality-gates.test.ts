@@ -506,4 +506,94 @@ github.com/user/project/file2.go:1.10,5.20 5 2`,
     expect(data.coverage.per_file["github.com/user/project/file1.go"].lines.pct).toBe(40.0);
     expect(data.coverage.per_file["github.com/user/project/file2.go"].lines.pct).toBe(100.0);
   });
+
+  it("detects Vitest and Jest runners correctly from commands and package.json", async () => {
+    const { detectTestRunner } = await import("../../src/handlers/run-quality-gates.js");
+    
+    // Direct command detection
+    expect(detectTestRunner({ binary: "vitest", args: ["run"], cwd: root })).toBe("vitest");
+    expect(detectTestRunner({ binary: "jest", args: [], cwd: root })).toBe("jest");
+    expect(detectTestRunner({ binary: "bun", args: ["test"], cwd: root })).toBe("vitest");
+
+    // Package.json detection
+    writeFileSync(
+      resolve(root, "package.json"),
+      JSON.stringify({
+        scripts: {
+          "test:coverage": "vitest run --coverage",
+          "test:jest": "jest --config jest.config.js"
+        }
+      })
+    );
+    expect(detectTestRunner({ binary: "npm", args: ["run", "test:coverage"], cwd: root })).toBe("vitest");
+    expect(detectTestRunner({ binary: "npm", args: ["run", "test:jest"], cwd: root })).toBe("jest");
+    expect(detectTestRunner({ binary: "npm", args: ["run", "other"], cwd: root })).toBeNull();
+  });
+
+  it("injects reporter arguments with package manager double-dash handling", async () => {
+    const { injectReporterArgs } = await import("../../src/handlers/run-quality-gates.js");
+
+    // Direct execution
+    expect(injectReporterArgs("vitest", ["run"], "vitest", "/path/to/report.json"))
+      .toEqual(["run", "--reporter=json", "--outputFile", "/path/to/report.json"]);
+
+    // Package manager double-dash injection
+    expect(injectReporterArgs("npm", ["run", "test"], "vitest", "/path/to/report.json"))
+      .toEqual(["run", "test", "--", "--reporter=json", "--outputFile", "/path/to/report.json"]);
+
+    expect(injectReporterArgs("npm", ["run", "test", "--", "--passWithNoTests"], "vitest", "/path/to/report.json"))
+      .toEqual(["run", "test", "--", "--reporter=json", "--outputFile", "/path/to/report.json", "--passWithNoTests"]);
+  });
+
+  it("parses failures correctly using mock Vitest JSON report", async () => {
+    writeFileSync(
+      resolve(root, "package.json"),
+      JSON.stringify({ scripts: { test: "vitest" } }),
+    );
+
+    // Mock Vitest JSON report file creation when spawned
+    vi.mocked(child_process.spawn).mockImplementation((binary, args, options) => {
+      // Find the injected report file path from arguments
+      const reportIdx = args.indexOf("--outputFile");
+      if (reportIdx !== -1 && args[reportIdx + 1]) {
+        const reportPath = args[reportIdx + 1];
+        writeFileSync(
+          reportPath,
+          JSON.stringify({
+            testResults: [
+              {
+                name: "src/sample.test.ts",
+                status: "failed",
+                assertionResults: [
+                  {
+                    fullName: "Suite Name > test case 1",
+                    status: "failed",
+                    failureMessages: ["AssertionError: expected true to be false"]
+                  }
+                ]
+              }
+            ]
+          }),
+          "utf-8"
+        );
+      }
+      
+      const child = createMockChild();
+      completeChild(child, 1, "test failed in JSON report mode", "", 10);
+      return child as any;
+    });
+
+    const result = await ritsu_run_quality_gates({ skip_lint: true, timeout_ms: 1000 });
+    const data = JSON.parse(result.content[0].text as string);
+
+    expect(data.passed).toBe(false);
+    expect(data.test.status).toBe("failed");
+    expect(data.test.failures).toHaveLength(1);
+    expect(data.test.failures[0]).toEqual({
+      suite: "src/sample.test.ts",
+      test: "Suite Name > test case 1",
+      error: "AssertionError: expected true to be false",
+      file_hint: "src/sample.test.ts"
+    });
+  });
 });

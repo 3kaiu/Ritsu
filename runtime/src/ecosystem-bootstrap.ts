@@ -178,26 +178,33 @@ export function bootstrapEcosystem(
   // 1. Scaffold AGENTS.md if missing in the project
   const agentsPath = resolve(projectRoot, "AGENTS.md");
   if (!existsSync(agentsPath)) {
-    const defaultAgents = `# Project Baseline: Ritsu v6.5.0
+    const defaultAgents = `# Project Baseline: Ritsu v7.0.0
 # Created by Antigravity AI Engineering Framework
 
 <!-- Ritsu Configuration Block -->
-ritsu-version: 6.5.0
+ritsu-version: 7.0.0
 domain: fullstack
+host_profile: ${hostProfile}
 tech_fingerprints:
   - nodejs
   - typescript
 rules_overrides:
   disable: []
   downgrade: []
-lint_cmd: npm run lint
-test_cmd: npm run test
-host_profile: ${hostProfile}
+lint_cmd: bun run --cwd runtime lint
+test_cmd: bun run --cwd runtime test
 <!-- End Ritsu Block -->
 
 ## Technical Stack
 - Language: TypeScript / JavaScript
 - Core: MCP Server (Node.js)
+- Skills: Markdown-based Protocol
+
+## Active Rules
+- Tiered Delivery: Enabled
+- Intent Routing: Enabled
+- Prompt Caching: Optimized
+- Adaptive Memory: Ready
 `;
     writeFileSync(agentsPath, defaultAgents, "utf-8");
     filesWritten.push("AGENTS.md (scaffolded)");

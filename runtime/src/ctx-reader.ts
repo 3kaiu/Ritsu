@@ -19,17 +19,108 @@ let lastPath: string = "";
 
 // Lazy Rust native ctx store initialization
 // When available, all reads go through indexed SQLite (O(1)) instead of JSONL scans (O(n))
-let _rustCtxAvailable = false;
 
-function tryInitRustCtx(): boolean {
-  if (_rustCtxAvailable) return true;
+function tryInitRustCtx(projectRoot: string): boolean {
+  if (process.env.RITSU_DISABLE_SQLITE === "1") return false;
   try {
     const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
-    if (nb.initCtxStore()) {
-      _rustCtxAvailable = true;
+    if (nb.initCtxStore(projectRoot)) {
+      // Sync from JSONL to SQLite if needed (e.g. in tests where write goes to JSONL directly)
+      const ctxPath = getCtxPath(projectRoot);
+      if (existsSync(ctxPath)) {
+        const stats = statSync(ctxPath);
+        const content = readFileSync(ctxPath, "utf-8");
+        
+        let jsonlCount = 0;
+        let start = 0;
+        let end = content.indexOf("\n");
+        while (end !== -1) {
+          if (content.slice(start, end).trim()) {
+            jsonlCount++;
+          }
+          start = end + 1;
+          end = content.indexOf("\n", start);
+        }
+        if (content.slice(start).trim()) {
+          jsonlCount++;
+        }
+
+        const trimmedContent = content.trim();
+        const lastNewLineIdx = trimmedContent.lastIndexOf("\n");
+        const lastLine = lastNewLineIdx === -1 ? trimmedContent : trimmedContent.slice(lastNewLineIdx + 1).trim();
+        
+        let lastLineParsed: Record<string, unknown> | null = null;
+        if (lastLine) {
+          try {
+            lastLineParsed = JSON.parse(lastLine);
+          } catch {
+            const healed = tryHealJsonLine(lastLine);
+            if (healed) {
+              try { lastLineParsed = JSON.parse(healed); } catch {}
+            }
+          }
+        }
+
+        const sqliteCount = nb.ctxQueryCount ? nb.ctxQueryCount(projectRoot) : 0;
+        const recentRows = nb.ctxQueryRecent ? nb.ctxQueryRecent(1) : [];
+        const lastSqliteRow = recentRows[0] || null;
+
+        let needSync = false;
+        if (sqliteCount !== jsonlCount) {
+          needSync = true;
+        } else if (!lastLineParsed && lastSqliteRow) {
+          needSync = true;
+        } else if (lastLineParsed && !lastSqliteRow) {
+          needSync = true;
+        } else if (lastLineParsed && lastSqliteRow) {
+          if (
+            lastLineParsed.correlation_id !== lastSqliteRow.correlation_id ||
+            lastLineParsed.ts !== lastSqliteRow.ts ||
+            lastLineParsed.status !== lastSqliteRow.status ||
+            lastLineParsed.skill !== lastSqliteRow.skill
+          ) {
+            needSync = true;
+          }
+        }
+
+        if (needSync) {
+          if (nb.ctxClear) {
+            nb.ctxClear();
+          }
+          if (stats.size > 0) {
+            const entries: Record<string, unknown>[] = [];
+            const skippedCountRef = { value: 0 };
+            start = 0;
+            end = content.indexOf("\n");
+            
+            while (end !== -1) {
+              const line = content.slice(start, end).trim();
+              if (line) {
+                processLine(line, projectRoot, entries, skippedCountRef);
+              }
+              start = end + 1;
+              end = content.indexOf("\n", start);
+            }
+            
+            const lastLine = content.slice(start).trim();
+            if (lastLine) {
+              processLine(lastLine, projectRoot, entries, skippedCountRef);
+            }
+
+            // Insert all robustly parsed and healed entries into SQLite
+            for (const entry of entries) {
+              nb.ctxInsert(entry);
+            }
+          }
+        }
+      }
       return true;
     }
-  } catch { /* no native module */ }
+  } catch (e) {
+    if (process.env.RITSU_STRICT_JSONL === "1") {
+      throw e;
+    }
+  }
   return false;
 }
 
@@ -153,12 +244,7 @@ function processLine(
  * 优化：对于 JSONL，逐行解析比全量 split 内存更友好。
  */
 export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
-  if (tryInitRustCtx()) {
-    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
-    return nb.ctxQueryAll(500);
-  }
   const ctxPath = getCtxPath(projectRoot);
-  
   try {
     const stats = existsSync(ctxPath) ? statSync(ctxPath) : null;
     const currentMtime = stats?.mtimeMs ?? 0;
@@ -166,6 +252,16 @@ export function readAllEntries(projectRoot: string): Record<string, unknown>[] {
 
     if (cachedEntries && lastPath === ctxPath && lastMtime === currentMtime && lastSize === currentSize) {
       return cachedEntries;
+    }
+
+    if (tryInitRustCtx(projectRoot)) {
+      const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+      const entries = nb.ctxQueryAll(500);
+      lastMtime = currentMtime;
+      lastSize = currentSize;
+      lastPath = ctxPath;
+      cachedEntries = entries;
+      return entries;
     }
 
     const entries: Record<string, unknown>[] = [];
@@ -213,26 +309,30 @@ export function readRecentEntries(
   projectRoot: string,
   limit = 20,
 ): Record<string, unknown>[] {
-  if (tryInitRustCtx()) {
+  const ctxPath = getCtxPath(projectRoot);
+  if (existsSync(ctxPath)) {
+    const stats = statSync(ctxPath);
+    if (cachedEntries && lastPath === ctxPath && lastMtime === stats.mtimeMs && lastSize === stats.size) {
+      return cachedEntries.slice(-limit);
+    }
+  }
+
+  if (tryInitRustCtx(projectRoot)) {
     const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
     return nb.ctxQueryRecent(limit);
   }
-  const ctxPath = getCtxPath(projectRoot);
-  if (!existsSync(ctxPath)) return [];
 
-  // 如果已经有缓存且是最新的，直接用缓存
-  const stats = statSync(ctxPath);
-  if (cachedEntries && lastPath === ctxPath && lastMtime === stats.mtimeMs && lastSize === stats.size) {
-    return cachedEntries.slice(-limit);
-  }
+  const ctxPathReal = getCtxPath(projectRoot);
+  if (!existsSync(ctxPathReal)) return [];
 
   // 如果文件较小 (< 64KB)，全量读取
+  const stats = statSync(ctxPathReal);
   if (stats.size < 65536) {
     return readAllEntries(projectRoot).slice(-limit);
   }
 
   // 大文件优化：从末尾读取最后 64KB 探测
-  const fd = openSync(ctxPath, "r");
+  const fd = openSync(ctxPathReal, "r");
   try {
     const readSize = Math.min(stats.size, 65536);
     const buffer = Buffer.alloc(readSize);
@@ -267,7 +367,7 @@ export function readRecentEntries(
 export function readLastIncomplete(
   projectRoot: string,
 ): Record<string, unknown> | null {
-  if (tryInitRustCtx()) {
+  if (tryInitRustCtx(projectRoot)) {
     const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
     const result = nb.ctxQueryLastIncomplete();
     if (result) return result;
@@ -297,7 +397,7 @@ export function readLastIncomplete(
 export function readLastCompleted(
   projectRoot: string,
 ): Record<string, unknown> | null {
-  if (tryInitRustCtx()) {
+  if (tryInitRustCtx(projectRoot)) {
     const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
     const result = nb.ctxQueryLastCompleted();
     if (result) return result;
@@ -336,4 +436,8 @@ export function _resetReaderCache(): void {
   lastMtime = 0;
   lastSize = 0;
   lastPath = "";
+  try {
+    const nb = require("./native-bridge.js") as typeof import("./native-bridge.js");
+    nb.closeCtxStore();
+  } catch {}
 }

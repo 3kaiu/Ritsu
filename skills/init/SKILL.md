@@ -16,6 +16,10 @@ total_steps: 4
 
 ## 执行流水线
 
+### -1. Prompt Caching 对齐
+
+> 引用 `_shared/skill-common-steps.md` Step -2。优先构建静态基座（`rules/anti-patterns.yaml` + `_shared/mcp-tools.yaml`）后，再进入后续动态流程。
+
 ### 1. 递归指纹扫描与技术栈感知 (Recursive Fingerprinting)
 
 识别项目的底层架构基因：

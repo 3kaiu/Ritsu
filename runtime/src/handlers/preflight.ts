@@ -22,6 +22,7 @@ export async function ritsu_preflight(
     stage,
     tier,
     taskSummary: typeof params.task_summary === "string" ? params.task_summary : "",
+    detail: params.detail === true,
   });
 
   const body = { ok: contextPack.passed !== false, context_pack: contextPack };

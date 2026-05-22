@@ -1,5 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Database } from "bun:sqlite";
+import { detectProjectRoot } from "./project-root.js";
 import { isNativeAvailable, initNativeStore, indexViolationEmbedding, searchSimilarViolations } from "./native-bridge.js";
 
 export type ViolationRecord = {
@@ -16,11 +18,23 @@ export type SimilarViolationHit = {
   score: number;
 };
 
-let _nativeIndexed = false;
+let _lastIndexedRecords: ViolationRecord[] | null = null;
 
 function ensureNativeIndex(records: ViolationRecord[]): void {
-  if (_nativeIndexed || !isNativeAvailable()) return;
+  if (_lastIndexedRecords === records || !isNativeAvailable()) return;
   if (initNativeStore()) {
+    try {
+      // Clear old violation vectors to prevent leakage across tests/runs
+      const root = detectProjectRoot();
+      const dbPath = resolve(root, ".ritsu", "vectors.db");
+      const db = new Database(dbPath);
+      try {
+        db.prepare("DELETE FROM vectors WHERE collection = 'violations'").run();
+      } finally {
+        db.close();
+      }
+    } catch {}
+
     for (const r of records) {
       indexViolationEmbedding(r.ts, `${r.rule_id} ${r.evidence}`, {
         rule_id: r.rule_id,
@@ -29,7 +43,7 @@ function ensureNativeIndex(records: ViolationRecord[]): void {
         skill: r.skill,
       });
     }
-    _nativeIndexed = true;
+    _lastIndexedRecords = records;
   }
 }
 
@@ -113,6 +127,11 @@ export function findSimilarViolations(
   limit = 10,
   minScore = 0.15,
 ): SimilarViolationHit[] {
+  // Ensure the records are indexed in the native store
+  if (records.length > 0) {
+    ensureNativeIndex(records);
+  }
+
   // Native vector search (semantic)
   if (isNativeAvailable()) {
     try {

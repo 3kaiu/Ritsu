@@ -1,7 +1,16 @@
-# Skill 公共步骤模板 v6.5.0
+# Skill 公共步骤模板 v7.0.0
 
 > 所有 `SKILL.md` 中重复出现的步骤，统一引用此模板。
 > 目标：提供自适应的分级交付路径，平衡效率与治理。
+
+---
+
+## Step -2: Prompt Caching 缓存基座对齐 (Prompt Caching Alignment)
+
+为了在 Anthropic / DeepSeek 运行中获得高达 90% 成本和 80% 延迟缩减的缓存优化收益，AI 必须保证以下静态加载流程最先执行：
+1. **构建静态基座**：优先确认已成功加载 `rules/anti-patterns.yaml`（全局底线规则）与 `_shared/mcp-tools.yaml`（MCP工具定义）。如果之前被截断或在新会话中，必须**优先**读取这两个静态文件来建立 prefix 缓存块。
+2. **挂载技能指令**：随后读取对应的 `skills/<stage>/SKILL.md` 技能指令文件。
+3. **隔离动态内容**：只有在前两步静态底座牢固建立后，方可加载 `task_summary`、调用 `ritsu_preflight` 或进行任何 `git diff` / 动态 trace 等易变上下文。禁止交叉加载！
 
 ---
 

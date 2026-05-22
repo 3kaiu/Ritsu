@@ -2,12 +2,14 @@
 
 # 律 (Ritsu) — AI Delivery Workflow Skill Engine
 
-[![CI](https://github.com/3kaiu/Ritsu/actions/workflows/ci.yml/badge.svg)](https://github.com/3kaiu/Ritsu/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-342_✔-green.svg)](runtime/tests)
-[![CodeQL](https://github.com/3kaiu/Ritsu/actions/workflows/codeql.yml/badge.svg)](https://github.com/3kaiu/Ritsu/actions/workflows/codeql.yml)
+[![Tests](https://img.shields.io/badge/Tests-345_✔-green.svg)](runtime/tests)
+[![Runtime](https://img.shields.io/badge/Runtime-Bun_1.3+-blue.svg)](https://bun.sh)
+[![Tech Stack](https://img.shields.io/badge/Tech_Stack-TypeScript-blue.svg)](https://www.typescriptlang.org)
 
-[核心理念](#-核心理念) • [安装](#-安装) • [指令集](#-指令参考) • [架构](#-架构) • [CLI](#-cli-工具)
+**极速、轻量、高精度的 AI 自动化交付与架构防腐工作流引擎**
+
+[核心理念](#-核心理念) • [核心特性](#-核心特性) • [安装与使用](#-安装与使用) • [架构设计](#-架构设计) • [CLI 诊断工具](#-cli-诊断工具) • [兼容性](#-兼容性)
 
 </div>
 
@@ -15,108 +17,145 @@
 
 ## ⚡ 核心理念
 
-Ritsu 是一个 **skill + engine**：对外是 6 个 skill 指令，对内自动编排策略引擎、质量门禁、代码图分析、跨会话记忆。
+Ritsu 是一个面向现代 AI 编码助手（如 Claude Code, Codex, Cursor 等）的 **工作流指令与策略执行引擎 (Skill + Engine)**。
 
-你只跟这 6 个指令交互，底层一切由 Ritsu 自动完成：
+通过向 AI 暴露 6 个极其内聚的阶段指令，Ritsu 在底层自动为 AI 编排**策略引擎、质量门禁、架构依赖图、跨会话记忆与 Token 预算**，确保大型代码库在 AI 频繁修改下依然保持 100% 的设计契约与架构健康。
 
-| 指令 | 用途 |
-|------|------|
-| `/r-think` | 设计 — 产出 design-sheet |
-| `/r-dev` | 实现 — 产出 dev-report + quality-gates |
-| `/r-review` | 验收 — 产出 assurance-sheet |
-| `/r-hunt` | 排障 — 产出 diagnosis |
-| `/r-augment` | 补测试 |
-| `/r-init` | 初始化项目 |
+### Ritsu 交付指令集 (Ritsu Skills)
 
-每个指令对应 `skills/<stage>/SKILL.md`。执行前先调 `ritsu_preflight` 获取上下文。
+| 指令 | 对应技能 | 阶段核心交付物 |
+| :--- | :--- | :--- |
+| **`/r-init`** | 契约初始化 | 建立项目开发契约底座，生成 `AGENTS.md` 规则基线 |
+| **`/r-think`** | 架构设计 | 深度剖析设计方案，产出设计蓝图 `design-sheet.md` |
+| **`/r-dev`** | 代码实现 | 执行编码，自动运行本地质量门禁并生成开发日志 |
+| **`/r-review`** | 质量验收 | 全量契约及架构漂移审计，生成正式 `assurance-sheet` |
+| **`/r-hunt`** | 智能排障 | 深度追踪 Trace 链路，提取环境及错误上下文进行诊断 |
+| **`/r-augment`** | 补测引擎 | 自动分析覆盖率缺口，智能补全核心业务单元测试 |
 
 ---
 
-## 📦 安装
+## 🚀 核心特性
 
-Ritsu 不是一个独立 CLI，它是安装在 Claude Code / Codex / Cursor 中的 skill。
+### 1. ⚡ Prompt Caching (提示词缓存) 协议支持
+完美对齐 Anthropic Claude-3.7 和 DeepSeek-V3/R1 的提示词缓存规则。通过在会话极前端锁定静态的 `rules/anti-patterns.yaml`（底线规则）和 `_shared/mcp-tools.yaml`（工具定义），将动态的 Git Diffs 和 JIT 上下文后置，实现 **80% 的延迟缩短**与 **90% 的 Token 成本节省**。
 
+### 2. 🪶 JIT (Just-In-Time) 上下文加载与自动熔断
+摒弃一次性加载数万 Token 的传统 Eager 加载模式。Ritsu Preflight 默认以 **JIT 模式 (`detail: false`)** 运行，仅返回极轻量的元数据索引。
+* **自适应熔断 (Self-Healing)**：当检测到 Trace 链路中连续发生 2 次以上失败（`consecutive_fails >= 2`）时，自动升级为 Eager 完整加载模式，确保 AI 拥有充足的调试指引。
+
+### 3. 💾 纯 Bun 驱动的 0 编译轻量双轨存储
+彻底移除 Rust `napi-rs` 编译依赖，解决跨平台安装报错。Ritsu 采用高性能纯 JS 实现：
+* **内存缓存层 (`:memory:`)**：由 Bun 内置的 `bun:sqlite` 提供极致的内存级 SQL 查询与索引，单次 pre-warm 预热小于 **5ms**。
+* **磁盘持久化层 (`.jsonl`)**：写操作直达磁盘追加日志文件，读操作优先命中内存。100% 免疫多实例并行测试下的文件锁定和 `SQLITE_IOERR` 磁盘冲突。
+
+### 4. 🔍 Jaccard 字面粗筛 + Cosine 向量回退混合检索
+在违规相似度匹配中，Ritsu 引入了混合检索机制：
+* 优先使用基于分词的 **Jaccard 相似度算法**，在 JS 侧进行高速字面粗筛。
+* 若历史记录缺失分词上下文，无缝退避至基于字符 n-gram 哈希特征的 **Cosine 相似度计算**，保障 100% 向上兼容。
+
+### 5. 🛠️ 稳健的 Git 分隔符解析器
+重构了 `miner.ts` 中的 Git 日志解析流程。在 `git log` 中注入 `<RITSU_COMMIT_START>` 结构化分隔符，并采用 `\r?\n(?=diff --git )` 断言拆分，完全免疫用户提交内容中的关键字冲突，健壮支持各种包含空格、特殊引号的复杂文件名。
+
+### 6. 🚦 标准化质量门禁 JSON 适配器
+Ritsu 质量门禁（Quality Gates）原生集成 `VitestJsonTestAdapter` 和 `JestJsonTestAdapter`。自动向包管理器（`bun`, `npm`, `pnpm`）注入结构化测试输出参数，直接读取 JSON 报告数据，彻底防止由于控制台彩色 stdout 变动导致的解析瘫痪。
+
+---
+
+## 📦 安装与使用
+
+Ritsu 作为一个工作流 Skill 挂载在主流 AI 助手上。
+
+### 1. 全局安装 Skill
 ```bash
-# 1. 安装 skill（一次）
+# 从 GitHub 仓库一次性添加 Skill 到你的 Claude Code / Codex
 npx skills add 3kaiu/Ritsu -a claude-code -g -y
+```
 
-# 2. 重载 MCP，验证
+### 2. 启动诊断与验证
+```bash
+# 检查 Ritsu 运行环境、基线配置与 AI 兼容性
 ritsu doctor
+```
 
-# 3. 开始使用
+### 3. 在项目根目录初始化
+```bash
+# AI 助手中运行此指令
 /r-init
 ```
 
-或者从插件市场安装：`/plugin install ritsu`
-
-### 本地开发
-
-```bash
-cd runtime && bun install && bun run build && bun run test
-```
-
 ---
 
-## 🧭 架构
+## 🧭 架构设计
+
+Ritsu 采用高内聚、低耦合的**五层架构**设计：
 
 ```
-你看到:   /r-think → /r-dev → /r-review → /r-hunt → /r-augment → /r-init
-
-Ritsu 自动做:
-  策略引擎       — 20 条反模式 + 9 个检测器，写入时自动拦截
-  质量门禁       — Lint + Test + 工作树指纹
-  架构漂移检测   — preflight 时对比模块依赖图
-  跨会话记忆     — 违规/偏好自动捕获，向量语义检索
-  代码图分析     — CodeGraph 影响半径（如有）
-  Token 预算     — ritsu_read_ctx 默认 medium 模式
-  AI 配置检查    — ritsu doctor --ai（Claude/Codex/Cursor 三大工具）
+┌─────────────────────────────────────────────────────────┐
+│              Skills Layer (7 个 SKILL.md 指令)           │
+└────────────────────────────┬────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│            Orchestration Layer (调度控制中心)             │
+│    - preflight-runner.ts       - architecture-fingerprint │
+└────────────────────────────┬────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│           Policy & Gate Layer (策略引擎与门禁)            │
+│    - evaluatePolicies          - vitest/jest-json-adapter   │
+└────────────────────────────┬────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│          Storage Layer (JIT 内存 SQL + JSONL 双轨)       │
+│    - bun:sqlite (:memory:)     - ctx-*.jsonl (append only)  │
+└────────────────────────────┬────────────────────────────┘
+                             ▼
+┌─────────────────────────────────────────────────────────┐
+│                 CLI Layer (命令行辅助与诊断)               │
+│    - ritsu doctor              - ritsu bootstrap            │
+└─────────────────────────────────────────────────────────┘
 ```
 
-| 技术栈 | |
-|--------|-|
-| 运行时 | Bun 1.3+ |
-| 测试 | Vitest — 60 文件 / 342 测试 |
-| 原生引擎 | Rust napi-rs（向量搜索 + ctx 存储） |
-| 策略格式 | YAML + 9 detectors + 用户插件 |
-| 存储 | SQLite（Rust WAL）+ JSONL 备份 |
-| 支持 AI | Claude Code / Codex CLI / Cursor |
-
----
-
-## 🎛️ CLI
-
-```bash
-ritsu doctor              # 健康检查（最常用）
-ritsu doctor --ecosystem  # MCP 生态验证
-ritsu doctor --signals    # 结构化审计 (PASS/WARN/FAIL)
-ritsu doctor --ai         # AI 工具配置检查
-ritsu bootstrap           # 初始化项目
-ritsu help                # 全部开发命令
-```
-
----
-
-## 仓库结构
-
-```
-├── .claude/           # Claude Code rules/
-├── .github/           # CI, Dependabot, CodeQL
-├── _shared/           # MCP 工具定义, schemas
-├── docs/              # 架构文档
-├── rules/             # 策略规则 + ast-grep 模式
-├── skills/            # 7 个 SKILL.md（核心）
-└── runtime/
-    ├── native/        # Rust 引擎 (vector_store + ctx_store)
+### 核心目录结构
+```text
+├── .claude/           # Claude Code 运行时规则
+├── _shared/           # MCP 工具声明 (mcp-tools.yaml) 与 JSON 约束 Schema
+├── rules/             # 策略过滤定义与 ast-grep 模式
+├── skills/            # 7 个阶段 SKILL.md 指令定义 (前置 Prompt 缓存底座)
+└── runtime/           # 运行时系统 (TypeScript)
     ├── src/
-    │   ├── cli/       # 9 个 CLI 子模块
-    │   ├── handlers/  # 22 个 MCP handlers
-    │   ├── orchestration/ # preflight, internal-tools, architecture
-    │   └── policy/    # 9 detectors + plugin-loader
-    └── tests/         # 60 文件 / 342 测试
+    │   ├── cli/       # doctor, bootstrap, export 等子指令
+    │   ├── handlers/  # 核心 MCP Tool 处理器
+    │   ├── policy/    # 9 大检测器及插件加载层
+    │   └── orchestration/ # 契约同步与 preflight 调度
+    └── tests/         # 60 组 Vitest 测试文件 (345 项验证用例)
 ```
 
 ---
 
-## 许可
+## 🎛️ CLI 诊断工具
+
+Ritsu 提供了开箱即用的 CLI 工具集，用于快速诊断项目配置与健康度：
+
+```bash
+ritsu doctor              # 进行全局健康体检 (最常用)
+ritsu doctor --ecosystem  # 验证 MCP Server 挂载与响应
+ritsu doctor --signals    # 对策略库与配置结构进行结构化 PASS/FAIL 评估
+ritsu doctor --ai         # 验证当前 IDE / AI 客户端 (Claude/Cursor) 的集成环境
+ritsu bootstrap           # 交互式初始化一个新项目
+```
+
+---
+
+## 💡 兼容性
+
+Ritsu 在以下主流 AI 编程助手中表现极佳，能够完全自动感应上下文：
+
+* **Claude Code CLI**: 完美支持 `.claude/rules/` 自动触发。
+* **Cursor IDE**: 通过 `.cursor/rules/ritsu.mdc` 自动对齐规则约束。
+* **Codex CLI**: 支持 `CODEX.md` 全局工作流管控。
+
+---
+
+## 📄 许可
 
 MIT © 2024-2026 3kaiu

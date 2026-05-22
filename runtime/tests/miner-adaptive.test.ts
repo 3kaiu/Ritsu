@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { autoApplyMinedRules, synthesizeRulesFromCorrections } from "../src/miner.js";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { autoApplyMinedRules } from "../src/miner.js";
+import { buildSynthesisPrompt, parseLLMResponse } from "../src/llm-synthesizer.js";
 import { existsSync, rmSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { resolve, join } from "node:path";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import yaml from "js-yaml";
@@ -16,12 +17,17 @@ function formatRitsuTs(date: Date): string {
   return `${yyyy}${mm}${dd}-${hh}${mi}${ss}`;
 }
 
-describe("Ritsu Adaptive Learning Engine", () => {
+describe("Ritsu LLM-Driven Adaptive Learning Engine", () => {
   let testRoot: string;
+  let originalEnv: Record<string, string | undefined>;
 
   beforeEach(() => {
     testRoot = mkdtempSync(join(tmpdir(), "ritsu-test-miner-adaptive-"));
     process.env.RITSU_PROJECT_ROOT = testRoot;
+
+    originalEnv = { ...process.env };
+    process.env.RITSU_LLM_ENABLED = "1";
+    process.env.RITSU_LLM_API_KEY = "mock-api-key";
 
     // Initialize git repo
     execSync("git init", { cwd: testRoot, stdio: "ignore" });
@@ -33,179 +39,127 @@ describe("Ritsu Adaptive Learning Engine", () => {
   });
 
   afterEach(() => {
+    process.env = originalEnv;
+    vi.restoreAllMocks();
     if (existsSync(testRoot)) {
       rmSync(testRoot, { recursive: true, force: true });
     }
   });
 
-  it("should synthesize pref-auto-logger when console is replaced by logger", () => {
-    const corrections = [
-      {
-        file: "index.ts",
-        diff: `
-diff --git a/index.ts b/index.ts
---- a/index.ts
-+++ b/index.ts
-@@ -1,3 +1,3 @@
--console.log('running server');
-+logger.info('running server');
-`
-      }
-    ];
+  describe("Prompt Synthesis & Parsing", () => {
+    it("should correctly build the synthesis prompt from corrections and violations", () => {
+      const input = {
+        corrections: [{ file: "src/main.ts", diff: "modified lines diff" }],
+        violations: [{ rule_id: "pref-no-any", skill: "dev", message: "avoid any", evidence: "x: any" }],
+        existingRules: [{ id: "pref-existing", match_regex: "console\\.log", scope: "coding_style" }]
+      };
 
-    const rules = synthesizeRulesFromCorrections(corrections);
-    expect(rules).toHaveLength(1);
-    expect(rules[0].id).toBe("pref-auto-logger");
-    expect(rules[0].match_regex).toBe("console\\.(log|warn|error|info)");
-    expect(rules[0].scope).toBe("coding_style");
+      const prompt = buildSynthesisPrompt(input);
+      expect(prompt).toContain("src/main.ts");
+      expect(prompt).toContain("modified lines diff");
+      expect(prompt).toContain("pref-no-any");
+      expect(prompt).toContain("avoid any");
+      expect(prompt).toContain("pref-existing");
+    });
+
+    it("should correctly parse clean and code-fenced YAML LLM responses", () => {
+      const fencedResponse = `
+\`\`\`yaml
+- id: pref-no-console
+  match_regex: "console\\\\.log"
+  scope: coding_style
+  auto_inject_to: [think, dev]
+  message: "Use logger"
+\`\`\`
+      `;
+      const rules = parseLLMResponse(fencedResponse);
+      expect(rules).toHaveLength(1);
+      expect(rules[0].id).toBe("pref-no-console");
+      expect(rules[0].match_regex).toBe("console\\.log");
+      expect(rules[0].scope).toBe("coding_style");
+    });
   });
 
-  it("should synthesize pref-auto-const when let is replaced by const for the same variable", () => {
-    const corrections = [
-      {
-        file: "index.ts",
-        diff: `
-diff --git a/index.ts b/index.ts
---- a/index.ts
-+++ b/index.ts
-@@ -1,3 +1,3 @@
--let count = 10;
-+const count = 10;
-`
-      }
-    ];
+  describe("End-to-End LLM Synthesis", () => {
+    it("should call the mocked LLM, merge new rules, and compile them to ast-grep", async () => {
+      const ritsuDir = join(testRoot, ".ritsu");
+      mkdirSync(ritsuDir);
 
-    const rules = synthesizeRulesFromCorrections(corrections);
-    expect(rules).toHaveLength(1);
-    expect(rules[0].id).toBe("pref-auto-const");
-    expect(rules[0].match_regex).toBe("\\blet\\s+([a-zA-Z_]\\w*)\\b");
-  });
+      // AI writes file
+      const codeFile = join(testRoot, "index.ts");
+      writeFileSync(codeFile, "console.log('AI write');\n");
+      execSync("git add index.ts", { cwd: testRoot, stdio: "ignore" });
+      execSync("git commit -m 'AI commit'", { cwd: testRoot, stdio: "ignore" });
 
-  it("should synthesize pref-auto-no-any when ': any' is replaced by a concrete type", () => {
-    const corrections = [
-      {
-        file: "index.ts",
-        diff: `
-diff --git a/index.ts b/index.ts
---- a/index.ts
-+++ b/index.ts
-@@ -1,3 +1,3 @@
--function handle(payload: any) {}
-+function handle(payload: string) {}
-`
-      }
-    ];
+      // Mock Event Trace
+      const ts = formatRitsuTs(new Date(Date.now() - 1000 * 60));
+      const ctxFile = join(ritsuDir, "ctx-20260521.jsonl");
+      writeFileSync(
+        ctxFile,
+        JSON.stringify({ ts, status: "artifact_written", artifact: "index.ts" }) + "\n",
+        "utf-8"
+      );
 
-    const rules = synthesizeRulesFromCorrections(corrections);
-    expect(rules).toHaveLength(1);
-    expect(rules[0].id).toBe("pref-auto-no-any");
-    expect(rules[0].match_regex).toBe(":\\s*any\\b");
-  });
+      // Human overrides AI code
+      writeFileSync(codeFile, "logger.info('AI write');\n");
+      execSync("git add index.ts", { cwd: testRoot, stdio: "ignore" });
+      execSync("git commit -m 'human override'", { cwd: testRoot, stdio: "ignore" });
 
-  it("should synthesize pref-auto-lodash-es when import is optimized from lodash to lodash-es", () => {
-    const corrections = [
-      {
-        file: "index.ts",
-        diff: `
-diff --git a/index.ts b/index.ts
---- a/index.ts
-+++ b/index.ts
-@@ -1,3 +1,3 @@
--import { cloneDeep } from 'lodash';
-+import { cloneDeep } from 'lodash-es';
-`
-      }
-    ];
+      // Create existing preferences.yaml
+      const prefFile = join(ritsuDir, "preferences.yaml");
+      writeFileSync(
+        prefFile,
+        yaml.dump({
+          rules: [
+            {
+              id: "pref-existing",
+              match_regex: "some-regex",
+              scope: "coding_style"
+            }
+          ]
+        }),
+        "utf-8"
+      );
 
-    const rules = synthesizeRulesFromCorrections(corrections);
-    expect(rules).toHaveLength(1);
-    expect(rules[0].id).toBe("pref-auto-lodash-es");
-  });
+      // Mock the LLM fetch endpoint
+      const mockLlmResponse = `
+- id: pref-auto-logger
+  match_regex: "console\\\\.log"
+  scope: coding_style
+  auto_inject_to: [think, dev]
+  message: "Use project logger instead of console.log."
+      `;
 
-  it("should synthesize generic mined rule for exact repeating deleted line", () => {
-    const corrections = [
-      {
-        file: "src/app.ts",
-        diff: `
-diff --git a/src/app.ts b/src/app.ts
---- a/src/app.ts
-+++ b/src/app.ts
-@@ -1,3 +1,3 @@
--legacyApiCall();
-+newApiCall();
-`
-      },
-      {
-        file: "src/utils.ts",
-        diff: `
-diff --git a/src/utils.ts b/src/utils.ts
---- a/src/utils.ts
-+++ b/src/utils.ts
-@@ -1,3 +1,3 @@
--legacyApiCall();
-+newApiCall();
-`
-      }
-    ];
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: mockLlmResponse,
+                },
+              },
+            ],
+          }),
+          { status: 200 }
+        )
+      );
 
-    const rules = synthesizeRulesFromCorrections(corrections);
-    const minedRule = rules.find((r) => r.id.startsWith("pref-auto-mined-"));
-    expect(minedRule).toBeDefined();
-    expect(minedRule!.match_regex).toBe("legacyApiCall\\(\\);");
-  });
+      // Run auto-apply preference mining
+      const result = await autoApplyMinedRules(7);
 
-  it("should merge mined rules conflict-free and trigger automatic preferences.yaml compilation", async () => {
-    const ritsuDir = join(testRoot, ".ritsu");
-    mkdirSync(ritsuDir);
+      expect(fetchSpy).toHaveBeenCalled();
+      expect(result.addedCount).toBe(1);
+      expect(result.rules).toHaveLength(1);
+      expect(result.rules[0].id).toBe("pref-auto-logger");
 
-    // AI write index.ts
-    const codeFile = join(testRoot, "index.ts");
-    writeFileSync(codeFile, "console.log('AI write');\n");
-    execSync("git add index.ts", { cwd: testRoot, stdio: "ignore" });
-    execSync("git commit -m 'AI commit'", { cwd: testRoot, stdio: "ignore" });
+      // Verify the preferences.yaml file is correctly updated and merged conflict-free
+      const prefContent = readFileSync(prefFile, "utf-8");
+      expect(prefContent).toContain("id: pref-existing");
+      expect(prefContent).toContain("id: pref-auto-logger");
 
-    // Mock Write Event
-    const ts = formatRitsuTs(new Date(Date.now() - 1000 * 60));
-    const ctxFile = join(ritsuDir, "ctx-20260521.jsonl");
-    writeFileSync(
-      ctxFile,
-      JSON.stringify({ ts, status: "artifact_written", artifact: "index.ts" }) + "\n",
-      "utf-8"
-    );
-
-    // Human overrides
-    writeFileSync(codeFile, "logger.info('AI write');\n");
-    execSync("git add index.ts", { cwd: testRoot, stdio: "ignore" });
-    execSync("git commit -m 'human override'", { cwd: testRoot, stdio: "ignore" });
-
-    // Create existing preferences.yaml
-    const prefFile = join(ritsuDir, "preferences.yaml");
-    writeFileSync(
-      prefFile,
-      yaml.dump({
-        rules: [
-          {
-            id: "pref-existing",
-            match_regex: "some-regex",
-            scope: "coding_style"
-          }
-        ]
-      }),
-      "utf-8"
-    );
-
-    // Execute auto Apply
-    const result = await autoApplyMinedRules(7);
-    expect(result.addedCount).toBe(1);
-    expect(result.rules).toHaveLength(1);
-    expect(result.rules[0].id).toBe("pref-auto-logger");
-
-    // Assert file was updated correctly
-    const prefContent = readFileSync(prefFile, "utf-8");
-    expect(prefContent).toContain("id: pref-existing");
-    expect(prefContent).toContain("id: pref-auto-logger");
-
-    // Assert compiled rules exist and reconcile succeeded
-    expect(existsSync(join(testRoot, "rules/ast-grep/pref-pref-auto-logger.yml"))).toBe(true);
+      // Verify it generated compiled ast-grep rules during reconciliation
+      expect(existsSync(join(testRoot, "rules/ast-grep/pref-pref-auto-logger.yml"))).toBe(true);
+    });
   });
 });

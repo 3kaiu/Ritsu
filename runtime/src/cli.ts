@@ -35,6 +35,8 @@ export function usage(detailed = false): string {
     "  ritsu doctor --ecosystem # MCP 生态验证",
     "  ritsu doctor --signals   # 结构化审计信号 (PASS/WARN/FAIL)",
     "  ritsu doctor --ai        # AI 工具配置检查",
+    "  ritsu trust        # 初始化/覆盖 HMAC 密钥",
+    "  ritsu verify <id>  # 校验指定 Trace 的 HMAC 签名",
     "",
     "Ritsu CLI — 4 阶段工作流: think → dev → review → hunt",
     "",
@@ -94,6 +96,64 @@ export function main() {
   if (cmd === "sync") { runSync(cmdArgs[0]); return; }
   if (cmd === "mine") { runMine(cmdArgs); return; }
   if (cmd === "cat") { runCat(cmdArgs); return; }
+
+  if (cmd === "trust") {
+    const force = cmdArgs.includes("--force");
+    const { initKey, getOrCreateKey } = require("./policy/signature.js");
+    const existing = getOrCreateKey();
+    if (existing && !force) {
+      console.log(color("❌ Trust key already exists. Use 'ritsu trust --force' to overwrite (CAUTION: invalidates old signatures).", "yellow"));
+      return;
+    }
+    initKey();
+    console.log(color("✅ Trust key initialized. All future events will be HMAC-signed.", "green"));
+    return;
+  }
+
+  if (cmd === "verify") {
+    const traceId = cmdArgs[0];
+    if (!traceId) {
+      console.error(color("❌ Missing trace ID. Usage: ritsu verify <trace_id>", "red"));
+      process.exit(1);
+    }
+    const { getOrCreateKey, verifyEvent } = require("./policy/signature.js");
+    const { readAllEntries } = require("./ctx-reader.js");
+    const { getProjectRoot } = require("./handlers/_utils.js");
+
+    const key = getOrCreateKey();
+    if (!key) {
+      console.error(color("❌ No trust key found. Use 'ritsu trust' first.", "red"));
+      process.exit(1);
+    }
+
+    const root = getProjectRoot();
+    const entries = readAllEntries(root);
+    const traceEvents = entries.filter((e: any) => e.trace_id === traceId);
+    
+    if (traceEvents.length === 0) {
+      console.error(color(`❌ Trace not found: ${traceId}`, "red"));
+      process.exit(1);
+    }
+
+    let violationCount = 0;
+    const details = traceEvents.map((e: any) => {
+      const valid = verifyEvent(e, key);
+      if (!valid) violationCount++;
+      return {
+        span_id: e.span_id,
+        status: e.status,
+        valid
+      };
+    });
+
+    console.log(JSON.stringify({
+      trace_id: traceId,
+      valid: violationCount === 0,
+      violation_count: violationCount,
+      details
+    }, null, 2));
+    return;
+  }
 
   console.error(color(`Unknown command: ${cmd}`, "red"));
   console.log(usage());

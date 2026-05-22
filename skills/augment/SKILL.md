@@ -16,6 +16,10 @@ total_steps: 4
 
 ## 执行流水线
 
+### -1. Prompt Caching 对齐
+
+> 引用 `_shared/skill-common-steps.md` Step -2。优先构建静态基座（`rules/anti-patterns.yaml` + `_shared/mcp-tools.yaml`）后，再进入后续动态流程。
+
 ### 1. 契约与覆盖率对账
 - **读取设计单**：查找最近的 `design-sheet`，提取 `verification_plan.contracts`。
 - **获取覆盖率**：调用 `ritsu_run_quality_gates` 并解析其返回的 `coverage.per_file` 字段。

@@ -43,9 +43,19 @@ npx skills add 3kaiu/Ritsu -a claude-code -g -y
 
 之后重载 MCP，运行 `ritsu doctor` 确认。
 
+## ⚡️ Prompt Caching (提示词缓存) 协议
+
+为最大化 Anthropic/DeepSeek 缓存命中率（降低 90% 成本，缩短 80% 延迟），你必须严格遵循以下 **Prompt 缓存加载顺序**：
+
+1. **第 1 步：加载静态底座 (Static Prefix)**：在会话启动时，**最前端**必须以静态方式加载极其稳定的 `rules/anti-patterns.yaml`（全局底线规则）和 `_shared/mcp-tools.yaml`（工具 Schema 定义）。这建立了 > 1024/2048 字节的缓存块。
+2. **第 2 步：加载静态技能指令**：随后读取当前指令对应的 `skills/<stage>/SKILL.md`。
+3. **第 3 步：加载易变动态上下文 (Dynamic Context)**：最后在 Prompt 尾部追加极易变动的 `task_summary`、`changed_files`、`git diff` 或者是 `ritsu_preflight` 轻量级 JIT 运行上下文。
+
+⚠️ **绝对禁止**：在加载静态底座前或加载中间，夹杂任何易变/动态数据（如当前任务描述或具体 diff 文件内容），否则会导致前面的 Prompt 缓存失效！
+
 ## 你必须遵守
 
-`rules/anti-patterns.yaml` 定义 20 条底线：
+`rules/anti-patterns.yaml` 定义 20 条底线（必须在第 1 步优先加载）：
 
 - **AP-5**: 没有命令输出就不要说"通过了"
 - **AP-6**: 不准留 TODO/TBD

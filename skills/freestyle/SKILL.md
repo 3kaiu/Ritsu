@@ -20,6 +20,11 @@ hard_constraints:
 
 ## 行为准则
 
+### -1. Prompt Caching 对齐
+> 引用 `_shared/skill-common-steps.md` Step -2。即使是 Freestyle 快速问答，也必须最先静态对齐缓存基座（加载 `rules/anti-patterns.yaml` 与 `_shared/mcp-tools.yaml`），保证整个会话在后续的多轮交互中始终命中缓存。
+
+### 0. 核心准则
+
 1. **直接回答**: 不调用任何 ctx/event 工具，不产出任何产物。
 2. **智能升级**: 如果回答过程中发现问题需要修改代码，主动建议 "这可能需要 `/r-dev` 来修复"。
 3. **保持上下文感知**: 虽然不进入流程，但仍然感知当前项目的技术栈和领域。

@@ -26,14 +26,28 @@ describe("native-bridge", () => {
     expect(diff).toBeGreaterThan(0.01);
   });
 
-  it("isNativeAvailable returns false when .node file missing", async () => {
+  it("isNativeAvailable returns true in Bun environment", async () => {
     const { isNativeAvailable } = await import("../src/native-bridge.js");
-    // In test environment, no native .node file should be found
-    expect(isNativeAvailable()).toBe(false);
+    expect(isNativeAvailable()).toBe(true);
   });
 
-  it("initNativeStore returns false when native unavailable", async () => {
-    const { initNativeStore } = await import("../src/native-bridge.js");
-    expect(initNativeStore()).toBe(false);
+  it("initNativeStore returns true when native database initializes successfully", async () => {
+    const { initNativeStore, closeNativeStore } = await import("../src/native-bridge.js");
+    const { mkdtempSync, rmSync, existsSync } = require("node:fs");
+    const { tmpdir } = require("node:os");
+    const { join } = require("node:path");
+    
+    const tempRoot = mkdtempSync(join(tmpdir(), "ritsu-test-vector-store-"));
+    process.env.RITSU_PROJECT_ROOT = tempRoot;
+
+    try {
+      expect(initNativeStore(tempRoot)).toBe(true);
+    } finally {
+      closeNativeStore();
+      delete process.env.RITSU_PROJECT_ROOT;
+      if (existsSync(tempRoot)) {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    }
   });
 });

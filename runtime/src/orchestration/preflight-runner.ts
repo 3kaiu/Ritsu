@@ -29,6 +29,7 @@ export type PreflightRunOptions = {
   stage: PreflightStage;
   tier?: PreflightTier;
   taskSummary?: string;
+  detail?: boolean;
 };
 
 export type PreflightContextPack = Record<string, unknown> & {
@@ -148,49 +149,86 @@ async function runDevReviewPreflight(
   projectRoot: string,
   stage: "dev" | "review",
   skill: string,
+  detail = false,
 ): Promise<PreflightContextPack> {
   const pack: PreflightContextPack = { stage, passed: true };
 
-  pack.ctx = await readCtxCompact(projectRoot);
+  const ctx = await readCtxCompact(projectRoot);
+  pack.ctx = ctx;
   process.env.RITSU_PROJECT_ROOT = projectRoot;
 
-  const artifactsRes = await ritsu_list_artifacts({
-    type: stage === "dev" ? "design-sheet" : "all",
-  });
-  const artText = artifactsRes.content[0];
-  if (artText?.type === "text") {
-    try {
-      pack.artifacts = JSON.parse(artText.text) as Record<string, unknown>;
-    } catch {
-      pack.artifacts = null;
+  // Auto-elevation check: consecutive_fails >= 2
+  const consecutiveFails = (ctx?.circuit_breaker_status as Record<string, unknown> | undefined)?.consecutive_fails;
+  const shouldElevate = typeof consecutiveFails === "number" && consecutiveFails >= 2;
+  const activeDetail = detail || shouldElevate;
+
+  let codegraphFiles: string[] | undefined = undefined;
+
+  if (activeDetail) {
+    const artifactsRes = await ritsu_list_artifacts({
+      type: stage === "dev" ? "design-sheet" : "all",
+    });
+    const artText = artifactsRes.content[0];
+    if (artText?.type === "text") {
+      try {
+        pack.artifacts = JSON.parse(artText.text) as Record<string, unknown>;
+      } catch {
+        pack.artifacts = null;
+      }
+    }
+
+    const changedRes = await ritsu_get_changed_files({});
+    const chText = changedRes.content[0];
+    let changed: Record<string, unknown> | null = null;
+    if (chText?.type === "text") {
+      try {
+        changed = JSON.parse(chText.text) as Record<string, unknown>;
+      } catch {
+        changed = null;
+      }
+    }
+    pack.changed_files = changed;
+    if (Array.isArray(changed?.files)) {
+      codegraphFiles = changed.files.filter((f): f is string => typeof f === "string");
+    }
+
+    // Internal: auto-fetch CodeGraph context for affected symbols
+    if (codegraphFiles && codegraphFiles.length > 0) {
+      const cg = fetchCodeGraphContext(codegraphFiles);
+      if (cg.symbols.length > 0) pack._codegraph = cg;
+    }
+
+    const statDiff = await inspectDiff({
+      projectRoot,
+      mode: "stat",
+    });
+    if (statDiff.ok) {
+      pack.diff = {
+        files: statDiff.data.files,
+        truncated: false,
+      };
+    }
+  } else {
+    // Under normal JIT workflow, only fetch changed files list internally to support architecture drift detection
+    const changedRes = await ritsu_get_changed_files({});
+    const chText = changedRes.content[0];
+    let changed: Record<string, unknown> | null = null;
+    if (chText?.type === "text") {
+      try {
+        changed = JSON.parse(chText.text) as Record<string, unknown>;
+      } catch {}
+    }
+    if (Array.isArray(changed?.files)) {
+      codegraphFiles = changed.files.filter((f): f is string => typeof f === "string");
     }
   }
 
-  const changedRes = await ritsu_get_changed_files({});
-  const chText = changedRes.content[0];
-  let changed: Record<string, unknown> | null = null;
-  if (chText?.type === "text") {
-    try {
-      changed = JSON.parse(chText.text) as Record<string, unknown>;
-    } catch {
-      changed = null;
-    }
-  }
-  pack.changed_files = changed;
-
-  // Internal: auto-fetch CodeGraph context for affected symbols
-  const codegraphFiles = changed?.files;
-  if (Array.isArray(codegraphFiles)) {
-    const cg = fetchCodeGraphContext(codegraphFiles.filter((f): f is string => typeof f === "string"));
-    if (cg.symbols.length > 0) pack._codegraph = cg;
-  }
-
-  // 架构漂移检测
+  // 架构漂移检测 - 即使 detail: false 也进行，如果有违反(异常)则记录
   try {
-    if (Array.isArray(codegraphFiles)) {
+    if (Array.isArray(codegraphFiles) && codegraphFiles.length > 0) {
       const { checkArchitectureDrift } = await import("./architecture-analyzer.js");
       const driftViolations = checkArchitectureDrift(
-        codegraphFiles.filter((f: unknown): f is string => typeof f === "string"),
+        codegraphFiles,
         projectRoot,
       );
       if (driftViolations.length > 0) {
@@ -199,38 +237,39 @@ async function runDevReviewPreflight(
     }
   } catch { /* non-critical */ }
 
-  const statDiff = await inspectDiff({
-    projectRoot,
-    mode: "stat",
-  });
-  if (statDiff.ok) {
-    pack.diff = {
-      files: statDiff.data.files,
-      truncated: false,
+  const policy: PolicyPreflightResult = await runPolicyPreflight(projectRoot, skill);
+  pack.passed = policy.passed;
+
+  // Policy: 如果 passed 且 detail: false，只返回 passed 状态以节省 tokens
+  // 如果未通过（异常流程）或者 detail: true，返回全部细节
+  if (activeDetail || !policy.passed) {
+    pack.policy = {
+      passed: policy.passed,
+      violations: policy.violations,
+      scan_files: policy.scan_files,
+      cached: policy.cached,
+    };
+  } else {
+    pack.policy = {
+      passed: policy.passed,
     };
   }
 
-  const policy: PolicyPreflightResult = await runPolicyPreflight(projectRoot, skill);
-  pack.policy = {
-    passed: policy.passed,
-    violations: policy.violations,
-    scan_files: policy.scan_files,
-    cached: policy.cached,
-  };
-  pack.passed = policy.passed;
-
   if (stage === "review") {
-    const ctx = pack.ctx as Record<string, unknown> | null | undefined;
-    const lastIncomplete = ctx?.last_incomplete as Record<string, unknown> | undefined;
-    const traceId = typeof lastIncomplete?.trace_id === "string" ? lastIncomplete.trace_id : undefined;
-    if (traceId) {
-      const traceRes = await ritsu_join_trace({ trace_id: traceId });
-      const tText = traceRes.content[0];
-      if (tText?.type === "text") {
-        try {
-          pack.trace = JSON.parse(tText.text) as Record<string, unknown>;
-        } catch {
-          pack.trace = null;
+    // Trace: 仅在 review 阶段、且 (activeDetail: true 或 发现异常流程时) 加载
+    if (activeDetail || !pack.passed || (pack._architecture_drift && pack._architecture_drift.length > 0)) {
+      const ctx = pack.ctx as Record<string, unknown> | null | undefined;
+      const lastIncomplete = ctx?.last_incomplete as Record<string, unknown> | undefined;
+      const traceId = typeof lastIncomplete?.trace_id === "string" ? lastIncomplete.trace_id : undefined;
+      if (traceId) {
+        const traceRes = await ritsu_join_trace({ trace_id: traceId });
+        const tText = traceRes.content[0];
+        if (tText?.type === "text") {
+          try {
+            pack.trace = JSON.parse(tText.text) as Record<string, unknown>;
+          } catch {
+            pack.trace = null;
+          }
         }
       }
     }
@@ -251,7 +290,7 @@ async function runDevReviewPreflight(
   return pack;
 }
 
-async function runHuntPreflight(projectRoot: string): Promise<PreflightContextPack> {
+async function runHuntPreflight(projectRoot: string, detail = false): Promise<PreflightContextPack> {
   const pack: PreflightContextPack = { stage: "hunt", passed: true };
 
   const ctx = await readCtxCompact(projectRoot);
@@ -259,37 +298,40 @@ async function runHuntPreflight(projectRoot: string): Promise<PreflightContextPa
   pack.recovery_context = ctx?.recovery_context ?? null;
 
   process.env.RITSU_PROJECT_ROOT = projectRoot;
-  const changedRes = await ritsu_get_changed_files({});
-  const chText = changedRes.content[0];
-  if (chText?.type === "text") {
-    try {
-      pack.changed_files = JSON.parse(chText.text) as Record<string, unknown>;
-    } catch {
-      pack.changed_files = null;
+
+  if (detail) {
+    const changedRes = await ritsu_get_changed_files({});
+    const chText = changedRes.content[0];
+    if (chText?.type === "text") {
+      try {
+        pack.changed_files = JSON.parse(chText.text) as Record<string, unknown>;
+      } catch {
+        pack.changed_files = null;
+      }
     }
-  }
 
-  const chunks = await inspectDiff({ projectRoot, mode: "chunks", topN: 15 });
-  if (chunks.ok && Array.isArray(chunks.data.chunks)) {
-    pack.top_risk_chunks = chunks.data.chunks;
-  }
+    const chunks = await inspectDiff({ projectRoot, mode: "chunks", topN: 15 });
+    if (chunks.ok && Array.isArray(chunks.data.chunks)) {
+      pack.top_risk_chunks = chunks.data.chunks;
+    }
 
-  const since = new Date(Date.now() - 30 * 24 * 3600 * 1000)
-    .toISOString()
-    .slice(0, 10)
-    .replace(/-/g, "");
-  pack.similar_violations = findSimilarViolations(
-    loadViolationRecords(resolve(projectRoot, ".ritsu"), since),
-    "failure error regression",
-    5,
-  );
+    const since = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10)
+      .replace(/-/g, "");
+    pack.similar_violations = findSimilarViolations(
+      loadViolationRecords(resolve(projectRoot, ".ritsu"), since),
+      "failure error regression",
+      5,
+    );
+  }
 
   pack.next_skill = "dev";
 
   const ctxSummary = pack.ctx as Record<string, unknown> | null | undefined;
   const cv = (pack.similar_violations as Array<Record<string, unknown>> | undefined)?.length ?? 0;
   const recovery = ctxSummary?.recovery_context ? `Recovery: ${(ctxSummary.recovery_context as Record<string, unknown>).resume_hint ?? "available"}` : "";
-  pack._ai_summary = [`Stage: hunt`, `Similar violations found: ${cv}`, recovery].filter(Boolean).join(" | ");
+  pack._ai_summary = [`Stage: hunt`, `Similar violations found: ${cv || "deferred"}`, recovery].filter(Boolean).join(" | ");
 
   return pack;
 }
@@ -297,14 +339,14 @@ async function runHuntPreflight(projectRoot: string): Promise<PreflightContextPa
 export async function runStagePreflight(
   options: PreflightRunOptions,
 ): Promise<PreflightContextPack> {
-  const { projectRoot, stage, taskSummary = "" } = options;
+  const { projectRoot, stage, taskSummary = "", detail = false } = options;
 
   if (stage === "think") {
     const ctx = await readCtxCompact(projectRoot);
     const tier = inferTier(options.tier, ctx);
     return runThinkPreflight(projectRoot, tier, taskSummary);
   }
-  if (stage === "hunt") return runHuntPreflight(projectRoot);
-  if (stage === "dev") return runDevReviewPreflight(projectRoot, "dev", "dev");
-  return runDevReviewPreflight(projectRoot, "review", "review");
+  if (stage === "hunt") return runHuntPreflight(projectRoot, detail);
+  if (stage === "dev") return runDevReviewPreflight(projectRoot, "dev", "dev", detail);
+  return runDevReviewPreflight(projectRoot, "review", "review", detail);
 }

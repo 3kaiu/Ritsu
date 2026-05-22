@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync, readFileSync, writeFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { getProjectRoot, textResult } from "./_utils.js";
@@ -395,6 +395,131 @@ function parseTestFailures(output: string): TestFailure[] {
   return failures.slice(0, 20);
 }
 
+export interface TestReportAdapter {
+  supports(runner: "vitest" | "jest"): boolean;
+  injectReporterArgs(args: string[], reportPath: string): string[];
+  parse(content: string): TestFailure[];
+}
+
+export class VitestJsonTestAdapter implements TestReportAdapter {
+  supports(runner: "vitest" | "jest"): boolean {
+    return runner === "vitest";
+  }
+
+  injectReporterArgs(args: string[], reportPath: string): string[] {
+    return [...args, "--reporter=json", "--outputFile", reportPath];
+  }
+
+  parse(content: string): TestFailure[] {
+    const parsed = JSON.parse(content);
+    const failures: TestFailure[] = [];
+    if (parsed && Array.isArray(parsed.testResults)) {
+      for (const suite of parsed.testResults) {
+        if (suite.status === "failed") {
+          for (const assertion of suite.assertionResults) {
+            if (assertion.status === "failed") {
+              failures.push({
+                suite: suite.name,
+                test: assertion.fullName || assertion.title,
+                error: assertion.failureMessages?.join("\n") || "Unknown error",
+                file_hint: suite.name,
+              });
+            }
+          }
+        }
+      }
+    }
+    return failures;
+  }
+}
+
+export class JestJsonTestAdapter implements TestReportAdapter {
+  supports(runner: "vitest" | "jest"): boolean {
+    return runner === "jest";
+  }
+
+  injectReporterArgs(args: string[], reportPath: string): string[] {
+    return [...args, "--json", "--outputFile", reportPath];
+  }
+
+  parse(content: string): TestFailure[] {
+    const parsed = JSON.parse(content);
+    const failures: TestFailure[] = [];
+    if (parsed && Array.isArray(parsed.testResults)) {
+      for (const suite of parsed.testResults) {
+        if (suite.status === "failed") {
+          for (const assertion of suite.assertionResults) {
+            if (assertion.status === "failed") {
+              failures.push({
+                suite: suite.name,
+                test: assertion.fullName || assertion.title,
+                error: assertion.failureMessages?.join("\n") || "Unknown error",
+                file_hint: suite.name,
+              });
+            }
+          }
+        }
+      }
+    }
+    return failures;
+  }
+}
+
+const testReportAdapters: TestReportAdapter[] = [
+  new VitestJsonTestAdapter(),
+  new JestJsonTestAdapter(),
+];
+
+export function detectTestRunner(command: { binary: string; args: string[]; cwd: string }): "vitest" | "jest" | null {
+  const fullCmd = [command.binary, ...command.args].join(" ");
+  if (fullCmd.includes("vitest")) return "vitest";
+  if (fullCmd.includes("jest")) return "jest";
+  if (fullCmd.includes("bun test")) return "vitest";
+
+  try {
+    const pkgPath = resolve(command.cwd, "package.json");
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+      const scripts = pkg.scripts ?? {};
+      const scriptName = command.args.find(arg => scripts[arg] !== undefined);
+      if (scriptName) {
+        const scriptCmd = scripts[scriptName];
+        if (scriptCmd.includes("vitest")) return "vitest";
+        if (scriptCmd.includes("jest")) return "jest";
+      }
+    }
+  } catch {}
+
+  return null;
+}
+
+export function injectReporterArgs(
+  binary: string,
+  args: string[],
+  runner: "vitest" | "jest",
+  reportPath: string
+): string[] {
+  const adapter = testReportAdapters.find(a => a.supports(runner));
+  if (!adapter) return args;
+
+  const runnerArgs = adapter.injectReporterArgs([], reportPath);
+  const isPackageManager = ["npm", "pnpm", "yarn", "bun"].includes(binary);
+  const hasDoubleDash = args.includes("--");
+
+  if (isPackageManager) {
+    if (hasDoubleDash) {
+      const idx = args.indexOf("--");
+      const before = args.slice(0, idx + 1);
+      const after = args.slice(idx + 1);
+      return [...before, ...runnerArgs, ...after];
+    } else {
+      return [...args, "--", ...runnerArgs];
+    }
+  }
+
+  return [...args, ...runnerArgs];
+}
+
 function detectPackageCommand(
   packageRoot: string,
 ): { lint?: CommandSpec; test?: CommandSpec } {
@@ -532,13 +657,49 @@ export async function ritsu_run_quality_gates(
   // Test
   if (!skipTest && test_cmd) {
     const command = parseCommand(test_cmd);
+    const runner = detectTestRunner(command);
+    let testArgs = command.args;
+    let reportPath = "";
+
+    if (runner) {
+      ensureRitsuDir(root);
+      reportPath = resolve(root, `.ritsu/test-report-${Date.now()}.json`);
+      testArgs = injectReporterArgs(command.binary, command.args, runner, reportPath);
+    }
+
     const r = await runCommand(
       command.binary,
-      command.args,
+      testArgs,
       command.cwd,
       timeoutMs,
     );
-    const failures = parseTestFailures(r.output);
+
+    let failures: TestFailure[] = [];
+    let parsedOk = false;
+
+    if (runner && reportPath) {
+      try {
+        const adapter = testReportAdapters.find(a => a.supports(runner));
+        if (adapter && existsSync(reportPath)) {
+          const content = readFileSync(reportPath, "utf-8");
+          failures = adapter.parse(content);
+          parsedOk = true;
+        }
+      } catch (err) {
+        console.warn("[ritsu-qg] Failed to parse JSON test report:", err);
+      } finally {
+        try {
+          if (existsSync(reportPath)) {
+            unlinkSync(reportPath);
+          }
+        } catch {}
+      }
+    }
+
+    if (!parsedOk) {
+      failures = parseTestFailures(r.output);
+    }
+
     const passed = r.ok && failures.length === 0;
     result.test = {
       status: passed ? "passed" : "failed",

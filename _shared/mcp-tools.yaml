@@ -1,4 +1,4 @@
-# Ritsu MCP Tool Schema 声明 v6.5.0
+# Ritsu MCP Tool Schema 声明 v7.1.0
 
 tools:
   - name: ritsu_emit_event
@@ -65,6 +65,10 @@ tools:
         type: boolean
         required: false
         description: "Full details (default: compact)"
+      token_budget:
+        type: integer
+        required: false
+        description: "Estimated token budget for context"
     output_schema:
       type: object
       required: [last_incomplete, last_completed, recent_entries, recovery_context]
@@ -73,21 +77,6 @@ tools:
         last_completed: { type: object }
         recent_entries: { type: array }
         recovery_context: { type: object }
-
-  - name: ritsu_read_agents
-    description: 读取 AGENTS.md 配置
-    call_template:
-      tool: ritsu_read_agents
-      params: {}
-    input: {}
-    output_schema:
-      type: object
-      required: [path, domain]
-      properties:
-        path: { type: string }
-        ritsu_version: { type: string }
-        domain: { type: string }
-        tech_fingerprints: { type: array }
 
   - name: ritsu_write_artifact
     description: 写入产物到 .ritsu/
@@ -112,59 +101,24 @@ tools:
         path: { type: string }
         size_bytes: { type: integer }
 
-  - name: ritsu_list_artifacts
-    description: 列出 .ritsu/ 产物
+  - name: ritsu_patch_artifact
+    description: "增量替换 Markdown 内容"
     call_template:
-      tool: ritsu_list_artifacts
+      tool: ritsu_patch_artifact
       params:
-        type: "all"
+        filename: "{filename}"
+        target_content: "{old}"
+        replacement_content: "{new}"
     input:
-      type: { type: string, required: false }
+      filename: { type: string, required: true }
+      target_content: { type: string, required: true }
+      replacement_content: { type: string, required: true }
     output_schema:
       type: object
-      required: [files, total_count]
+      required: [path, size_bytes]
       properties:
-        files: { type: array }
-        total_count: { type: integer }
-
-  - name: ritsu_exec
-    description: 执行命令（安全沙箱）
-    call_template:
-      tool: ritsu_exec
-      params:
-        command: "{命令}"
-    input:
-      command: { type: string, required: true }
-      max_output_lines: { type: integer, required: false }
-      timeout_ms: { type: integer, required: false }
-    output_schema:
-      type: object
-      required: [ok, output]
-      properties:
-        ok: { type: boolean }
-        output: { type: string }
-
-  - name: ritsu_inspect_git_changes
-    description: "Git 变更检视: status/stat/chunks/full"
-    call_template:
-      tool: ritsu_inspect_git_changes
-      params:
-        mode: full
-        staged: true
-        unstaged: true
-    input:
-      mode:
-        type: enum
-        values: [status, stat, chunks, full]
-        required: false
-      cached: { type: boolean, required: false }
-      max_output_lines: { type: integer, required: false }
-      top_n: { type: integer, required: false }
-      staged: { type: boolean, required: false }
-      unstaged: { type: boolean, required: false }
-    output_schema:
-      type: object
-
+        path: { type: string }
+        size_bytes: { type: integer }
 
   - name: ritsu_run_quality_gates
     description: 质量门禁
@@ -193,107 +147,6 @@ tools:
         passed: { type: boolean }
         lint: { type: object }
         test: { type: object }
-
-  - name: ritsu_read_preferences
-    description: 读取项目偏好
-    call_template:
-      tool: ritsu_read_preferences
-    input: {}
-    output_schema:
-      type: object
-      properties:
-        rules: { type: array }
-
-  - name: ritsu_write_preference
-    description: 写入偏好
-    call_template:
-      tool: ritsu_write_preference
-      params:
-        rule:
-          match_regex: "{regex}"
-          scope: "{scope}"
-    input:
-      rule:
-        type: object
-        properties:
-          match_regex: { type: string }
-          forbid_lib: { type: string }
-          require_call: { type: string }
-          pattern: { type: string }
-          scope:
-            type: enum
-            values: [coding_style, library_choice, naming_convention, architecture]
-            required: true
-          source: { type: string }
-          auto_inject_to: { type: array }
-          confidence: { type: number }
-    output_schema:
-      type: object
-      properties:
-        ok: { type: boolean }
-        id: { type: string }
-        matches: { type: array }
-
-  - name: ritsu_span_lifecycle
-    description: "Span 生命周期: open/close"
-    call_template:
-      tool: ritsu_span_lifecycle
-      params:
-        action: open
-        skill: "{skill_name}"
-        domain: "{value}"
-    input:
-      action:
-        type: enum
-        values: [open, close]
-        required: true
-      skill: { type: string, required: false }
-      domain: { type: string, required: false }
-      trace_id: { type: string, required: false }
-      span_id: { type: string, required: false }
-      parent_span_id: { type: string, required: false }
-      status:
-        type: enum
-        values: [done, failed]
-        required: false
-      error: { type: string, required: false }
-      cost: { type: object, required: false }
-      step: { type: string, required: false }
-      metadata: { type: object, required: false }
-      agent: { type: object, required: false }
-      name: { type: string, required: false }
-    output_schema:
-      type: object
-
-
-  - name: ritsu_join_trace
-    description: 查询 Trace 状态
-    call_template:
-      tool: ritsu_join_trace
-      params:
-        trace_id: "{trace_id}"
-    input:
-      trace_id: { type: string, required: true }
-    output_schema:
-      type: object
-      required: [trace_id, tree, artifacts]
-      properties:
-        trace_id: { type: string }
-        tree: { type: array }
-  
-  - name: ritsu_init_trust_key
-    description: "初始化 HMAC 密钥"
-    call_template:
-      tool: ritsu_init_trust_key
-      params: {}
-    input:
-      force: { type: boolean, required: false, description: "Overwrite existing key" }
-    output_schema:
-      type: object
-      required: [ok, path]
-      properties:
-        ok: { type: boolean }
-        path: { type: string }
 
   - name: ritsu_file_lease
     description: "文件锁定: claim/release/list"
@@ -332,46 +185,6 @@ tools:
     output_schema:
       type: object
 
-
-  - name: ritsu_verify_trace
-    description: "校验 Trace HMAC 签名"
-    call_template:
-      tool: ritsu_verify_trace
-      params:
-        trace_id: "{trace_id}"
-    input:
-      trace_id: { type: string, required: true }
-    output_schema:
-      type: object
-      required: [trace_id, valid, violation_count]
-      properties:
-        trace_id: { type: string }
-        valid: { type: boolean }
-        violation_count: { type: integer }
-        details: { type: array }
-  
-  - name: ritsu_bootstrap_ecosystem
-    description: "项目引导 (MCP + 生态)"
-    call_template:
-      tool: ritsu_bootstrap_ecosystem
-      params:
-        host: claude-code
-    input:
-      host:
-        type: enum
-        values: [claude-code, cursor, all]
-        required: false
-      include_cursor_hooks: { type: boolean, required: false }
-    output_schema:
-      type: object
-      required: [project_root, files_written, ecosystem]
-      properties:
-        project_root: { type: string }
-        files_written: { type: array }
-        files_merged: { type: array }
-        ecosystem: { type: object }
-        notes: { type: array }
-
   - name: ritsu_preflight
     description: "阶段预检: 一键加载上下文"
     call_template:
@@ -391,48 +204,13 @@ tools:
       task_summary:
         type: string
         required: false
+      detail:
+        type: boolean
+        required: false
+        description: "Whether to eager load full context details (default: false)"
     output_schema:
       type: object
       required: [ok, context_pack]
       properties:
         ok: { type: boolean }
         context_pack: { type: object }
-
-  - name: ritsu_sync_openspec_contracts
-    description: "同步 OpenSpec 需求"
-    call_template:
-      tool: ritsu_sync_openspec_contracts
-      params:
-        change_id: "{change_id}"
-    input:
-      change_id:
-        type: string
-        required: false
-        description: "Change ID (默认最近)"
-    output_schema:
-      type: object
-      required: [change_id, contracts, design_sheet_path]
-      properties:
-        change_id: { type: string }
-        contracts: { type: array }
-        design_sheet_path: { type: string }
-        openspec_proposal_path: { type: string }
-
-  - name: ritsu_patch_artifact
-    description: "增量替换 Markdown 内容"
-    call_template:
-      tool: ritsu_patch_artifact
-      params:
-        filename: "{filename}"
-        target_content: "{old}"
-        replacement_content: "{new}"
-    input:
-      filename: { type: string, required: true }
-      target_content: { type: string, required: true }
-      replacement_content: { type: string, required: true }
-    output_schema:
-      type: object
-      required: [path, size_bytes]
-      properties:
-        path: { type: string }
-        size_bytes: { type: integer }

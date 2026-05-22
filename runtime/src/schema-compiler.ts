@@ -2,15 +2,17 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { getSharedDir } from "./shared.js";
 import yaml from "js-yaml";
-import { z } from "zod";
+import { z as zodType } from "zod";
+const zodModule = require("zod");
+const z = (zodModule.z || zodModule.default?.z || zodType) as typeof zodType;
 
-type ZodShape = Record<string, z.ZodTypeAny>;
+type ZodShape = Record<string, zodType.ZodTypeAny>;
 
 interface CompiledTool {
   name: string;
   description: string;
-  inputSchema: z.ZodObject<ZodShape>;
-  outputSchema?: z.ZodTypeAny;
+  inputSchema: zodType.ZodObject<ZodShape>;
+  outputSchema?: zodType.ZodTypeAny;
   error_shape?: Record<string, unknown>;
   call_template?: Record<string, unknown>;
   validation?: string;
@@ -49,8 +51,8 @@ interface ToolsYamlDoc {
  * Converts a YAML input field definition to a Zod schema type.
  * Supports recursive resolution for objects and lists.
  */
-function convertFieldToZod(field: YamlInputField): z.ZodTypeAny {
-  let type: z.ZodTypeAny;
+function convertFieldToZod(field: YamlInputField): zodType.ZodTypeAny {
+  let type: zodType.ZodTypeAny;
 
   switch (field.type) {
     case "enum":
@@ -98,7 +100,7 @@ function convertFieldToZod(field: YamlInputField): z.ZodTypeAny {
  */
 function convertInputToZod(
   input: Record<string, YamlInputField>,
-): z.ZodObject<ZodShape> {
+): zodType.ZodObject<ZodShape> {
   const shape: ZodShape = {};
 
   for (const [key, field] of Object.entries(input)) {
@@ -110,12 +112,12 @@ function convertInputToZod(
 
 function convertOutputSchemaToZod(
   schema: ToolOutputSchemaDefinition | undefined,
-): z.ZodTypeAny {
+): zodType.ZodTypeAny {
   if (!schema || schema.type !== "object" || !schema.properties) {
     return z.any();
   }
   const requiredFields = Array.isArray(schema.required) ? schema.required : [];
-  const shape: Record<string, z.ZodTypeAny> = {};
+  const shape: Record<string, zodType.ZodTypeAny> = {};
   for (const [key, prop] of Object.entries(schema.properties)) {
     const field: YamlInputField = { ...prop, required: requiredFields.includes(key) };
     shape[key] = convertFieldToZod(field);

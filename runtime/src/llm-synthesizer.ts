@@ -70,14 +70,26 @@ export async function synthesizeWithLLM(
           {
             role: "system",
             content: `You are Ritsu's preference mining engine. Analyze human corrections to code written by AI, and synthesize preference rules that prevent similar issues.
-Output ONLY valid YAML (no markdown fences, no explanatory text).
-Each rule must have: id, match_regex, scope (coding_style|type_safety|performance|architecture|naming_convention), auto_inject_to array, and message.`,
+Output ONLY a valid JSON object matching this schema:
+{
+  "rules": [
+    {
+      "id": "pref-unique-identifier",
+      "match_regex": "regex pattern",
+      "scope": "coding_style|type_safety|performance|architecture|naming_convention",
+      "auto_inject_to": ["think", "dev"],
+      "message": "Description of what to do instead"
+    }
+  ]
+}
+Each rule must have all fields populated. Do not include markdown wrapper blocks or explanations.`,
           },
           {
             role: "user",
             content: prompt,
           },
         ],
+        response_format: { type: "json_object" },
         temperature: 0.3,
         max_tokens: 2000,
       }),
@@ -129,39 +141,71 @@ export function buildSynthesisPrompt(input: SynthesisInput): string {
     parts.push("");
   }
 
-  parts.push(`Generate preference rules in this exact YAML format:`);
-  parts.push(`- id: pref-unique-identifier`);
-  parts.push(`  match_regex: "regex pattern to match"`);
-  parts.push(`  scope: coding_style`);
-  parts.push(`  auto_inject_to: [think, dev]`);
-  parts.push(`  message: "Description of what to do instead"`);
+  parts.push(`Generate preference rules in this exact JSON format inside a "rules" array:`);
+  parts.push(`{`);
+  parts.push(`  "rules": [`);
+  parts.push(`    {`);
+  parts.push(`      "id": "pref-unique-identifier",`);
+  parts.push(`      "match_regex": "regex pattern to match",`);
+  parts.push(`      "scope": "coding_style",`);
+  parts.push(`      "auto_inject_to": ["think", "dev"],`);
+  parts.push(`      "message": "Description of what to do instead"`);
+  parts.push(`    }`);
+  parts.push(`  ]`);
+  parts.push(`}`);
 
   return parts.join("\n");
 }
 
 export function parseLLMResponse(content: string): PreferenceRule[] {
-  // Strip markdown fences if present
   const cleaned = content
-    .replace(/^```ya?ml\s*/m, "")
-    .replace(/^```\s*$/m, "")
+    .replace(/^```(?:json|ya?ml)?\s*/im, "")
+    .replace(/```\s*$/m, "")
     .trim();
 
-  try {
-    const parsed = yaml.load(cleaned) as unknown;
-    if (!parsed) return [];
+  if (!cleaned) return [];
 
-    const rules = Array.isArray(parsed) ? parsed : [parsed];
-    return rules.filter((r): r is PreferenceRule => {
-      return (
-        typeof r === "object" &&
-        r !== null &&
-        typeof (r as Record<string, unknown>).id === "string" &&
-        typeof (r as Record<string, unknown>).match_regex === "string" &&
-        String((r as Record<string, unknown>).id).length > 0
-      );
-    });
+  // Try parsing as JSON first
+  try {
+    const parsed = JSON.parse(cleaned) as unknown;
+    if (parsed && typeof parsed === "object") {
+      let rules: unknown[] = [];
+      if (Array.isArray(parsed)) {
+        rules = parsed;
+      } else if (Array.isArray((parsed as Record<string, unknown>).rules)) {
+        rules = (parsed as Record<string, unknown>).rules as unknown[];
+      } else if (Array.isArray((parsed as Record<string, unknown>).preferences)) {
+        rules = (parsed as Record<string, unknown>).preferences as unknown[];
+      } else {
+        rules = [parsed];
+      }
+
+      return validateRules(rules);
+    }
   } catch {
-    console.warn("[ritsu-llm] Failed to parse LLM response as YAML");
-    return [];
+    // If JSON parsing fails, fallback to YAML parsing for maximum backward compatibility
+    try {
+      const parsed = yaml.load(cleaned) as unknown;
+      if (parsed) {
+        const rules = Array.isArray(parsed) ? parsed : [parsed];
+        return validateRules(rules);
+      }
+    } catch {
+      console.warn("[ritsu-llm] Failed to parse LLM response as JSON or YAML");
+    }
   }
+
+  return [];
+}
+
+function validateRules(rules: unknown[]): PreferenceRule[] {
+  return rules.filter((r): r is PreferenceRule => {
+    return (
+      typeof r === "object" &&
+      r !== null &&
+      typeof (r as Record<string, unknown>).id === "string" &&
+      typeof (r as Record<string, unknown>).match_regex === "string" &&
+      String((r as Record<string, unknown>).id).length > 0
+    );
+  }) as PreferenceRule[];
 }

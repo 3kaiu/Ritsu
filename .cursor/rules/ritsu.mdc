@@ -6,10 +6,17 @@ globs: "*"
 
 See `CLAUDE.md` for the complete AI onboarding guide.
 
+## ⚡️ Prompt Caching Protocol (提示词缓存协议)
+
+Always establish a static cache prefix before loading variable parameters.
+1. **Load Static Base**: Read `rules/anti-patterns.yaml` and `_shared/mcp-tools.yaml` at the **absolute start of the session**.
+2. **Load Skill Guide**: Read the active `skills/<stage>/SKILL.md` file.
+3. **Load Dynamic Context**: Append dynamic inputs (e.g. `task_summary`, JIT `ritsu_preflight` metadata, git diffs) only at the **absolute end** of the prompt sequence.
+
 ## Quick Reference
 
 - Build: `bun run --cwd runtime build`
 - Test: `bun run --cwd runtime test` (342 tests)
 - Workflow: `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
-- MCP: `ritsu` 提供 22 个工具
+- MCP: `ritsu` 提供 8 个核心工具 (优化后)
 - Check: `ritsu doctor`
