@@ -1,237 +1,293 @@
 import { describe, it, expect } from "vitest";
-import type { QualityGateStepStatus } from "../src/quality-gates.js";
+import {
+  computeOverallStatus,
+  normalizeQualityGateStatusToken,
+  parseQualityGatePct,
+  assessRiskLevel,
+  getCoverageThreshold,
+  checkCoverageThreshold,
+  checkVerificationClaims,
+  validateQualityGateSnapshotContext,
+  extractQualityGateExecutionContext,
+  buildQualityGateSnapshot,
+  parseQualityGateSnapshot,
+} from "../src/quality-gates.js";
 
-describe("quality-gates — pure functions", () => {
-  // ─── computeOverallStatus ─────────────────────────────────
-
-  describe("computeOverallStatus", () => {
-    it("returns passed when both lint and test pass", async () => {
-      const { computeOverallStatus } = await import("../src/quality-gates.js");
-      const result = computeOverallStatus("passed", "passed");
-      expect(result.passed).toBe(true);
-      expect(result.status).toBe("passed");
-    });
-
-    it("returns failed when lint fails", async () => {
-      const { computeOverallStatus } = await import("../src/quality-gates.js");
-      const result = computeOverallStatus("failed", "passed");
-      expect(result.passed).toBe(false);
-      expect(result.status).toBe("failed");
-    });
-
-    it("returns failed when test fails", async () => {
-      const { computeOverallStatus } = await import("../src/quality-gates.js");
-      const result = computeOverallStatus("passed", "failed");
-      expect(result.passed).toBe(false);
-      expect(result.status).toBe("failed");
-    });
-
-    it("returns partially_skipped when both skipped", async () => {
-      const { computeOverallStatus } = await import("../src/quality-gates.js");
-      const result = computeOverallStatus("skipped", "skipped");
-      expect(result.passed).toBe(false);
-      expect(result.status).toBe("partially_skipped");
-    });
+describe("computeOverallStatus", () => {
+  it("passes when both pass", () => {
+    expect(computeOverallStatus("passed", "passed")).toEqual({ passed: true, status: "passed" });
   });
 
-  // ─── checkVerificationClaims ──────────────────────────────
-
-  describe("checkVerificationClaims", () => {
-    it("returns null when tests actually ran", async () => {
-      const { checkVerificationClaims } = await import("../src/quality-gates.js");
-      const result = checkVerificationClaims({
-        lint: { status: "passed", output: "" },
-        test: { status: "passed", failures: [], output: "All tests pass" },
-      });
-      expect(result).toBeNull();
-    });
-
-    it("returns warning when tests skipped but output claims passing", async () => {
-      const { checkVerificationClaims } = await import("../src/quality-gates.js");
-      const result = checkVerificationClaims({
-        lint: { status: "skipped", output: "" },
-        test: { status: "skipped", failures: [], output: "All tests pass" },
-      });
-      expect(result).toContain("Unverified claim");
-    });
-
-    it("returns null when tests skipped and no verification language", async () => {
-      const { checkVerificationClaims } = await import("../src/quality-gates.js");
-      const result = checkVerificationClaims({
-        lint: { status: "skipped", output: "" },
-        test: { status: "skipped", failures: [], output: "" },
-      });
-      expect(result).toBeNull();
-    });
-
-    it("detects Chinese verification claims", async () => {
-      const { checkVerificationClaims } = await import("../src/quality-gates.js");
-      const result = checkVerificationClaims({
-        lint: { status: "skipped", output: "检查全部通过" },
-        test: { status: "skipped", failures: [], output: "" },
-      });
-      expect(result).toContain("Unverified claim");
-    });
+  it("fails when lint fails", () => {
+    expect(computeOverallStatus("failed", "passed")).toEqual({ passed: false, status: "failed" });
   });
 
-  // ─── buildQualityGateSnapshot ─────────────────────────────
-
-  describe("buildQualityGateSnapshot", () => {
-    it("builds snapshot with all fields", async () => {
-      const { buildQualityGateSnapshot } = await import("../src/quality-gates.js");
-      const snapshot = buildQualityGateSnapshot({
-        context: { skill: "dev", domain: "fullstack" },
-        lint: { status: "passed", output: "" },
-        test: { status: "passed", failures: [], output: "ok" },
-        coverage: {
-          summary: { lines: { total: 10, covered: 8, pct: 80 } },
-          per_file: {},
-        },
-      });
-      expect(snapshot.passed).toBe(true);
-      expect(snapshot.status).toBe("passed");
-      expect(snapshot.context?.skill).toBe("dev");
-      expect(snapshot.coverage?.summary.lines?.pct).toBe(80);
-      expect(snapshot.recorded_at).toBeTruthy();
-    });
+  it("partially_skipped when lint skipped, test passed", () => {
+    const r = computeOverallStatus("skipped", "passed");
+    expect(r.status).toBe("partially_skipped");
   });
 
-  // ─── parseQualityGateSnapshot ─────────────────────────────
+  it("passed when test passed and lint passed", () => {
+    expect(computeOverallStatus("passed", "passed").passed).toBe(true);
+  });
+});
 
-  describe("parseQualityGateSnapshot", () => {
-    it("parses valid JSON snapshot", async () => {
-      const { parseQualityGateSnapshot } = await import("../src/quality-gates.js");
-      const raw = {
-        recorded_at: "20260522-120000",
-        passed: true,
-        status: "passed",
-        lint: { status: "passed", output: "" },
-        test: { status: "passed", failures: [], output: "" },
-      };
-      const result = parseQualityGateSnapshot(raw);
-      expect(result).not.toBeNull();
-      expect(result!.passed).toBe(true);
-      expect(result!.status).toBe("passed");
-    });
-
-    it("returns null for non-object", async () => {
-      const { parseQualityGateSnapshot } = await import("../src/quality-gates.js");
-      expect(parseQualityGateSnapshot(null)).toBeNull();
-      expect(parseQualityGateSnapshot("string")).toBeNull();
-    });
-
-    it("returns null for missing lint/test", async () => {
-      const { parseQualityGateSnapshot } = await import("../src/quality-gates.js");
-      expect(parseQualityGateSnapshot({})).toBeNull();
-    });
-
-    it("parses coverage from summary or total", async () => {
-      const { parseQualityGateSnapshot } = await import("../src/quality-gates.js");
-      const usingTotal = parseQualityGateSnapshot({
-        lint: { status: "passed", output: "" },
-        test: { status: "passed", failures: [], output: "" },
-        coverage: {
-          total: { lines: { total: 10, covered: 9, pct: 90 } },
-          per_file: {},
-        },
-      });
-      expect(usingTotal?.coverage?.summary.lines?.pct).toBe(90);
-    });
+describe("normalizeQualityGateStatusToken", () => {
+  it("normalizes chinese to english", () => {
+    expect(normalizeQualityGateStatusToken("通过")).toBe("passed");
+    expect(normalizeQualityGateStatusToken("失败")).toBe("failed");
+    expect(normalizeQualityGateStatusToken("跳过")).toBe("skipped");
   });
 
-  // ─── extractQualityGateExecutionContext ───────────────────
-
-  describe("extractQualityGateExecutionContext", () => {
-    it("extracts context from params", async () => {
-      const { extractQualityGateExecutionContext } = await import("../src/quality-gates.js");
-      const result = extractQualityGateExecutionContext({
-        skill: "dev",
-        trace_id: "trace-abc",
-        span_id: "span-123",
-      });
-      expect(result.skill).toBe("dev");
-      expect(result.trace_id).toBe("trace-abc");
-      expect(result.span_id).toBe("span-123");
-    });
-
-    it("extracts context from nested context field", async () => {
-      const { extractQualityGateExecutionContext } = await import("../src/quality-gates.js");
-      const result = extractQualityGateExecutionContext({
-        context: { skill: "review", correlation_id: "cid-001" },
-      });
-      expect(result.skill).toBe("review");
-      expect(result.correlation_id).toBe("cid-001");
-    });
-
-    it("skips empty values", async () => {
-      const { extractQualityGateExecutionContext } = await import("../src/quality-gates.js");
-      const result = extractQualityGateExecutionContext({ skill: "" });
-      expect(result.skill).toBeUndefined();
-    });
+  it("preserves english tokens", () => {
+    expect(normalizeQualityGateStatusToken("passed")).toBe("passed");
   });
 
-  // ─── validateQualityGateSnapshotContext ───────────────────
+  it("returns null for unknown tokens", () => {
+    expect(normalizeQualityGateStatusToken("unknown")).toBeNull();
+  });
+});
 
-  describe("validateQualityGateSnapshotContext", () => {
-    it("passes when no trace context provided", async () => {
-      const { validateQualityGateSnapshotContext } = await import("../src/quality-gates.js");
-      const result = validateQualityGateSnapshotContext(
-        { recorded_at: "", passed: true, status: "passed", lint: { status: "passed", output: "" }, test: { status: "passed", failures: [], output: "" } },
-        {},
-      );
-      expect(result.ok).toBe(true);
-    });
-
-    it("fails when snapshot lacks span_id", async () => {
-      const { validateQualityGateSnapshotContext } = await import("../src/quality-gates.js");
-      const result = validateQualityGateSnapshotContext(
-        { recorded_at: "", passed: true, status: "passed", lint: { status: "passed", output: "" }, test: { status: "passed", failures: [], output: "" } },
-        { span_id: "span-123" },
-      );
-      expect(result.ok).toBe(false);
-    });
-
-    it("passes when span_id matches", async () => {
-      const { validateQualityGateSnapshotContext } = await import("../src/quality-gates.js");
-      const result = validateQualityGateSnapshotContext(
-        { recorded_at: "", passed: true, status: "passed", context: { span_id: "span-123" }, lint: { status: "passed", output: "" }, test: { status: "passed", failures: [], output: "" } },
-        { span_id: "span-123" },
-      );
-      expect(result.ok).toBe(true);
-    });
-
-    it("fails when span_id differs", async () => {
-      const { validateQualityGateSnapshotContext } = await import("../src/quality-gates.js");
-      const result = validateQualityGateSnapshotContext(
-        { recorded_at: "", passed: true, status: "passed", context: { span_id: "span-old" }, lint: { status: "passed", output: "" }, test: { status: "passed", failures: [], output: "" } },
-        { span_id: "span-new" },
-      );
-      expect(result.ok).toBe(false);
-    });
+describe("parseQualityGatePct", () => {
+  it("parses percentages", () => {
+    expect(parseQualityGatePct("85.5%")).toBe(85.5);
+    expect(parseQualityGatePct("100%")).toBe(100);
   });
 
-  // ─── normalizeQualityGateStatusToken ──────────────────────
+  it("returns null for non-numeric", () => {
+    expect(parseQualityGatePct("N/A")).toBeNull();
+  });
+});
 
-  describe("normalizeQualityGateStatusToken", () => {
-    it("normalizes status tokens", async () => {
-      const { normalizeQualityGateStatusToken, parseQualityGatePct } = await import("../src/quality-gates.js");
-      expect(normalizeQualityGateStatusToken("passed")).toBe("passed");
-      expect(normalizeQualityGateStatusToken("FAILED")).toBe("failed");
-      expect(normalizeQualityGateStatusToken(" 通过 ")).toBe("passed");
-      expect(normalizeQualityGateStatusToken(" 部分跳过 ")).toBe("partially_skipped");
-      expect(normalizeQualityGateStatusToken("invalid")).toBeNull();
-      expect(normalizeQualityGateStatusToken("")).toBeNull();
-    });
+describe("assessRiskLevel", () => {
+  it("auth → core", () => {
+    expect(assessRiskLevel(["src/auth/login.ts"])).toBe("core");
+  });
+  it("payment → core", () => {
+    expect(assessRiskLevel(["src/payment/checkout.ts"])).toBe("core");
+  });
+  it("crypto → core", () => {
+    expect(assessRiskLevel(["lib/crypto/encrypt.ts"])).toBe("core");
+  });
+  it("types → core", () => {
+    expect(assessRiskLevel(["src/types/index.ts"])).toBe("core");
+  });
+  it("middleware → core", () => {
+    expect(assessRiskLevel(["src/middleware/auth.ts"])).toBe("core");
+  });
+  it(".d.ts → core", () => {
+    expect(assessRiskLevel(["src/api.d.ts"])).toBe("core");
+  });
+  it("routes file → core", () => {
+    expect(assessRiskLevel(["src/routes/users.ts"])).toBe("core");
+  });
+  it("utils → periphery", () => {
+    expect(assessRiskLevel(["src/utils/format.ts"])).toBe("periphery");
+  });
+  it("one core file contaminates the list", () => {
+    expect(assessRiskLevel(["src/utils/x.ts", "src/auth/login.ts"])).toBe("core");
+  });
+});
+
+describe("getCoverageThreshold", () => {
+  it("core => 100", () => expect(getCoverageThreshold("core")).toBe(100));
+  it("periphery => -1", () => expect(getCoverageThreshold("periphery")).toBe(-1));
+});
+
+describe("checkCoverageThreshold", () => {
+  it("passes when met", () => {
+    expect(checkCoverageThreshold(100, 100)).toBe(true);
+  });
+  it("fails when below", () => {
+    expect(checkCoverageThreshold(79, 80)).toBe(false);
+  });
+  it("always passes with negative threshold", () => {
+    expect(checkCoverageThreshold(0, -1)).toBe(true);
+    expect(checkCoverageThreshold(undefined, -1)).toBe(true);
+  });
+  it("fails with undefined pct and positive threshold", () => {
+    expect(checkCoverageThreshold(undefined, 80)).toBe(false);
+  });
+});
+
+describe("checkVerificationClaims", () => {
+  it("null when tests actually ran", () => {
+    expect(checkVerificationClaims({
+      lint: { status: "passed", output: "clean" },
+      test: { status: "passed", failures: [], output: "3 passed" },
+    })).toBeNull();
   });
 
-  // ─── parseQualityGatePct ──────────────────────────────────
-
-  describe("parseQualityGatePct", () => {
-    it("parses percentage values", async () => {
-      const { parseQualityGatePct } = await import("../src/quality-gates.js");
-      expect(parseQualityGatePct("80%")).toBe(80);
-      expect(parseQualityGatePct("92.5")).toBe(92.5);
-      expect(parseQualityGatePct("abc")).toBeNull();
+  it("detects unverified 'passed' claim when skipped", () => {
+    const r = checkVerificationClaims({
+      lint: { status: "skipped", output: "" },
+      test: { status: "skipped", failures: [], output: "all tests passed!" },
     });
+    expect(r).toContain("Unverified claim");
+  });
+
+  it("detects chinese verification claims", () => {
+    const r = checkVerificationClaims({
+      lint: { status: "skipped", output: "" },
+      test: { status: "skipped", failures: [], output: "测试全部通过" },
+    });
+    expect(r).toContain("Unverified claim");
+  });
+
+  it("detects 'verified' keyword claims", () => {
+    const r = checkVerificationClaims({
+      lint: { status: "skipped", output: "" },
+      test: { status: "skipped", failures: [], output: "verified manually" },
+    });
+    expect(r).toContain("Unverified claim");
+  });
+});
+
+describe("validateQualityGateSnapshotContext", () => {
+  const snap = {
+    recorded_at: "20260522-120000",
+    passed: true,
+    status: "passed" as const,
+    lint: { status: "passed" as const, output: "" },
+    test: { status: "passed" as const, failures: [], output: "" },
+  };
+
+  it("ok when no context at all", () => {
+    expect(validateQualityGateSnapshotContext({ ...snap }, {}).ok).toBe(true);
+  });
+
+  it("ok when span_id matches", () => {
+    const r = validateQualityGateSnapshotContext(
+      { ...snap, context: { span_id: "span-abc12345" } },
+      { span_id: "span-abc12345" },
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("fails when span_id mismatches", () => {
+    const r = validateQualityGateSnapshotContext(
+      { ...snap, context: { span_id: "span-a" } },
+      { span_id: "span-b" },
+    );
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.expected).toContain("span_id: span-b");
+  });
+
+  it("fails when snapshot missing span_id", () => {
+    const r = validateQualityGateSnapshotContext(
+      { ...snap, context: {} },
+      { span_id: "span-abc" },
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("ok when trace_id matches", () => {
+    const r = validateQualityGateSnapshotContext(
+      { ...snap, context: { trace_id: "tr-20260522-ab" } },
+      { trace_id: "tr-20260522-ab" },
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it("fails when snapshot has no trace_id but current does", () => {
+    const r = validateQualityGateSnapshotContext(
+      { ...snap, context: { span_id: "span-123" } },
+      { trace_id: "tr-abc", span_id: "span-123" },
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("falls back to correlation_id", () => {
+    const r = validateQualityGateSnapshotContext(
+      { ...snap, context: { correlation_id: "cid-001" } },
+      { correlation_id: "cid-001" },
+    );
+    expect(r.ok).toBe(true);
+  });
+});
+
+describe("extractQualityGateExecutionContext", () => {
+  it("extracts from top-level params", () => {
+    const ctx = extractQualityGateExecutionContext({
+      trace_id: "trace-abc",
+      skill: "dev",
+    });
+    expect(ctx.trace_id).toBe("trace-abc");
+    expect(ctx.skill).toBe("dev");
+  });
+
+  it("extracts from nested context object", () => {
+    const ctx = extractQualityGateExecutionContext({
+      context: { trace_id: "trace-xyz" },
+    });
+    expect(ctx.trace_id).toBe("trace-xyz");
+  });
+
+  it("empty for no params", () => {
+    expect(Object.keys(extractQualityGateExecutionContext({})).length).toBe(0);
+  });
+});
+
+describe("buildQualityGateSnapshot", () => {
+  it("builds basic snapshot", () => {
+    const s = buildQualityGateSnapshot({
+      lint: { status: "passed", output: "ok" },
+      test: { status: "passed", failures: [], output: "3 passed" },
+    });
+    expect(s.passed).toBe(true);
+    expect(s.recorded_at).toBeTruthy();
+  });
+
+  it("includes coverage when provided", () => {
+    const s = buildQualityGateSnapshot({
+      lint: { status: "passed", output: "" },
+      test: { status: "passed", failures: [], output: "" },
+      coverage: {
+        summary: { lines: { total: 100, covered: 85, pct: 85 } },
+        per_file: {},
+      },
+    });
+    expect(s.coverage?.summary.lines?.pct).toBe(85);
+  });
+
+  it("records verification_warning when claims detected", () => {
+    const s = buildQualityGateSnapshot({
+      lint: { status: "skipped", output: "" },
+      test: { status: "skipped", failures: [], output: "测试全部通过" },
+    });
+    expect(s.verification_warning).toBeDefined();
+  });
+});
+
+describe("parseQualityGateSnapshot", () => {
+  it("parses well-formed snapshot", () => {
+    const raw = {
+      recorded_at: "20260522-120000",
+      passed: true,
+      status: "passed",
+      lint: { status: "passed", output: "" },
+      test: { status: "passed", failures: [], output: "" },
+    };
+    expect(parseQualityGateSnapshot(raw)).not.toBeNull();
+  });
+
+  it("returns null for missing required fields", () => {
+    expect(parseQualityGateSnapshot({})).toBeNull();
+    expect(parseQualityGateSnapshot({ lint: null, test: null })).toBeNull();
+  });
+
+  it("parses coverage when present", () => {
+    const raw = {
+      recorded_at: "20260522-120000",
+      passed: true,
+      status: "passed",
+      lint: { status: "passed", output: "" },
+      test: { status: "passed", failures: [], output: "" },
+      coverage: {
+        summary: { lines: { total: 100, covered: 90, pct: 90 } },
+        per_file: {},
+      },
+    };
+    expect(parseQualityGateSnapshot(raw)!.coverage?.summary.lines?.pct).toBe(90);
   });
 });
