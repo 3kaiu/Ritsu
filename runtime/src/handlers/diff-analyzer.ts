@@ -1,5 +1,5 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-// node:child_process import removed
+import { inspectDiff, type InspectDiffMode } from "../orchestration/diff-inspect.js";
 import { getProjectRoot, textResult, errorResult } from "./_utils.js";
 import { runGit } from "./_git-utils.js";
 
@@ -39,7 +39,13 @@ function inferDomain(files: ChangedFile[]): string {
   return top;
 }
 
+function parseMode(value: unknown): InspectDiffMode {
+  const m = String(value ?? "full").toLowerCase();
+  if (m === "stat" || m === "chunks" || m === "full") return m;
+  return "full";
+}
 
+/** Get changed files from git working tree */
 export async function ritsu_get_changed_files(
   params: Record<string, unknown>,
 ): Promise<CallToolResult> {
@@ -95,4 +101,45 @@ export async function ritsu_get_changed_files(
       domain_hint: domain,
     }),
   );
+}
+
+/** Inspect git diff with mode selection */
+export async function ritsu_inspect_diff(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const root = getProjectRoot();
+  const result = await inspectDiff({
+    projectRoot: root,
+    mode: parseMode(params.mode),
+    cached: params.cached === true,
+    maxOutputLines: Number(params.max_output_lines ?? 500),
+    topN: Number(params.top_n ?? 20),
+  });
+  if (!result.ok) return errorResult(result.error);
+  return textResult(JSON.stringify(result.data, null, 2));
+}
+
+/** @deprecated Use ritsu_inspect_diff mode=full */
+export async function ritsu_get_diff(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  return ritsu_inspect_diff({ ...params, mode: "full" });
+}
+
+/** @deprecated Use ritsu_inspect_diff mode=chunks */
+export async function ritsu_diff_chunks(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  return ritsu_inspect_diff({ ...params, mode: "chunks" });
+}
+
+/** Unified git changes entry: routes to status or diff based on mode */
+export async function ritsu_inspect_git_changes(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const mode = String(params.mode ?? "full").toLowerCase();
+  if (mode === "status") {
+    return ritsu_get_changed_files(params);
+  }
+  return ritsu_inspect_diff(params);
 }

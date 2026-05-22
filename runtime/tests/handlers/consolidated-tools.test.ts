@@ -3,8 +3,8 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ritsu_file_lease } from "../../src/handlers/file-lease.js";
-import { ritsu_span_lifecycle } from "../../src/handlers/open-span.js";
-import { ritsu_inspect_git_changes } from "../../src/handlers/inspect-diff.js";
+import { ritsu_span_lifecycle } from "../../src/handlers/span-orchestrator.js";
+import { ritsu_inspect_git_changes } from "../../src/handlers/diff-analyzer.js";
 import { ritsu_task_coordination } from "../../src/handlers/task-protocol.js";
 
 describe("consolidated tools handlers", () => {

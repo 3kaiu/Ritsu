@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { ritsu_read_ctx } from "../../src/handlers/read-ctx.js";
+import { ritsu_read_ctx } from "../../src/handlers/ctx-controller.js";
 import { ritsu_emit_event } from "../../src/handlers/emit-event.js";
 import { getCtxPath, ensureCtxFile } from "../../src/ctx-path.js";
 import { _resetReaderCache } from "../../src/ctx-reader.js";

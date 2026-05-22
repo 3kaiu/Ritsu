@@ -1,35 +1,38 @@
 /**
- * 工具 Handler 注册表 v6.5.0
+ * 工具 Handler 注册表 v7.3.0 — consolidated
  */
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ritsu_emit_event } from "./emit-event.js";
-import { ritsu_read_ctx } from "./read-ctx.js";
+import { ritsu_read_ctx, ritsu_verify_trace } from "./ctx-controller.js";
 import { ritsu_read_agents } from "./read-agents.js";
-import { ritsu_write_artifact } from "./write-artifact.js";
-import { ritsu_patch_artifact } from "./patch-artifact.js";
+import { ritsu_write_artifact, ritsu_patch_artifact } from "./artifact-manager.js";
 import { ritsu_list_artifacts } from "./list-artifacts.js";
 import { ritsu_exec } from "./exec.js";
-import { ritsu_get_changed_files } from "./get-changed-files.js";
 import {
+  ritsu_get_changed_files,
+  ritsu_inspect_diff,
   ritsu_inspect_git_changes,
-} from "./inspect-diff.js";
+} from "./diff-analyzer.js";
 import { ritsu_run_quality_gates } from "./run-quality-gates.js";
 import {
   ritsu_read_preferences,
   ritsu_write_preference,
 } from "./preferences.js";
-import { ritsu_span_lifecycle } from "./open-span.js";
-import { ritsu_join_trace } from "./join-trace.js";
+import {
+  ritsu_open_span,
+  ritsu_close_span,
+  ritsu_span_lifecycle,
+  ritsu_join_trace,
+} from "./span-orchestrator.js";
 import { ritsu_init_trust_key } from "./init-trust-key.js";
 import { ritsu_task_coordination } from "./task-protocol.js";
-import { ritsu_verify_trace } from "./verify-trace.js";
 import { ritsu_file_lease } from "./file-lease.js";
 import { ritsu_sync_openspec_contracts } from "./sync-openspec-contracts.js";
 import { ritsu_bootstrap_ecosystem } from "./bootstrap-ecosystem.js";
 import { ritsu_preflight } from "./preflight.js";
 
-// ─── Handler Registry (only merged/consolidated tools) ───────
+// ─── Handler Registry ───────
 
 export const registerHandlers: Record<
   string,

@@ -9,34 +9,27 @@ import {
 } from "../ctx-reader.js";
 import { getCtxPath } from "../ctx-path.js";
 import { getStageForSkill } from "../shared.js";
-import { getProjectRoot, textResult, warnResult } from "./_utils.js";
+import { getProjectRoot, textResult, warnResult, errorResult } from "./_utils.js";
+import { verifyEvent, getOrCreateKey } from "../policy/signature.js";
+
+// ─── read-ctx constants ───
 
 const SUMMARY_THRESHOLD = 50;
-
 const PRUNED_RECENT_LIMIT = 10;
 
-function attachStage(
-  entry: Record<string, unknown> | null,
-): Record<string, unknown> | null {
+function attachStage(entry: Record<string, unknown> | null): Record<string, unknown> | null {
   if (!entry) return null;
   const skill = String(entry.skill ?? "");
-  const copy: Record<string, unknown> = {
-    ...entry,
-    stage: getStageForSkill(skill),
-  };
+  const copy: Record<string, unknown> = { ...entry, stage: getStageForSkill(skill) };
   delete copy.signature;
   return copy;
 }
 
-function attachStageToEntries(
-  entries: Record<string, unknown>[],
-): Record<string, unknown>[] {
+function attachStageToEntries(entries: Record<string, unknown>[]): Record<string, unknown>[] {
   return entries.map((entry) => attachStage(entry) ?? entry);
 }
 
-function computeSummary(
-  entries: Record<string, unknown>[],
-): Record<string, unknown> | null {
+function computeSummary(entries: Record<string, unknown>[]): Record<string, unknown> | null {
   if (entries.length === 0) return null;
 
   const skillsUsed: Record<string, number> = {};
@@ -51,29 +44,20 @@ function computeSummary(
 
     const cid = String(e.correlation_id ?? "");
     if (cid) {
-      if (!taskTerminalStatus.has(cid)) {
-        taskTerminalStatus.set(cid, null);
-      }
-
-      if (e.status === "done" || e.status === "failed") {
-        taskTerminalStatus.set(cid, e.status);
-      }
+      if (!taskTerminalStatus.has(cid)) taskTerminalStatus.set(cid, null);
+      if (e.status === "done" || e.status === "failed") taskTerminalStatus.set(cid, e.status);
     }
   }
 
-  const tasksTotal = taskTerminalStatus.size;
-  let tasksDone = 0;
-  let tasksFailed = 0;
-
+  let tasksDone = 0, tasksFailed = 0;
   for (const status of taskTerminalStatus.values()) {
     if (status === "done") tasksDone++;
     if (status === "failed") tasksFailed++;
   }
 
-  const month = new Date().toISOString().slice(0, 7);
   return {
-    month,
-    tasks_total: tasksTotal,
+    month: new Date().toISOString().slice(0, 7),
+    tasks_total: taskTerminalStatus.size,
     tasks_done: tasksDone,
     tasks_failed: tasksFailed,
     skills_used: skillsUsed,
@@ -97,56 +81,32 @@ function pruneRecentEntries(
 ): Record<string, unknown>[] {
   if (entries.length <= limit) return entries;
 
-  // Prefer important statuses, but keep recency: score = weight + recency bonus
   const scored = entries.map((e, idx) => {
     const s = String(e.status ?? "");
     const cid = String(e.correlation_id ?? "");
     let w = statusWeight(s);
-
-    // Force inclusion of anchor points
-    if (cid && (cid === lastIncompleteCid || cid === lastCompletedCid)) {
-      w += 10; // Mega boost
-    }
-
-    // recency bonus: last entries get slightly higher
+    if (cid && (cid === lastIncompleteCid || cid === lastCompletedCid)) w += 10;
     const recency = idx / Math.max(1, entries.length - 1);
-    const score = w + recency;
-    return { e, score, idx };
+    return { e, score: w + recency, idx };
   });
 
-  const picked = scored
+  return scored
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
-    // keep chronological order for readability
     .sort((a, b) => a.idx - b.idx)
     .map((x) => x.e);
-
-  return picked;
 }
 
-function summarizeFailedEntries(
-  entries: Record<string, unknown>[],
-): Record<string, unknown> {
-  const bySkill: Record<
-    string,
-    { count: number; last_error: string; last_ts: string; last_cid: string }
-  > = {};
-
+function summarizeFailedEntries(entries: Record<string, unknown>[]): Record<string, unknown> {
+  const bySkill: Record<string, { count: number; last_error: string; last_ts: string; last_cid: string }> = {};
   for (const e of entries) {
     if (e.status !== "failed") continue;
     const skill = String(e.skill ?? "unknown");
     const ts = String(e.ts ?? "");
     const cid = String(e.correlation_id ?? "");
     const err = String(e.error ?? "");
-
-    const cur = bySkill[skill] ?? {
-      count: 0,
-      last_error: "",
-      last_ts: "",
-      last_cid: "",
-    };
-    cur.count += 1;
-    // keep last (most recent) failure info
+    const cur = bySkill[skill] ?? { count: 0, last_error: "", last_ts: "", last_cid: "" };
+    cur.count++;
     if (!cur.last_ts || ts > cur.last_ts) {
       cur.last_ts = ts;
       cur.last_error = err;
@@ -154,12 +114,9 @@ function summarizeFailedEntries(
     }
     bySkill[skill] = cur;
   }
-
   const totalFailed = Object.values(bySkill).reduce((a, b) => a + b.count, 0);
   return { total_failed: totalFailed, by_skill: bySkill };
 }
-
-// ─── 现实对账：检查 last_completed 的 artifact 是否仍存在 ───
 
 function checkRealityDesync(
   root: string,
@@ -167,43 +124,30 @@ function checkRealityDesync(
   entries: Record<string, unknown>[],
 ): { desync_detected: boolean; missing_artifacts: string[] } {
   const missing: string[] = [];
-  if (!lastCompleted)
-    return { desync_detected: false, missing_artifacts: missing };
+  if (!lastCompleted) return { desync_detected: false, missing_artifacts: missing };
 
   const artifacts = new Set<string>();
   const addArtifact = (value: unknown) => {
     const artifact = String(value ?? "");
-    if (artifact && artifact !== "null") {
-      artifacts.add(artifact);
-    }
+    if (artifact && artifact !== "null") artifacts.add(artifact);
   };
 
   addArtifact(lastCompleted.artifact);
-
   const cid = String(lastCompleted.correlation_id ?? "");
   if (cid) {
     for (const entry of entries) {
       if (String(entry.correlation_id ?? "") !== cid) continue;
-      if (entry.status === "artifact_written") {
-        addArtifact(entry.artifact);
-      }
+      if (entry.status === "artifact_written") addArtifact(entry.artifact);
     }
   }
 
   for (const artifact of artifacts) {
     const fullPath = resolve(root, artifact);
-    if (!existsSync(fullPath)) {
-      missing.push(artifact);
-    }
+    if (!existsSync(fullPath)) missing.push(artifact);
   }
 
-  return {
-    desync_detected: missing.length > 0,
-    missing_artifacts: missing,
-  };
+  return { desync_detected: missing.length > 0, missing_artifacts: missing };
 }
-
-// ─── 熔断状态计算：统计同一 correlation_id 下的连续 failed 次数 ───
 
 function computeCircuitBreaker(entries: Record<string, unknown>[]): {
   consecutive_fails: number;
@@ -232,40 +176,24 @@ function computeCircuitBreaker(entries: Record<string, unknown>[]): {
   }
 
   if (!lastFailedCid || !cidGroups[lastFailedCid]) {
-    return {
-      consecutive_fails: 0,
-      should_redirect: null,
-      recommended_stage: null,
-      last_failed_skill: null,
-      last_failed_cid: null,
-    };
+    return { consecutive_fails: 0, should_redirect: null, recommended_stage: null, last_failed_skill: null, last_failed_cid: null };
   }
 
   const group = cidGroups[lastFailedCid];
   let consecutiveFails = 0;
   for (let i = group.length - 1; i >= 0; i--) {
-    if (group[i].status === "failed") {
-      consecutiveFails++;
-    } else if (group[i].status === "done") {
-      break;
-    }
+    if (group[i].status === "failed") consecutiveFails++;
+    else if (group[i].status === "done") break;
   }
-
-  const shouldRedirect = consecutiveFails >= 2 ? "think" : null;
-  const recommendedStage = shouldRedirect
-    ? getStageForSkill(shouldRedirect)
-    : null;
 
   return {
     consecutive_fails: consecutiveFails,
-    should_redirect: shouldRedirect,
-    recommended_stage: recommendedStage,
+    should_redirect: consecutiveFails >= 2 ? "think" : null,
+    recommended_stage: consecutiveFails >= 2 ? getStageForSkill("think") : null,
     last_failed_skill: lastFailedSkill,
     last_failed_cid: lastFailedCid,
   };
 }
-
-// ─── 可操作恢复上下文 ───
 
 function buildRecoveryContext(
   lastIncomplete: Record<string, unknown> | null,
@@ -283,28 +211,17 @@ function buildRecoveryContext(
   let lastArtifact: string | null = null;
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
-    if (
-      String(e.correlation_id ?? "") === cid &&
-      e.status === "artifact_written" &&
-      e.artifact
-    ) {
+    if (String(e.correlation_id ?? "") === cid && e.status === "artifact_written" && e.artifact) {
       lastArtifact = String(e.artifact);
       break;
     }
   }
 
   return {
-    skill,
-    stage,
-    domain,
-    step,
-    correlation_id: cid,
-    last_artifact: lastArtifact,
+    skill, stage, domain, step, correlation_id: cid, last_artifact: lastArtifact,
     resume_hint: `🔄 会话恢复: ${stage} (${skill}) | 断点: step ${step} | 领域: ${domain}${lastArtifact ? ` | 产物: ${lastArtifact}` : ""}`,
   };
 }
-
-// ─── 智能下一步建议与断点对账 ───
 
 function computeNextStepAndBreakpoint(
   root: string,
@@ -315,51 +232,28 @@ function computeNextStepAndBreakpoint(
   if (lastIncomplete) {
     const skill = String(lastIncomplete.skill ?? "");
     const stage = getStageForSkill(skill);
-    return {
-      recommended_next_step: `/r-${skill}`,
-      breakpoint_summary: `检测到未完成的任务：${stage} (${skill})。建议继续执行。`,
-    };
+    return { recommended_next_step: `/r-${skill}`, breakpoint_summary: `检测到未完成的任务：${stage} (${skill})。建议继续执行。` };
   }
 
   if (!lastCompleted) {
-    return {
-      recommended_next_step: "/r-init",
-      breakpoint_summary: "项目尚未初始化或无历史记录。建议从 /r-init 开始。",
-    };
+    return { recommended_next_step: "/r-init", breakpoint_summary: "项目尚未初始化或无历史记录。建议从 /r-init 开始。" };
   }
 
   const lastSkill = String(lastCompleted.skill ?? "");
   const lastStage = getStageForSkill(lastSkill);
 
   const stateMap: Record<string, { next: string | null; summary: string }> = {
-    init: {
-      next: "/r-think",
-      summary: "项目已初始化。可以开始需求分析 (/r-think)。",
-    },
-    think: {
-      next: "/r-dev",
-      summary: "《设计单 (Design Sheet)》已完成。建议开始开发 (/r-dev)。",
-    },
-    dev: {
-      next: "/r-review",
-      summary: "代码实现已完成。建议进行验收审查 (/r-review)。",
-    },
-    review: {
-      next: null,
-      summary: "上一次验收已完成。所有交付已闭环。",
-    },
+    init: { next: "/r-think", summary: "项目已初始化。可以开始需求分析 (/r-think)。" },
+    think: { next: "/r-dev", summary: "《设计单 (Design Sheet)》已完成。建议开始开发 (/r-dev)。" },
+    dev: { next: "/r-review", summary: "代码实现已完成。建议进行验收审查 (/r-review)。" },
+    review: { next: null, summary: "上一次验收已完成。所有交付已闭环。" },
   };
 
-  const recommendation = stateMap[lastStage] ?? {
-    next: null,
-    summary: `上一次任务 (${lastStage}) 已完成。`,
-  };
-
-  return {
-    recommended_next_step: recommendation.next,
-    breakpoint_summary: recommendation.summary,
-  };
+  const recommendation = stateMap[lastStage] ?? { next: null, summary: `上一次任务 (${lastStage}) 已完成。` };
+  return { recommended_next_step: recommendation.next, breakpoint_summary: recommendation.summary };
 }
+
+// ─── Read Context ───
 
 export async function ritsu_read_ctx(
   params: Record<string, unknown>,
@@ -391,26 +285,13 @@ export async function ritsu_read_ctx(
   const recentEntries = readRecentEntries(root, 10);
   const failedSummary = summarizeFailedEntries(allEntries);
 
-  // ─── Token 预算裁剪 ─────────────────────────────────────
-  // 高预算 (>5000): 完整返回（同 detail 模式）
-  // 中预算 (1000-5000): last_incomplete + last_completed + summary + recovery
-  // 低预算 (<1000): 仅 recovery_context + recommended_next_step
-  // 无预算: 当前默认行为（兼容）
-
   if (tokenBudget !== undefined && tokenBudget < 1000) {
-    // 低预算：仅返回恢复上下文和下一步建议
-    data.recovery_context = buildRecoveryContext(
-      lastIncomplete, lastCompleted, allEntries,
-    );
+    data.recovery_context = buildRecoveryContext(lastIncomplete, lastCompleted, allEntries);
     data.circuit_breaker_status = computeCircuitBreaker(allEntries);
-
-    const nextStep = computeNextStepAndBreakpoint(
-      root, lastIncomplete, lastCompleted, allEntries,
-    );
+    const nextStep = computeNextStepAndBreakpoint(root, lastIncomplete, lastCompleted, allEntries);
     data.recommended_next_step = nextStep.recommended_next_step;
     data.breakpoint_summary = nextStep.breakpoint_summary;
     data._budget = "low";
-
     return textResult(JSON.stringify(data));
   }
 
@@ -420,8 +301,7 @@ export async function ritsu_read_ctx(
 
   if (isDetail || (tokenBudget !== undefined && tokenBudget > 5000)) {
     const recentEntriesPruned = pruneRecentEntries(
-      allEntries,
-      PRUNED_RECENT_LIMIT,
+      allEntries, PRUNED_RECENT_LIMIT,
       lastIncomplete?.correlation_id as string,
       lastCompleted?.correlation_id as string,
     );
@@ -433,25 +313,14 @@ export async function ritsu_read_ctx(
     if (tokenBudget !== undefined) data._budget = "medium";
   }
 
-  data.recovery_context = buildRecoveryContext(
-    lastIncomplete,
-    lastCompleted,
-    allEntries,
-  );
-
+  data.recovery_context = buildRecoveryContext(lastIncomplete, lastCompleted, allEntries);
   data.reality_check = checkRealityDesync(root, lastCompleted, allEntries);
 
   const cbStatus = computeCircuitBreaker(allEntries);
   data.circuit_breaker_status = cbStatus;
 
-  const nextStep = computeNextStepAndBreakpoint(
-    root,
-    lastIncomplete,
-    lastCompleted,
-    allEntries,
-  );
+  const nextStep = computeNextStepAndBreakpoint(root, lastIncomplete, lastCompleted, allEntries);
 
-  // 优先级：熔断重定向 > 断点恢复 > 阶段建议
   if (cbStatus.should_redirect) {
     data.recommended_next_step = `/r-${cbStatus.should_redirect}`;
     data.breakpoint_summary = `检测到连续失败，建议回流至 ${cbStatus.should_redirect} 阶段重新分析。`;
@@ -461,10 +330,7 @@ export async function ritsu_read_ctx(
   }
 
   if (recentEntries.length === 0) {
-    return warnResult(
-      data,
-      "ctx file is empty — no events recorded this month",
-    );
+    return warnResult(data, "ctx file is empty — no events recorded this month");
   }
 
   if (allEntries.length >= SUMMARY_THRESHOLD) {
@@ -472,4 +338,39 @@ export async function ritsu_read_ctx(
   }
 
   return textResult(JSON.stringify(data));
+}
+
+// ─── Verify Trace ───
+
+export async function ritsu_verify_trace(
+  params: Record<string, unknown>,
+): Promise<CallToolResult> {
+  const root = getProjectRoot();
+  const traceId = String(params.trace_id ?? "");
+  const key = getOrCreateKey();
+
+  if (!key) {
+    return errorResult("No trust key found. Use ritsu_init_trust_key first.");
+  }
+
+  const entries = readAllEntries(root);
+  const traceEvents = entries.filter((e) => e.trace_id === traceId);
+
+  if (traceEvents.length === 0) {
+    return errorResult(`trace not found: ${traceId}`);
+  }
+
+  let violationCount = 0;
+  const details = traceEvents.map(e => {
+    const valid = verifyEvent(e, key);
+    if (!valid) violationCount++;
+    return { span_id: e.span_id, status: e.status, valid };
+  });
+
+  return textResult(JSON.stringify({
+    trace_id: traceId,
+    valid: violationCount === 0,
+    violation_count: violationCount,
+    details,
+  }));
 }

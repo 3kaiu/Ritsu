@@ -41,15 +41,40 @@ export class AstDetector implements DetectorPlugin {
     const violations: PolicyViolation[] = [];
 
     try {
-      // Create a TypeScript program for the target files
-      const program = ts.createProgram(existingFiles, {
+      const compilerOptions: ts.CompilerOptions = {
         noEmit: true,
         allowJs: true,
         checkJs: true,
         target: ts.ScriptTarget.ESNext,
         module: ts.ModuleKind.CommonJS,
         skipLibCheck: true,
-      });
+      };
+
+      const defaultHost = ts.createCompilerHost(compilerOptions);
+
+      // Create a custom CompilerHost that reads from AST cache first — zero IO for pre-parsed files
+      const customHost: ts.CompilerHost = {
+        getSourceFile: (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+          const cached = ctx.astCache?.get(fileName);
+          if (cached) return cached.sourceFile;
+          return defaultHost.getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+        },
+        getDefaultLibFileName: (opts) => defaultHost.getDefaultLibFileName(opts),
+        writeFile: (name, text, writeByteOrderMark) => defaultHost.writeFile(name, text, writeByteOrderMark),
+        getCurrentDirectory: () => defaultHost.getCurrentDirectory(),
+        getCanonicalFileName: (fileName) => defaultHost.getCanonicalFileName(fileName),
+        useCaseSensitiveFileNames: () => defaultHost.useCaseSensitiveFileNames(),
+        getNewLine: () => defaultHost.getNewLine(),
+        fileExists: (fileName) => defaultHost.fileExists(fileName),
+        readFile: (fileName) => {
+          const cached = ctx.astCache?.get(fileName);
+          if (cached) return cached.content;
+          return defaultHost.readFile(fileName);
+        },
+      };
+
+      // Create a TypeScript program for the target files with cache-aware CompilerHost
+      const program = ts.createProgram(existingFiles, compilerOptions, customHost);
 
       // Fetch all diagnostics
       const diagnostics = ts.getPreEmitDiagnostics(program);

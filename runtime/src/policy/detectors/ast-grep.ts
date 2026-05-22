@@ -192,7 +192,7 @@ export class AstGrepRuleBridge {
   }
 }
 
-function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyViolation[] {
+function fallbackScan(files: string[], root: string, rule: PolicyRule, ctx?: PolicyCheckContext): PolicyViolation[] {
   const violations: PolicyViolation[] = [];
   const hintPrefix = `[ritsu] 💡 提示：检测到当前宿主系统未全局安装 ast-grep，已自动降级为原生安全解析。建议运行 npm i -g @ast-grep/cli 获得更强的底线检测。\n`;
 
@@ -234,10 +234,16 @@ function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyVi
   for (const file of files) {
     const fileRel = file.replace(root + "/", "");
     let content: string;
-    try {
-      content = readFileSync(file, "utf-8");
-    } catch {
-      continue;
+
+    const cached = ctx?.astCache?.get(file);
+    if (cached) {
+      content = cached.content;
+    } else {
+      try {
+        content = readFileSync(file, "utf-8");
+      } catch {
+        continue;
+      }
     }
 
     const ext = file.split(".").pop()?.toLowerCase();
@@ -247,12 +253,14 @@ function fallbackScan(files: string[], root: string, rule: PolicyRule): PolicyVi
 
     if (isJsTs) {
       try {
-        const sourceFile = ts.createSourceFile(
-          file,
-          content,
-          ts.ScriptTarget.Latest,
-          true
-        );
+        const sourceFile = cached
+          ? cached.sourceFile
+          : ts.createSourceFile(
+              file,
+              content,
+              ts.ScriptTarget.Latest,
+              true
+            );
 
         const checkNode = (node: ts.Node) => {
           for (const m of matchers) {
@@ -389,7 +397,7 @@ export class AstGrepDetector implements DetectorPlugin {
     }
 
     if (!astGrepOk) {
-      return fallbackScan(existing, root, rule);
+      return fallbackScan(existing, root, rule, ctx);
     }
 
     try {
@@ -419,7 +427,7 @@ export class AstGrepDetector implements DetectorPlugin {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       if (message.includes("ENOENT") || message.includes("not found")) {
-        return fallbackScan(existing, root, rule);
+        return fallbackScan(existing, root, rule, ctx);
       }
       return [
         {

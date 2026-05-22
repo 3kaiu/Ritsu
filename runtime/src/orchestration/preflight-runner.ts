@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { ritsu_read_ctx } from "../handlers/read-ctx.js";
+import { ritsu_read_ctx } from "../handlers/ctx-controller.js";
 import { ritsu_read_agents } from "../handlers/read-agents.js";
-import { ritsu_get_changed_files } from "../handlers/get-changed-files.js";
+import { ritsu_get_changed_files } from "../handlers/diff-analyzer.js";
 import { ritsu_list_artifacts } from "../handlers/list-artifacts.js";
-import { ritsu_join_trace } from "../handlers/join-trace.js";
+import { ritsu_join_trace } from "../handlers/span-orchestrator.js";
 import { ritsu_exec } from "../handlers/exec.js";
 import { syncOpenSpecContracts } from "../openspec-bridge.js";
 import { inspectDiff } from "./diff-inspect.js";

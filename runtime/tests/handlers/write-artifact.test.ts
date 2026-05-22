@@ -30,7 +30,7 @@ import {
   joinArtifactViolationMessages,
   ritsu_write_artifact,
   validateArtifactContentDetailed,
-} from "../../src/handlers/write-artifact.js";
+} from "../../src/handlers/artifact-manager.js";
 import {
   existsSync,
   mkdirSync,

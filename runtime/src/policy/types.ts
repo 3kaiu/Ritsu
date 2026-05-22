@@ -1,3 +1,5 @@
+import type ts from "typescript";
+
 export type Severity = "fatal" | "error" | "warn" | "hard_stop";
 
 export interface PolicyViolation {
@@ -53,9 +55,11 @@ export interface PolicyCheckContext {
     /** Relative paths for ast-grep and other file-scoped detectors */
     scan_files?: string[];
   };
+  astCache?: Map<string, { sourceFile: ts.SourceFile; content: string }>;
 }
 
 export interface DetectorPlugin {
   type: DetectorType;
   detect(rule: PolicyRule, ctx: PolicyCheckContext): PolicyViolation[];
 }
+

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { ritsu_get_changed_files } from "../../src/handlers/get-changed-files.js";
+import { ritsu_get_changed_files } from "../../src/handlers/diff-analyzer.js";
 import * as gitUtils from "../../src/handlers/_git-utils.js";
 
 vi.mock("../../src/handlers/_git-utils.js");

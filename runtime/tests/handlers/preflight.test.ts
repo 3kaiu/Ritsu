@@ -1,8 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { ritsu_read_ctx } from "../../src/handlers/read-ctx.js";
+import { ritsu_read_ctx } from "../../src/handlers/ctx-controller.js";
 import { ritsu_list_artifacts } from "../../src/handlers/list-artifacts.js";
 
-vi.mock("../../src/handlers/read-ctx.js", () => ({
+vi.mock("../../src/handlers/ctx-controller.js", () => ({
   ritsu_read_ctx: vi.fn(async () => ({
     content: [
       {

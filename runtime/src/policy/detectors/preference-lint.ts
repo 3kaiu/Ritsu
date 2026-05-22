@@ -133,12 +133,16 @@ export class PreferenceLintDetector implements DetectorPlugin {
 
       if (isJsOrTs) {
         try {
-          const sourceFile = ts.createSourceFile(
-            targetPath,
-            content,
-            ts.ScriptTarget.Latest,
-            true
-          );
+          const absPath = resolve(root, targetPath);
+          const cached = ctx.astCache?.get(absPath);
+          const sourceFile = cached
+            ? cached.sourceFile
+            : ts.createSourceFile(
+                targetPath,
+                content,
+                ts.ScriptTarget.Latest,
+                true
+              );
 
           const imports: string[] = [];
           const calls: string[] = [];

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { ritsu_patch_artifact } from "../../src/handlers/patch-artifact.js";
+import { ritsu_patch_artifact } from "../../src/handlers/artifact-manager.js";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, mkdtempSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { tmpdir } from "node:os";

@@ -8,7 +8,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { ritsu_join_trace } from "../../src/handlers/join-trace.js";
+import { ritsu_join_trace } from "../../src/handlers/span-orchestrator.js";
 import { getCurrentMonthFilename } from "../../src/ctx-path.js";
 import { _resetReaderCache } from "../../src/ctx-reader.js";
 

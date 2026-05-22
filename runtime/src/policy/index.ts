@@ -1,3 +1,7 @@
+import ts from "typescript";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { getProjectRoot } from "../handlers/_utils.js";
 import type { PolicyCheckContext, PolicyViolation } from "./types.js";
 import { loadPolicies } from "./loader.js";
 import { reconcilePreferences } from "./detectors/ast-grep-reconciler.js";
@@ -9,6 +13,52 @@ export { clearPluginCache };
 export function evaluatePolicies(ctx: PolicyCheckContext): { passed: boolean; violations: PolicyViolation[] } {
   const rules = loadPolicies();
   const violations: PolicyViolation[] = [];
+
+  // Initialize and pre-warm AST cache
+  if (!ctx.astCache) {
+    ctx.astCache = new Map();
+  }
+
+  const root = getProjectRoot();
+  const scanFiles = ctx.context?.scan_files?.length
+    ? ctx.context.scan_files
+    : ctx.context?.in_scope_files;
+
+  if (scanFiles && scanFiles.length > 0) {
+    for (const f of scanFiles) {
+      const absPath = resolve(root, f);
+      if (existsSync(absPath) && /\.(ts|tsx|js|jsx|mjs|cjs)$/.test(absPath)) {
+        try {
+          const content = readFileSync(absPath, "utf-8");
+          const sourceFile = ts.createSourceFile(
+            absPath,
+            content,
+            ts.ScriptTarget.Latest,
+            true
+          );
+          ctx.astCache.set(absPath, { sourceFile, content });
+        } catch {
+          // ignore read or parse failures
+        }
+      }
+    }
+  }
+
+  if (ctx.target && ctx.content !== undefined) {
+    const absTarget = resolve(root, ctx.target);
+    if (/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(absTarget)) {
+      try {
+        const sourceFile = ts.createSourceFile(
+          absTarget,
+          ctx.content,
+          ts.ScriptTarget.Latest,
+          true
+        );
+        ctx.astCache.set(absTarget, { sourceFile, content: ctx.content });
+      } catch {}
+    }
+  }
+
 
   for (const rule of rules) {
     // 1. Check exemptions
