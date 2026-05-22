@@ -165,9 +165,13 @@ async function runDevReviewPreflight(
   pack.ctx = ctx;
   process.env.RITSU_PROJECT_ROOT = projectRoot;
 
-  // Auto-elevation check: consecutive_fails >= 2
+  // Progressive Disclosure levels:
+  //   0 = normal (detail: false, fails: 0)       → compact JIT
+  //   1 = mild   (detail: false, fails: 1)       → + top_risk_chunks only
+  //   2 = full   (detail: true || fails >= 2)    → full context
   const consecutiveFails = (ctx?.circuit_breaker_status as Record<string, unknown> | undefined)?.consecutive_fails;
   const shouldElevate = typeof consecutiveFails === "number" && consecutiveFails >= 2;
+  const mildElevation = typeof consecutiveFails === "number" && consecutiveFails === 1 && !detail;
   const activeDetail = detail || shouldElevate;
 
   let codegraphFiles: string[] | undefined = undefined;
@@ -229,6 +233,17 @@ async function runDevReviewPreflight(
     if (Array.isArray(changed?.files)) {
       codegraphFiles = changed.files.filter((f): f is string => typeof f === "string");
     }
+  }
+
+  // Progressive Disclosure Level 1: risk-scored diff chunks only（fails=1，轻度告警）
+  if (mildElevation && codegraphFiles && codegraphFiles.length > 0) {
+    try {
+      const { inspectDiff } = await import("./diff-inspect.js");
+      const riskChunks = await inspectDiff({ projectRoot, mode: "chunks", topN: 5 });
+      if (riskChunks.ok) {
+        pack.top_risk_chunks = riskChunks.data.chunks;
+      }
+    } catch { /* non-critical */ }
   }
 
   // 架构漂移检测 - 即使 detail: false 也进行，如果有违反(异常)则记录
@@ -357,12 +372,22 @@ export async function runStagePreflight(
 ): Promise<PreflightContextPack> {
   const { projectRoot, stage, taskSummary = "", detail = false } = options;
 
+  let pack: PreflightContextPack;
   if (stage === "think") {
     const ctx = await readCtxCompact(projectRoot);
     const tier = inferTier(options.tier, ctx);
-    return runThinkPreflight(projectRoot, tier, taskSummary);
+    pack = await runThinkPreflight(projectRoot, tier, taskSummary);
+  } else if (stage === "hunt") {
+    pack = await runHuntPreflight(projectRoot, detail);
+  } else if (stage === "dev") {
+    pack = await runDevReviewPreflight(projectRoot, "dev", "dev", detail);
+  } else {
+    pack = await runDevReviewPreflight(projectRoot, "review", "review", detail);
   }
-  if (stage === "hunt") return runHuntPreflight(projectRoot, detail);
-  if (stage === "dev") return runDevReviewPreflight(projectRoot, "dev", "dev", detail);
-  return runDevReviewPreflight(projectRoot, "review", "review", detail);
+
+  // Mark entire preflight response as Suffix Zone — must go at the end of the prompt,
+  // after Static Prefix (anti-patterns.yaml, mcp-tools.yaml) and Skill Guide (SKILL.md).
+  pack._suffix = true as unknown as undefined;
+
+  return pack;
 }

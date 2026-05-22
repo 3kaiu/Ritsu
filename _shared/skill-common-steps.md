@@ -7,10 +7,32 @@
 
 ## Step -2: Prompt Caching 缓存基座对齐 (Prompt Caching Alignment)
 
-为了在 Anthropic / DeepSeek 运行中获得高达 90% 成本和 80% 延迟缩减的缓存优化收益，AI 必须保证以下静态加载流程最先执行：
-1. **构建静态基座**：优先确认已成功加载 `rules/anti-patterns.yaml`（全局底线规则）与 `_shared/mcp-tools.yaml`（MCP工具定义）。如果之前被截断或在新会话中，必须**优先**读取这两个静态文件来建立 prefix 缓存块。
-2. **挂载技能指令**：随后读取对应的 `skills/<stage>/SKILL.md` 技能指令文件。
-3. **隔离动态内容**：只有在前两步静态底座牢固建立后，方可加载 `task_summary`、调用 `ritsu_preflight` 或进行任何 `git diff` / 动态 trace 等易变上下文。禁止交叉加载！
+为了在 Anthropic / DeepSeek 运行中获得高达 90% 成本和 80% 延迟缩减的缓存优化收益，AI 必须保证以下**严格的三段式（3-Stage）加载顺序**，绝对不可交叉：
+
+```
+┌─ Stage 1: Static Prefix ─────────────────────────────┐
+│  rules/anti-patterns.yaml + _shared/mcp-tools.yaml   │ ← 绝对稳定，首部加载
+├─ Stage 2: Skill Guide ───────────────────────────────┤
+│  skills/<stage>/SKILL.md                             │ ← 半稳定，阶段切换才变
+├─ Stage 3: Suffix Zone ───────────────────────────────┤
+│  ritsu_preflight 响应（标记为 _suffix: true）          │ ← 全部动态内容集中在 Prompt 末尾
+│  task_summary / git diff / read_ctx / trace          │
+└──────────────────────────────────────────────────────┘
+```
+
+### Suffix Zone 约定
+
+所有动态数据（`ritsu_preflight` 响应、`ritsu_read_ctx` 结果、`changed_files`、`git diff` 等）必须放置在 Prompt 的**最末尾**，且满足以下条件：
+
+1. **`ritsu_preflight` 的 context_pack 包含 `_suffix: true`**，AI 应将整个 pack 视为后缀段。**禁止**将其内容前置到 Stage 1 或 Stage 2 中。
+2. **任何 `git diff` 输出、`ritsu_read_ctx` 结果、`ritsu_join_trace` 结果**等动态调用响应，必须追加在 preflight context_pack 之后（即最末尾）。
+3. **禁止**：在 Stage 1 或 Stage 2 之间插入或引用动态数据（如 `task_summary` 或 `changed_files`），即使以"参考"名义也不行。
+
+### 正确 vs 错误
+
+| ✅ 正确（Cache 命中 95%） | ❌ 错误（Cache 碎裂 100%） |
+|---|---|
+| anti-patterns.yaml → mcp-tools.yaml → SKILL.md → _suffix pack → diff | anti-patterns.yaml → **diff** → mcp-tools.yaml → SKILL.md → _suffix pack |
 
 ---
 

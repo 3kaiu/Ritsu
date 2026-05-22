@@ -12,6 +12,8 @@ total_steps: 4
 
 # Hunt: 自适应技术诊断与排障
 
+> **⚡️ Prompt Topology** — 三段式不可交叉：`anti-patterns.yaml` + `mcp-tools.yaml`（Stage 1）→ this file（Stage 2）→ `_suffix: true` 数据（Stage 3，末尾）。
+
 **触发条件**：用户输入 `/r-hunt`。
 
 ## 执行流水线

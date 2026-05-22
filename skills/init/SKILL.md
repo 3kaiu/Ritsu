@@ -12,6 +12,8 @@ total_steps: 4
 
 # Init: 架构级指纹识别与基线初始化
 
+> **⚡️ Prompt Topology** — 三段式不可交叉：`anti-patterns.yaml` + `mcp-tools.yaml`（Stage 1）→ this file（Stage 2）→ `_suffix: true` 数据（Stage 3，末尾）。
+
 **触发条件**：用户输入 `/r-init`。
 
 ## 执行流水线

@@ -12,6 +12,8 @@ total_steps: 5
 
 # Dev: 自适应代码实现与交付
 
+> **⚡️ Prompt Topology** — 三段式不可交叉：`anti-patterns.yaml` + `mcp-tools.yaml`（Stage 1）→ this file（Stage 2）→ `_suffix: true` 数据（Stage 3，末尾）。
+
 **触发条件**：用户输入 `/r-dev`，或自动路由判定为开发任务。
 
 ## 执行流水线
