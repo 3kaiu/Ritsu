@@ -11,6 +11,7 @@ interface TaskClaim {
   span_id: string;
   agent_id: string;
   claimed_at: string;
+  target_paths?: string[];
 }
 
 interface PendingTask {
@@ -105,6 +106,7 @@ export async function ritsu_claim_task(params: Record<string, unknown>): Promise
           span_id: spanId,
           agent_id: agentId,
           claimed_at: new Date().toISOString(),
+          target_paths: Array.isArray(params.target_paths) ? params.target_paths.map(String) : undefined,
         });
       }
 

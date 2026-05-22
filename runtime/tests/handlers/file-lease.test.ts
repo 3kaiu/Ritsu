@@ -76,7 +76,7 @@ describe("file lease handlers", () => {
     await ritsu_claim_file({ path: "src/c.ts", span_id: "span-cccc3333" });
 
     expect(checkLease(testRoot, "src/a.ts", "span-aaaa1111")).toEqual({ ok: true });
-    expect(checkLease(testRoot, "src/c.ts", "span-aaaa1111")).toEqual({
+    expect(checkLease(testRoot, "src/c.ts", "span-aaaa1111")).toMatchObject({
       ok: false,
       message: "File is locked by span span-cccc3333",
     });

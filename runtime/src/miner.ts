@@ -7,6 +7,8 @@ import { reconcilePreferences } from "./policy/detectors/ast-grep-reconciler.js"
 import { isRecord } from "./shared.js";
 import { synthesizeWithLLM } from "./llm-synthesizer.js";
 import { jaccardSimilarity } from "./similarity.js";
+import * as ts from "typescript";
+import { readSync } from "node:fs";
 
 const RITSU_DIR = ".ritsu";
 
@@ -439,6 +441,202 @@ function clusterCorrections(corrections: Array<{ file: string; diff: string }>):
   return clusters;
 }
 
+function askYesNo(question: string): boolean {
+  const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+  const isNonInteractive = process.env.RITSU_NON_INTERACTIVE === "1";
+  if (isTest || isNonInteractive) {
+    return true; // Auto-approve in non-interactive/test environments
+  }
+
+  process.stdout["write"](`${question} (y/N): `);
+  const buffer = Buffer.alloc(16);
+  try {
+    const bytesRead = readSync(0, buffer, 0, 16, null);
+    const response = buffer.toString("utf8", 0, bytesRead).trim().toLowerCase();
+    return response === "y" || response === "yes";
+  } catch {
+    return false;
+  }
+}
+
+function parseHunksFromDiff(diff: string): { pre: string; post: string }[] {
+  const hunks: { pre: string; post: string }[] = [];
+  const lines = diff.split(/\r?\n/);
+  
+  let preAccumulator: string[] = [];
+  let postAccumulator: string[] = [];
+  let inHunk = false;
+
+  for (const line of lines) {
+    if (line.startsWith("diff --git") || line.startsWith("index ") || line.startsWith("--- ") || line.startsWith("+++ ")) {
+      if (inHunk && (preAccumulator.length > 0 || postAccumulator.length > 0)) {
+        hunks.push({
+          pre: preAccumulator.join("\n"),
+          post: postAccumulator.join("\n"),
+        });
+        preAccumulator = [];
+        postAccumulator = [];
+      }
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("@@")) {
+      if (inHunk && (preAccumulator.length > 0 || postAccumulator.length > 0)) {
+        hunks.push({
+          pre: preAccumulator.join("\n"),
+          post: postAccumulator.join("\n"),
+        });
+      }
+      preAccumulator = [];
+      postAccumulator = [];
+      inHunk = true;
+      continue;
+    }
+
+    if (inHunk) {
+      if (line.startsWith("-")) {
+        preAccumulator.push(line.slice(1));
+      } else if (line.startsWith("+")) {
+        postAccumulator.push(line.slice(1));
+      } else {
+        const content = line.startsWith(" ") ? line.slice(1) : line;
+        preAccumulator.push(content);
+        postAccumulator.push(content);
+      }
+    }
+  }
+
+  if (inHunk && (preAccumulator.length > 0 || postAccumulator.length > 0)) {
+    hunks.push({
+      pre: preAccumulator.join("\n"),
+      post: postAccumulator.join("\n"),
+    });
+  }
+
+  return hunks;
+}
+
+function collectNodes(node: ts.Node, kind: ts.SyntaxKind): ts.Node[] {
+  const nodes: ts.Node[] = [];
+  function traverse(n: ts.Node) {
+    if (n.kind === kind) {
+      nodes.push(n);
+    }
+    ts.forEachChild(n, traverse);
+  }
+  traverse(node);
+  return nodes;
+}
+
+function analyzeHunkAST(preCode: string, postCode: string): PreferenceRule[] {
+  const rules: PreferenceRule[] = [];
+  
+  try {
+    const preSource = ts.createSourceFile("pre.ts", preCode, ts.ScriptTarget.Latest, true);
+    const postSource = ts.createSourceFile("post.ts", postCode, ts.ScriptTarget.Latest, true);
+
+    // 1. Let to Const
+    const preVars = collectNodes(preSource, ts.SyntaxKind.VariableDeclarationList) as ts.VariableDeclarationList[];
+    const postVars = collectNodes(postSource, ts.SyntaxKind.VariableDeclarationList) as ts.VariableDeclarationList[];
+
+    const preHasLet = preVars.some(v => !(v.flags & ts.NodeFlags.Const));
+    const postHasConst = postVars.some(v => !!(v.flags & ts.NodeFlags.Const));
+    if (preHasLet && postHasConst) {
+      const preNames = new Set(preVars.flatMap(v => v.declarations.map(d => d.name.getText())));
+      const postNames = new Set(postVars.flatMap(v => v.declarations.map(d => d.name.getText())));
+      const intersection = [...preNames].filter(x => postNames.has(x));
+      if (intersection.length > 0) {
+        rules.push({
+          id: "pref-prefer-const",
+          match_regex: "\\blet\\s+\\w+\\s*=",
+          scope: "coding_style",
+          auto_inject_to: ["think", "dev"],
+          message: "Prefer const over let for variables that are never reassigned",
+        });
+      }
+    }
+
+    // 2. Loose to Strict Equality (== to === or != to !==)
+    const preBinary = collectNodes(preSource, ts.SyntaxKind.BinaryExpression) as ts.BinaryExpression[];
+    const postBinary = collectNodes(postSource, ts.SyntaxKind.BinaryExpression) as ts.BinaryExpression[];
+
+    const preHasLoose = preBinary.some(b => 
+      b.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken || 
+      b.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsToken
+    );
+    const postHasStrict = postBinary.some(b => 
+      b.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken || 
+      b.operatorToken.kind === ts.SyntaxKind.ExclamationEqualsEqualsToken
+    );
+    if (preHasLoose && postHasStrict) {
+      rules.push({
+        id: "pref-strict-equality",
+        match_regex: "(?<!!)={2}(?!=)|(?<![!=>])!=(?!=)",
+        scope: "type_safety",
+        auto_inject_to: ["think", "dev"],
+        message: "Use strict equality (=== / !==) instead of loose equality (== / !=)",
+      });
+    }
+
+    // 3. Function declaration to arrow function expression
+    const preFuncs = collectNodes(preSource, ts.SyntaxKind.FunctionDeclaration) as ts.FunctionDeclaration[];
+    const postArrows = collectNodes(postSource, ts.SyntaxKind.ArrowFunction) as ts.ArrowFunction[];
+    if (preFuncs.length > 0 && postArrows.length > 0) {
+      const preFuncNames = new Set(
+        preFuncs
+          .map(f => f.name?.getText())
+          .filter((name): name is string => typeof name === "string")
+      );
+      const postVarNames = new Set(postVars.flatMap(v => v.declarations.map(d => d.name.getText())));
+      const intersection = [...preFuncNames].filter(x => postVarNames.has(x));
+      if (intersection.length > 0) {
+        rules.push({
+          id: "pref-arrow-function",
+          match_regex: "function\\s+\\w+\\s*\\([^)]*\\)\\s*\\{",
+          scope: "coding_style",
+          auto_inject_to: ["dev"],
+          message: "Use arrow function expressions instead of function declarations for callbacks",
+        });
+      }
+    }
+
+    // 4. Template literal over string concatenation
+    const preConcat = preBinary.some(b => b.operatorToken.kind === ts.SyntaxKind.PlusToken);
+    const postTemplate = collectNodes(postSource, ts.SyntaxKind.TemplateExpression).length > 0 || 
+                         collectNodes(postSource, ts.SyntaxKind.NoSubstitutionTemplateLiteral).length > 0;
+    if (preConcat && postTemplate) {
+      rules.push({
+        id: "pref-template-literal",
+        match_regex: "'[\"']\\s*\\+\\s*\\w+\\s*\\+\\s*['\"]",
+        scope: "coding_style",
+        auto_inject_to: ["dev"],
+        message: "Use template literals (`...`) instead of string concatenation",
+      });
+    }
+
+    // 5. Async/await over Promises (.then() to await)
+    const preCalls = collectNodes(preSource, ts.SyntaxKind.CallExpression) as ts.CallExpression[];
+    const postAwait = collectNodes(postSource, ts.SyntaxKind.AwaitExpression).length > 0;
+    const preHasThen = preCalls.some(c => {
+      const exp = c.expression;
+      return ts.isPropertyAccessExpression(exp) && exp.name.getText() === "then";
+    });
+    if (preHasThen && postAwait) {
+      rules.push({
+        id: "pref-async-await",
+        match_regex: "\\.then\\s*\\(",
+        scope: "performance",
+        auto_inject_to: ["dev"],
+        message: "Prefer async/await over .then() chains for better readability",
+      });
+    }
+  } catch (err) {
+    // Parser error on snippet, ignore
+  }
+
+  return rules;
+}
+
 export function extractHeuristicRules(
   corrections: Array<{ file: string; diff: string }>,
 ): PreferenceRule[] {
@@ -448,18 +646,41 @@ export function extractHeuristicRules(
   const suggested: PreferenceRule[] = [];
   const seenIds = new Set<string>();
 
+  // 1. AST Diff extraction using TS Compiler API
+  for (const correction of corrections) {
+    if (/\.(ts|tsx|js|jsx)$/.test(correction.file)) {
+      const hunks = parseHunksFromDiff(correction.diff);
+      for (const hunk of hunks) {
+        const astRules = analyzeHunkAST(hunk.pre, hunk.post);
+        for (const rule of astRules) {
+          if (seenIds.has(rule.id)) continue;
+          
+          const clusterCount = clusters.get(correction.file) ?? 1;
+          const confidence = 0.8 + (clusterCount - 1) * 0.1;
+          
+          if (confidence >= 0.7) {
+            seenIds.add(rule.id);
+            suggested.push(rule);
+          }
+        }
+      }
+    }
+  }
+
+  // 2. Standard regex heuristic patterns as complement
   for (const correction of corrections) {
     for (const pattern of HEURISTIC_PATTERNS) {
       if (!pattern.test(correction.diff)) continue;
-      if (seenIds.has(pattern.name)) continue;
+      if (seenIds.has(pattern.name) || seenIds.has(`pref-${pattern.name}`)) continue;
 
-      // Boost confidence if this correction appears in multiple files
       const clusterCount = clusters.get(correction.file) ?? 1;
       const effectiveConfidence = Math.min(1, pattern.confidence + (clusterCount - 1) * 0.1);
 
       if (effectiveConfidence >= 0.7) {
+        const rule = pattern.build();
         seenIds.add(pattern.name);
-        suggested.push(pattern.build());
+        seenIds.add(rule.id);
+        suggested.push(rule);
       }
     }
   }
@@ -543,6 +764,21 @@ export function promotePreference(prefId: string): boolean {
     const promotedRule = extractPreferenceRuleFromSheet(content, prefId);
 
     if (promotedRule) {
+      // Prompt user with full details of the rule (HITL)
+      console.log(`\nProposed Preference Rule Found:`);
+      console.log(`---------------------------------`);
+      console.log(`ID:            ${promotedRule.id}`);
+      console.log(`Match Regex:   ${promotedRule.match_regex}`);
+      console.log(`Scope:         ${promotedRule.scope}`);
+      console.log(`Auto Inject:   ${JSON.stringify(promotedRule.auto_inject_to)}`);
+      console.log(`Message:       ${promotedRule.message}`);
+      console.log(`---------------------------------`);
+
+      if (!askYesNo(`Do you want to promote this rule to '.ritsu/preferences.yaml'?`)) {
+        console.log(`❌ Promotion of preference rule '${prefId}' was cancelled by user.`);
+        return false;
+      }
+
       let currentRules: PreferenceRule[] = [];
       let shouldRewriteCanonicalDoc = false;
       if (existsSync(prefPath)) {
@@ -561,12 +797,14 @@ export function promotePreference(prefId: string): boolean {
           writeFileSync(prefPath, yaml.dump({ rules: currentRules }), "utf-8");
         }
         reconcilePreferences();
+        console.log(`✅ Preference rule '${prefId}' is already in preferences.yaml.`);
         return true;
       }
 
       currentRules.push(promotedRule);
       writeFileSync(prefPath, yaml.dump({ rules: currentRules }), "utf-8");
       reconcilePreferences();
+      console.log(`✅ Preference rule '${prefId}' promoted successfully.`);
       return true;
     }
   }

@@ -52,11 +52,16 @@ function normalizeToolError(result: CallToolResult): CallToolResult | null {
   const firstContent = result.content[0];
   if (firstContent?.type !== "text" || typeof firstContent.text !== "string") return null;
 
+  if (firstContent.text.includes("❌ [Linter Error]")) {
+    return null;
+  }
+
   // Check if already structured JSON
   try {
     const parsed = JSON.parse(firstContent.text) as unknown;
     if (hasErrorField(parsed)) return null;
   } catch { /* plain text, proceed with normalization */ }
+
 
   // Wrap plain text error in structured format
   const cleanMessage = firstContent.text.replace(/^❌\s*/, "");

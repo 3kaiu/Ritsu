@@ -9,6 +9,8 @@ import { runExport } from "./cli/export.js";
 import { runSync } from "./cli/sync.js";
 import { runMine } from "./cli/mine.js";
 import { runBootstrap } from "./cli/bootstrap.js";
+import { runCheck } from "./cli/check.js";
+
 
 // Re-exports for backward compatibility (used by tests)
 export {
@@ -139,6 +141,8 @@ export function main() {
   if (cmd === "mine" || cmd === "learn") { runMine(cmdArgs); return; }
   if (cmd === "status") { runStatus(); return; }
   if (cmd === "cat") { runCat(cmdArgs); return; }
+  if (cmd === "check") { runCheck(cmdArgs); return; }
+
 
   if (cmd === "trust") {
     const force = cmdArgs.includes("--force");

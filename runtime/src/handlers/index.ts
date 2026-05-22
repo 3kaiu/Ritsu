@@ -31,6 +31,7 @@ import { ritsu_preflight } from "./preflight.js";
 import { ritsu_learn } from "./learn.js";
 import { ritsu_agent_status } from "./agent-status.js";
 import { ritsu_coordination } from "./coordination.js";
+import { ritsu_write_file } from "./write-file.js";
 
 // ─── Handler Registry ───────
 
@@ -62,4 +63,6 @@ export const registerHandlers: Record<
   ritsu_span_lifecycle,
   ritsu_file_lease,
   ritsu_task_coordination,
+  write_file: ritsu_write_file,
 };
+

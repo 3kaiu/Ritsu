@@ -153,6 +153,7 @@ tools:
       span_id: { type: string, required: false }
       agent_id: { type: string, required: false, description: "Agent ID (claim_task)" }
       ttl_ms: { type: integer, required: false, description: "Lease TTL in ms (claim_file)" }
+      target_paths: { type: list, items: { type: string }, required: false, description: "Allowed target paths for the claimed task" }
     output_schema:
       type: object
 
@@ -219,3 +220,27 @@ tools:
       properties:
         active_count: { type: integer }
         agents: { type: array }
+
+  - name: write_file
+    description: "Write content to a file at the specified path (proxied and verified by Ritsu policy engine)."
+    call_template:
+      tool: write_file
+      params:
+        path: "{path}"
+        content: "{content}"
+    input:
+      path:
+        type: string
+        required: true
+        description: "Absolute or relative path to the file"
+      content:
+        type: string
+        required: true
+        description: "The complete content to write"
+    output_schema:
+      type: object
+      required: [success, path]
+      properties:
+        success: { type: boolean }
+        path: { type: string }
+

@@ -32,14 +32,17 @@ export async function ritsu_claim_file(params: Record<string, unknown>): Promise
       const now = Date.now();
       const activeLeases = current.filter((lease) => lease.expires_at > now);
       const existing = activeLeases.find((lease) => lease.path === filePath);
-
       if (existing && existing.span_id !== spanId) {
+        const remaining = existing.expires_at - now;
         return {
           data: activeLeases,
           result: {
             ok: false,
             path: filePath,
             message: `File already claimed by span ${existing.span_id}.`,
+            holder_span_id: existing.span_id,
+            expires_at: existing.expires_at,
+            ttl_remaining_ms: remaining > 0 ? remaining : 0,
           },
         };
       }
@@ -118,11 +121,28 @@ export async function releaseAllForSpan(root: string, spanId: string): Promise<v
   );
 }
 
-export function checkLease(root: string, filePath: string, spanId?: string): { ok: boolean; message?: string } {
+export function checkLease(
+  root: string,
+  filePath: string,
+  spanId?: string,
+): {
+  ok: boolean;
+  message?: string;
+  holder_span_id?: string;
+  expires_at?: number;
+  ttl_remaining_ms?: number;
+} {
   const leases = getLeases(root);
   const existing = leases.find(l => l.path === filePath);
   if (existing && existing.span_id !== spanId) {
-    return { ok: false, message: `File is locked by span ${existing.span_id}` };
+    const remaining = existing.expires_at - Date.now();
+    return {
+      ok: false,
+      message: `File is locked by span ${existing.span_id}`,
+      holder_span_id: existing.span_id,
+      expires_at: existing.expires_at,
+      ttl_remaining_ms: remaining > 0 ? remaining : 0,
+    };
   }
   return { ok: true };
 }

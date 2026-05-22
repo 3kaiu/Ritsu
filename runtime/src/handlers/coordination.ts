@@ -34,6 +34,7 @@ export async function ritsu_coordination(
         action: action.replace("_task", ""),
         span_id: params.span_id,
         agent_id: params.agent_id,
+        target_paths: params.target_paths,
       });
 
     default:
