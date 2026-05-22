@@ -19,6 +19,7 @@ import {
   fetchCodeGraphContext,
   getToolReadiness,
 } from "./internal-tools.js";
+import type { ArchitectureFingerprint } from "./architecture-analyzer.js";
 import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureContext } from "./architecture-analyzer.js";
 
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
@@ -105,10 +106,17 @@ async function runThinkPreflight(
   }
 
   // 架构漂移检测：学习当前项目的架构指纹
+  let _fingerprint: ArchitectureFingerprint | undefined;
   try {
-    const fingerprint = buildArchitectureFingerprint(projectRoot);
-    storeArchitectureFingerprint(fingerprint);
-    pack._architecture = buildArchitectureContext(fingerprint);
+    _fingerprint = buildArchitectureFingerprint(projectRoot);
+    storeArchitectureFingerprint(_fingerprint);
+    pack._architecture = buildArchitectureContext(_fingerprint);
+  } catch { /* non-critical */ }
+
+  // Architecture → IDE rules sync (best-effort)
+  try {
+    const { syncArchitectureToIDERules } = await import("../ide-rules-sync.js");
+    syncArchitectureToIDERules(projectRoot, "think", _fingerprint, undefined, taskSummary);
   } catch { /* non-critical */ }
 
   const hasOpenSpec = existsSync(resolve(projectRoot, "openspec"));
@@ -235,6 +243,14 @@ async function runDevReviewPreflight(
         pack._architecture_drift = driftViolations;
       }
     }
+  } catch { /* non-critical */ }
+
+  // Architecture → IDE rules sync (best-effort)
+  try {
+    const { syncArchitectureToIDERules } = await import("../ide-rules-sync.js");
+    const { buildArchitectureFingerprint: rebuildFingerprint } = await import("./architecture-analyzer.js");
+    const fp = rebuildFingerprint(projectRoot);
+    syncArchitectureToIDERules(projectRoot, stage, fp, pack._architecture_drift);
   } catch { /* non-critical */ }
 
   const policy: PolicyPreflightResult = await runPolicyPreflight(projectRoot, skill);
