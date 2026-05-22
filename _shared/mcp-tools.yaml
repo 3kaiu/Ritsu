@@ -231,3 +231,20 @@ tools:
       properties:
         learned: { type: boolean }
         added_count: { type: integer }
+
+  - name: ritsu_agent_status
+    description: "Query active agents — who is working on what, current step, last artifact. Use before starting work to avoid conflicts."
+    call_template:
+      tool: ritsu_agent_status
+      params: {}
+    input:
+      current_span_only:
+        type: boolean
+        required: false
+        description: "Only show active spans (default: true)"
+    output_schema:
+      type: object
+      required: [active_count, agents]
+      properties:
+        active_count: { type: integer }
+        agents: { type: array }
