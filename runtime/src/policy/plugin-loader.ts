@@ -18,6 +18,8 @@ import { AstGrepDetector } from "./detectors/ast-grep.js";
 import { AstDetector } from "./detectors/ast.js";
 import { CodeGraphDetector } from "./detectors/codegraph.js";
 import { ArchitectureDetector } from "./detectors/architecture.js";
+import { SecuritySmellDetector } from "./detectors/security-smell.js";
+import { ContractDriftDetector } from "./detectors/contract-drift.js";
 import { getProjectRoot } from "../handlers/_utils.js";
 
 const BUILT_IN_DETECTORS: Record<string, DetectorPlugin> = {
@@ -25,11 +27,13 @@ const BUILT_IN_DETECTORS: Record<string, DetectorPlugin> = {
   cross_file: new CrossFileDetector(),
   scope_diff: new ScopeDiffDetector(),
   contract_coverage: new ContractCoverageDetector(),
+  contract_drift: new ContractDriftDetector(),
   preference_lint: new PreferenceLintDetector(),
   ast_grep: new AstGrepDetector(),
   ast: new AstDetector(),
   codegraph: new CodeGraphDetector(),
   architecture: new ArchitectureDetector(),
+  security_smell: new SecuritySmellDetector(),
 };
 
 let _cachedPlugins: Record<string, DetectorPlugin> | null = null;

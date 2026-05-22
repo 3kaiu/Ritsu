@@ -88,6 +88,11 @@ global:
     pattern: "命令执行报错了，假装没看见继续下一步"
     enforcement: "必须停下来，分析报错，或将报错直接反馈给用户"
     severity: FATAL
+    detector:
+      type: ast_grep
+      target: diff
+      languages: [typescript, javascript]
+      note: "检测空 catch 块和吞没错误的 try/catch。完整 AP-7 执行依赖 AI 遵守。"
     examples:
       - wrong: "npm install 报 404 → 继续写 import 该包的代码"
         right: "npm install 报 404 → 检查包名拼写是否正确 → 搜索正确的包名 → 安装成功后再写 import"
@@ -198,6 +203,9 @@ review:
     name: 破坏性契约变更
     pattern: "修改了现有 API/数据格式但不向后兼容，且无双写/迁移方案"
     severity: HARD_STOP
+    detector:
+      type: contract_drift
+      target: diff
     examples:
       - wrong: "将 getUser(id) 签名改为 getUser(id, options) → 所有调用方 break"
         right: "getUser(id, options?) 保留向后兼容 → 或提供迁移脚本 → 或通知所有调用方"
@@ -206,6 +214,13 @@ review:
     name: 数据迁移不可逆
     pattern: "迁移脚本无法回滚，或没有回滚测试"
     severity: HARD_STOP
+    detector:
+      type: regex
+      target: diff
+      patterns:
+        - "\\bDROP\\s+(TABLE|COLUMN|INDEX|DATABASE)\\b"
+        - "\\bALTER\\s+TABLE\\s+\\w+\\s+DROP\\s+COLUMN\\b"
+        - "\\bTRUNCATE\\s+(TABLE\\s+)?\\w+"
     examples:
       - wrong: "ALTER TABLE users DROP COLUMN old_name — 无法恢复数据"
         right: "迁移分三步：ADD COLUMN new_name → 双写 → 确认稳定后 DROP old_name"
@@ -214,6 +229,9 @@ review:
     name: 安全漏洞引入
     pattern: "新增依赖存在已知 CVE，或代码中存在注入/越权风险"
     severity: HARD_STOP
+    detector:
+      type: security_smell
+      target: diff
     examples:
       - wrong: "npm install package@1.0.0 该版本有已知 RCE 漏洞"
         right: "npm install package@1.2.1 (最新安全版本) 或用 npm audit 确认后再安装"

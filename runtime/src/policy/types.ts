@@ -24,11 +24,13 @@ export type DetectorType =
   | "cross_file"
   | "scope_diff"
   | "contract_coverage"
+  | "contract_drift"
   | "preference_lint"
   | "ast_grep"
   | "ast"
   | "codegraph"
-  | "architecture";
+  | "architecture"
+  | "security_smell";
 
 export interface DetectorConfig {
   type: DetectorType;
