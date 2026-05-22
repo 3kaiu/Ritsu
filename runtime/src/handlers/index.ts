@@ -31,6 +31,7 @@ import { ritsu_file_lease } from "./file-lease.js";
 import { ritsu_sync_openspec_contracts } from "./sync-openspec-contracts.js";
 import { ritsu_bootstrap_ecosystem } from "./bootstrap-ecosystem.js";
 import { ritsu_preflight } from "./preflight.js";
+import { ritsu_learn } from "./learn.js";
 
 // ─── Handler Registry ───────
 
@@ -55,6 +56,7 @@ export const registerHandlers: Record<
   ritsu_sync_openspec_contracts,
   ritsu_bootstrap_ecosystem,
   ritsu_preflight,
+  ritsu_learn,
   ritsu_inspect_git_changes,
   ritsu_span_lifecycle,
   ritsu_file_lease,

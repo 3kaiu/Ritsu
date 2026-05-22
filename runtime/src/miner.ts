@@ -343,6 +343,147 @@ function scanHumanCorrections(root: string, days: number): ScanResult {
   return { corrections, violations };
 }
 
+// ─── Heuristic Rule Extraction (no LLM required) ──────────────
+
+interface HeuristicPattern {
+  name: string;
+  test: (diff: string) => boolean;
+  build: () => PreferenceRule;
+  confidence: number; // 0-1
+}
+
+const HEURISTIC_PATTERNS: HeuristicPattern[] = [
+  {
+    name: "prefer-const",
+    confidence: 0.85,
+    test: (diff) => /^\-.*\blet\b.*=.*\n^\+.*\bconst\b.*=.*/m.test(diff),
+    build: () => ({
+      id: "pref-prefer-const",
+      match_regex: "\\blet\\s+\\w+\\s*=",
+      scope: "coding_style",
+      auto_inject_to: ["think", "dev"],
+      message: "Prefer const over let for variables that are never reassigned",
+    }),
+  },
+  {
+    name: "prefer-arrow-function",
+    confidence: 0.7,
+    test: (diff) =>
+      /^\-.*\bfunction\s+\w+\s*\(/.test(diff) &&
+      /^\+.*\bconst\s+\w+\s*=\s*(?:\(.*\)|\w+)\s*=>/.test(diff),
+    build: () => ({
+      id: "pref-arrow-function",
+      match_regex: "function\\s+\\w+\\s*\\([^)]*\\)\\s*\\{",
+      scope: "coding_style",
+      auto_inject_to: ["dev"],
+      message: "Use arrow function expressions instead of function declarations for callbacks",
+    }),
+  },
+  {
+    name: "prefer-template-literal",
+    confidence: 0.7,
+    test: (diff) =>
+      /^\-.*['"][^'"]*['"]\s*\+/.test(diff) &&
+      /^\+.*`/.test(diff),
+    build: () => ({
+      id: "pref-template-literal",
+      match_regex: `'["']\\s*\\+\\s*\\w+\\s*\\+\\s*['"]`,
+      scope: "coding_style",
+      auto_inject_to: ["dev"],
+      message: "Use template literals (`...`) instead of string concatenation",
+    }),
+  },
+  {
+    name: "prefer-strict-equality",
+    confidence: 0.9,
+    test: (diff) => /^\-.*==[^=].*\n^\+.*===/m.test(diff) || /^\-.*!=[^=].*\n^\+.*!==/m.test(diff),
+    build: () => ({
+      id: "pref-strict-equality",
+      match_regex: "(?<!!)={2}(?!=)|(?<!!)={2}(?!=)",
+      scope: "type_safety",
+      auto_inject_to: ["think", "dev"],
+      message: "Use strict equality (=== / !==) instead of loose equality (== / !=)",
+    }),
+  },
+  {
+    name: "prefer-async-await",
+    confidence: 0.65,
+    test: (diff) => /^\-.*\.then\s*\(/.test(diff) && /^\+.*await\b/.test(diff),
+    build: () => ({
+      id: "pref-async-await",
+      match_regex: "\\.then\\s*\\(",
+      scope: "performance",
+      auto_inject_to: ["dev"],
+      message: "Prefer async/await over .then() chains for better readability",
+    }),
+  },
+];
+
+function tokenize(text: string): Set<string> {
+  return new Set(
+    text.toLowerCase().split(/[^a-z0-9_]+/).filter((t) => t.length > 2),
+  );
+}
+
+function jaccardSimilarity(a: string, b: string): number {
+  const setA = tokenize(a);
+  const setB = tokenize(b);
+  if (setA.size === 0 && setB.size === 0) return 0;
+  let intersection = 0;
+  for (const t of setA) {
+    if (setB.has(t)) intersection++;
+  }
+  const union = new Set([...setA, ...setB]).size;
+  return union === 0 ? 0 : intersection / union;
+}
+
+function clusterCorrections(corrections: Array<{ file: string; diff: string }>): Map<string, number> {
+  const clusters = new Map<string, number>();
+
+  for (let i = 0; i < corrections.length; i++) {
+    for (let j = i + 1; j < corrections.length; j++) {
+      const score = jaccardSimilarity(corrections[i].diff, corrections[j].diff);
+      if (score > 0.4) {
+        // Both diffs belong to the same cluster — increment their counts
+        const keyI = corrections[i].file;
+        const keyJ = corrections[j].file;
+        clusters.set(keyI, (clusters.get(keyI) ?? 1) + 1);
+        clusters.set(keyJ, (clusters.get(keyJ) ?? 1) + 1);
+      }
+    }
+  }
+
+  return clusters;
+}
+
+export function extractHeuristicRules(
+  corrections: Array<{ file: string; diff: string }>,
+): PreferenceRule[] {
+  if (corrections.length === 0) return [];
+
+  const clusters = clusterCorrections(corrections);
+  const suggested: PreferenceRule[] = [];
+  const seenIds = new Set<string>();
+
+  for (const correction of corrections) {
+    for (const pattern of HEURISTIC_PATTERNS) {
+      if (!pattern.test(correction.diff)) continue;
+      if (seenIds.has(pattern.name)) continue;
+
+      // Boost confidence if this correction appears in multiple files
+      const clusterCount = clusters.get(correction.file) ?? 1;
+      const effectiveConfidence = Math.min(1, pattern.confidence + (clusterCount - 1) * 0.1);
+
+      if (effectiveConfidence >= 0.7) {
+        seenIds.add(pattern.name);
+        suggested.push(pattern.build());
+      }
+    }
+  }
+
+  return suggested;
+}
+
 // ─── minePreferences ──────────────────────────────────────────
 
 export function minePreferences(days: number): string | null {
@@ -473,15 +614,24 @@ export async function autoApplyMinedRules(days: number): Promise<{ addedCount: n
     }
   }
 
-  // LLM-Driven preference rules synthesis
-  const synthesizedRules = await synthesizeWithLLM({
+  // Phase 1: Heuristic rule extraction (always available, no LLM needed)
+  const heuristicRules = extractHeuristicRules(corrections);
+
+  // Phase 2: LLM-Driven preference rules synthesis (when RITSU_LLM_ENABLED=1)
+  const llmRules = await synthesizeWithLLM({
     corrections,
     violations,
     existingRules: currentRules,
   });
 
+  // Merge: heuristic rules take precedence (higher specificity), LLM fills gaps
+  const candidateRules = [
+    ...heuristicRules,
+    ...llmRules.filter((lr) => !heuristicRules.some((hr) => hr.id === lr.id)),
+  ];
+
   let addedCount = 0;
-  for (const syn of synthesizedRules) {
+  for (const syn of candidateRules) {
     const exists = currentRules.some(
       (existing) =>
         existing.id === syn.id || existing.match_regex === syn.match_regex
@@ -499,7 +649,7 @@ export async function autoApplyMinedRules(days: number): Promise<{ addedCount: n
 
   return {
     addedCount,
-    rules: synthesizedRules
+    rules: candidateRules
   };
 }
 

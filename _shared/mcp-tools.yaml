@@ -214,3 +214,20 @@ tools:
       properties:
         ok: { type: boolean }
         context_pack: { type: object }
+
+  - name: ritsu_learn
+    description: "Scan recent corrections and auto-synthesize preference rules."
+    call_template:
+      tool: ritsu_learn
+      params: {}
+    input:
+      days:
+        type: number
+        required: false
+        description: "How many days back to scan (default: 7, max: 90)"
+    output_schema:
+      type: object
+      required: [learned, added_count]
+      properties:
+        learned: { type: boolean }
+        added_count: { type: integer }

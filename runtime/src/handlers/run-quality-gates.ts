@@ -8,6 +8,9 @@ import {
   buildQualityGateSnapshot,
   captureQualityGateWorktreeState,
   extractQualityGateExecutionContext,
+  assessRiskLevel,
+  getCoverageThreshold,
+  checkCoverageThreshold,
   type CoverageByFile,
   type CoverageMetric,
   type CoverageStats,
@@ -727,7 +730,6 @@ export async function ritsu_run_quality_gates(
       if (coverage) {
         const perFile: CoverageByFile = {};
         for (const [file, stats] of Object.entries(coverage.per_file)) {
-          // Normalize paths
           const relPath = file.startsWith(root + "/")
             ? file.replace(root + "/", "")
             : file;
@@ -743,15 +745,26 @@ export async function ritsu_run_quality_gates(
     }
   }
 
+  // Adaptive Coverage Threshold: risk-based
+  const riskLevel = assessRiskLevel(policyPreflight.scan_files);
+  const coverageThreshold = getCoverageThreshold(riskLevel);
+  const coverageLinesPct = result.coverage?.summary.lines?.pct;
+  const coverageMet = checkCoverageThreshold(coverageLinesPct, coverageThreshold);
+
+  // coverageThreshold < 0 means no requirement
+  const coverageBlocked = coverageThreshold >= 0 && !coverageMet;
+
   const jsonOutput = JSON.stringify({
-    passed: allPassed && !anyFailed && !policyBlocked,
+    passed: allPassed && !anyFailed && !policyBlocked && !coverageBlocked,
     status: policyBlocked
       ? "policy_failed"
-      : anyFailed
-        ? "failed"
-        : allPassed
-          ? "passed"
-          : "partially_skipped",
+      : coverageBlocked
+        ? "coverage_failed"
+        : anyFailed
+          ? "failed"
+          : allPassed
+            ? "passed"
+            : "partially_skipped",
     preflight: {
       policy: {
         passed: policyPreflight.passed,
@@ -765,6 +778,8 @@ export async function ritsu_run_quality_gates(
     test: result.test,
     coverage: result.coverage,
     strict,
+    _risk_level: riskLevel,
+    _coverage_threshold: coverageThreshold >= 0 ? coverageThreshold : null,
   });
 
   // Save for detectors to consume

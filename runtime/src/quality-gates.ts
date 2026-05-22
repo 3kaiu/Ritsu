@@ -5,6 +5,62 @@ import { runGit } from "./handlers/_git-utils.js";
 import { ts } from "./handlers/_utils.js";
 import { isRecord } from "./shared.js";
 
+// ─── Adaptive Coverage: risk-based threshold ─────────────────
+
+const CORE_PATTERNS = [
+  /\/pay(?:ment)?s?\//,
+  /\/checkout\//,
+  /\/billing\//,
+  /\/crypto(?:gr)?\//,
+  /\/encrypt/,
+  /\/cipher/,
+  /\/auth\//,
+  /\/login\//,
+  /\/oauth\//,
+  /\/session\//,
+  /\/middleware\//,
+  /\/types\//,
+  /\/interfaces\//,
+  /contracts?\//,
+  /\/core\//,
+  /\.d\.ts$/,
+  /\/routes\/[^/]+\.ts$/,
+];
+
+export type RiskLevel = "core" | "periphery";
+
+/**
+ * 对变更文件集进行风险评级。任何匹配核心模式的路径都将整个变更标记为"core"。
+ */
+export function assessRiskLevel(scanFiles: string[]): RiskLevel {
+  for (const file of scanFiles) {
+    for (const pattern of CORE_PATTERNS) {
+      if (pattern.test(file)) return "core";
+    }
+  }
+  return "periphery";
+}
+
+/**
+ * 根据风险等级确定覆盖率阈值:
+ *   core      → 100% (lines)
+ *   periphery → -1 (不要求覆盖率，编译通过即放行)
+ */
+export function getCoverageThreshold(risk: RiskLevel): number {
+  return risk === "core" ? 100 : -1;
+}
+
+/**
+ * 检查覆盖率是否达到阈值。threshold < 0 视为不要求覆盖率。
+ */
+export function checkCoverageThreshold(
+  pct: number | undefined,
+  threshold: number,
+): boolean {
+  if (threshold < 0) return true;
+  return typeof pct === "number" && pct >= threshold;
+}
+
 export type QualityGateStepStatus = "passed" | "failed" | "skipped";
 export type QualityGateOverallStatus =
   | "passed"
