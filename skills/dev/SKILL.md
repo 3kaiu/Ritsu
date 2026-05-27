@@ -93,6 +93,27 @@ ritsu_dispatch_task(agents: 3, cross_review: true)
 - **单 Agent**: `ritsu_run_quality_gates`（已内嵌 policy preflight；传入当前 trace/span/correlation_id）。未通过禁止交付。
 - **多 Agent**: 每个 Agent 独立运行质量门禁。`ritsu_dispatch_task` 结果中的 `all_quality_gates_passed` 是所有 Agent 的门禁汇总。若存在 `quality_divergence` 类型的冲突，需人工介入。
 
+#### 4b. 🔍 视觉还原检查（可选，前端 P2 专用）
+
+如果 `fe-sight` MCP 服务器可用且项目有设计稿，在质量门禁后做视觉检查：
+
+```
+fe_sight_check(design: "设计稿.png", url: "http://localhost:5173")
+```
+
+- 还原度 ≥ 95% → 通过，进入交付
+- 还原度 < 95% → 修复 CSS 差异后重检
+- fe-sight 不在 MCP 列表中则跳过（非硬依赖）
+
+fe-sight 是独立 MCP 服务器，不包含在 Ritsu 中。安装方式：
+
+```bash
+npm install -g fe-sight
+npx playwright install chromium
+```
+
+然后在 `.mcp.json` 中添加 `fe-sight` 条目即可。
+
 #### 5. 交付
 
 - 将 gates 结果写入 `dev-report` 结构化字段。
