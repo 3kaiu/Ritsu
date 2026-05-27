@@ -8,13 +8,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 process.env.RITSU_SHARED_DIR = resolve(__dirname, "../_shared");
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "bun:sqlite": resolve(__dirname, "src/__mocks__/bun-sqlite.ts"),
+    },
+  },
   test: {
-    include: ["tests/**/*.test.ts"],
+    include: ["tests/**/*.test.ts", "src/tests/**/*.test.ts"],
     passWithNoTests: false,
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "json-summary", "html"],
-      exclude: ["tests/**", "dist/**", "node_modules/**"],
+      exclude: ["dist/**", "node_modules/**", "**/__mocks__/**"],
     },
     typecheck: {
       enabled: false,

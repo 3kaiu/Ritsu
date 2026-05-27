@@ -94,7 +94,7 @@ tools:
         description: "write (default) or patch for incremental replacement"
       type:
         type: enum
-        values: [design-sheet, design-brief, dev-report, assurance-sheet, diagnosis, coordination-sheet]
+        values: [design-sheet, design-brief, dev-report, assurance-sheet, diagnosis, coordination-sheet, deploy-plan, deploy-report]
         required: false
       filename: { type: string, required: true }
       content: { type: string, required: false }
@@ -220,6 +220,80 @@ tools:
       properties:
         active_count: { type: integer }
         agents: { type: array }
+
+  - name: ritsu_launch_agent
+    description: "Launch an AI coding agent subprocess (Claude Code or Codex) with a focused prompt. Used internally by ritsu_dispatch_task for multi-agent orchestration."
+    call_template:
+      tool: ritsu_launch_agent
+      params:
+        prompt: "{instruction}"
+        agent_type: "claude"
+    input:
+      prompt:
+        type: string
+        required: true
+        description: "The prompt/instruction for the agent"
+      agent_type:
+        type: enum
+        values: [claude, codex]
+        required: false
+        description: "Which agent CLI to use (default: claude)"
+      timeout_ms:
+        type: integer
+        required: false
+        description: "Max execution time in ms (default: 300000, max: 600000)"
+      trace_id:
+        type: string
+        required: false
+        description: "Parent trace ID for RITSU_TRACE_PARENT propagation"
+      span_id:
+        type: string
+        required: false
+        description: "Span ID for trace linking"
+    output_schema:
+      type: object
+      required: [agent_id, ok, output, exit_code, duration_ms]
+      properties:
+        agent_id: { type: string }
+        ok: { type: boolean }
+        output: { type: string }
+        exit_code: { type: integer }
+        duration_ms: { type: integer }
+
+  - name: ritsu_dispatch_task
+    description: "Multi-agent task dispatch. Splits a design-sheet into sub-tasks, launches agents in parallel, cross-reviews results, and detects conflicts. Use for P2 tasks with 3+ contracts."
+    call_template:
+      tool: ritsu_dispatch_task
+      params:
+        agents: 2
+        cross_review: true
+    input:
+      design_sheet_path:
+        type: string
+        required: false
+        description: "Path to design-sheet (default: latest in .ritsu/)"
+      agents:
+        type: integer
+        required: false
+        description: "Number of parallel agents (default: 2, max: 8)"
+      cross_review:
+        type: boolean
+        required: false
+        description: "Enable cross-review between agents (default: true)"
+      trace_id:
+        type: string
+        required: false
+        description: "Trace ID for linking sub-agent spans"
+    output_schema:
+      type: object
+      required: [ok, agents, conflicts]
+      properties:
+        ok: { type: boolean }
+        agents: { type: array }
+        conflicts: { type: array }
+        divergence_rate: { type: number }
+        all_quality_gates_passed: { type: boolean }
+        total_duration_ms: { type: integer }
 
   - name: write_file
     description: "Write content to a file at the specified path (proxied and verified by Ritsu policy engine)."

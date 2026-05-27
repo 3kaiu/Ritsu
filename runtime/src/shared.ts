@@ -75,6 +75,8 @@ export const ARTIFACT_REGISTRY: ArtifactDefinition[] = [
   { type: "assurance-sheet", prefix: "assurance-sheet-", layer: "primary" },
   { type: "diagnosis", prefix: "diagnosis-", layer: "evidence" },
   { type: "coordination-sheet", prefix: "coordination-sheet-", layer: "primary" },
+  { type: "deploy-plan", prefix: "deploy-plan-", layer: "primary" },
+  { type: "deploy-report", prefix: "deploy-report-", layer: "primary" },
   { type: "ctx", prefix: "ctx-", layer: "system" },
 ];
 
@@ -85,6 +87,8 @@ export const ARTIFACT_VALID_TYPES = [
   "assurance-sheet",
   "diagnosis",
   "coordination-sheet",
+  "deploy-plan",
+  "deploy-report",
   "ctx",
 ] as const;
 export type ArtifactType = (typeof ARTIFACT_VALID_TYPES)[number];

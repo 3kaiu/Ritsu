@@ -1,19 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  formatEvent,
-  findLatestCtxFile,
-  getLatestTraceId,
-  getOpenTraceIds,
   main,
-  normalizeTraceId,
-  parseJsonl,
-  readCoveragePct,
-  readRuntimeMetadataFromPackageJson,
   runDoctor,
   runDoctorHealth,
   runExport,
   runTrace,
 } from "../src/cli.js";
+import {
+  findLatestCtxFile,
+  formatEvent,
+  getLatestTraceId,
+  getOpenTraceIds,
+  normalizeTraceId,
+  parseJsonl,
+  readCoveragePct,
+  readRuntimeMetadataFromPackageJson,
+} from "../src/cli/shared.js";
 import {
   existsSync,
   mkdirSync,

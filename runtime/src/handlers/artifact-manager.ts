@@ -8,7 +8,7 @@ import {
   renameSync,
   rmSync,
 } from "node:fs";
-import { resolve, join } from "node:path";
+import { resolve, join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 import { load as loadYaml } from "js-yaml";
 import {
@@ -43,6 +43,8 @@ import {
   validateQualityGateSnapshotWorktree,
 } from "../quality-gates.js";
 import { emitViolationEvent } from "../violation-events.js";
+import { autoCheckpoint } from "../context-lifecycle.js";
+import { syncFromDesignSheet } from "../contract-registry.js";
 
 function isArtifactType(value: string): value is ArtifactType {
   return ARTIFACT_VALID_TYPES.some((artifactType) => artifactType === value);
@@ -920,6 +922,27 @@ export async function ritsu_write_artifact(
   normalizedArtifactMeta.size_bytes = sizeBytes;
   artifactWrittenEvent.artifact_meta = normalizedArtifactMeta;
   await appendArtifactWrittenEvent(artifactWrittenEvent);
+
+  // Auto-checkpoint after artifact write for session recovery
+  try {
+    const skill = pickContextValue(params, "skill");
+    if (typeof skill === "string" && skill) {
+      autoCheckpoint(root, skill, normalizedArtifactMeta.summary || type);
+    }
+  } catch {
+    // best-effort
+  }
+
+  // Sync contract registry on design-sheet write
+  if (type === "design-sheet") {
+    try {
+      const content = readFileSync(mdPath, "utf-8");
+      const filename = basename(mdPath);
+      syncFromDesignSheet(root, content, filename, artifactMeta?.domain ? String(artifactMeta.domain) : undefined);
+    } catch {
+      // best-effort
+    }
+  }
 
   return textResult(
     JSON.stringify({

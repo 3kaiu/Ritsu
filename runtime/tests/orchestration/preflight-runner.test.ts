@@ -74,6 +74,12 @@ vi.mock("../../src/openspec-bridge.js", () => ({
   syncOpenSpecContracts: vi.fn(() => ({ contracts: [] })),
 }));
 
+vi.mock("../../src/context-lifecycle.js", () => ({
+  loadLatestCheckpoint: vi.fn(() => null),
+  isCheckpointFresh: vi.fn(() => false),
+  generateRecoveryPrompt: vi.fn(() => ""),
+}));
+
 vi.mock("../../src/similar-violations.js", () => ({
   loadViolationRecords: vi.fn(() => []),
   findSimilarViolations: vi.fn(() => []),
@@ -164,5 +170,106 @@ describe("runStagePreflight", () => {
       });
       expect(pack._suffix).toBeDefined();
     }
+  });
+
+  it("inferTier returns P2 for critical risk recovery context", async () => {
+    // Override the ctx mock for this test only
+    const ctxCtrl = await import("../../src/handlers/ctx-controller.js");
+    vi.mocked(ctxCtrl.ritsu_read_ctx).mockImplementationOnce(
+      async () => ({
+        content: [{ type: "text", text: JSON.stringify({
+          recovery_context: { risk_level: "critical", resume_hint: "urgent fix" },
+          circuit_breaker_status: { consecutive_fails: 0 },
+        })}],
+      }),
+    );
+
+    const pack = await runStagePreflight({
+      projectRoot: FAKE_ROOT,
+      stage: "hunt",
+    });
+    expect(pack.stage).toBe("hunt");
+  });
+
+  it("runs dev preflight with detail=true (level 2 disclosure)", async () => {
+    const pack = await runStagePreflight({
+      projectRoot: FAKE_ROOT,
+      stage: "dev",
+      tier: "P2",
+      detail: true,
+    });
+
+    expect(pack.stage).toBe("dev");
+    expect(pack.passed).toBeDefined();
+    expect(pack.ctx).toBeDefined();
+  });
+
+  it("runs review preflight with trace loading on detail=true", async () => {
+    const ctxCtrl = await import("../../src/handlers/ctx-controller.js");
+    vi.mocked(ctxCtrl.ritsu_read_ctx).mockImplementationOnce(
+      async () => ({
+        content: [{ type: "text", text: JSON.stringify({
+          last_incomplete: { trace_id: "trace-review-1", skill: "dev" },
+          last_completed: null,
+          circuit_breaker_status: { consecutive_fails: 0 },
+          recovery_context: null,
+        })}],
+      }),
+    );
+
+    const pack = await runStagePreflight({
+      projectRoot: FAKE_ROOT,
+      stage: "review",
+      detail: true,
+    });
+
+    expect(pack.stage).toBe("review");
+    expect(pack._ai_summary).toBeDefined();
+  });
+
+  it("runs hunt preflight with detail=true loads changed files and violations", async () => {
+    const pack = await runStagePreflight({
+      projectRoot: FAKE_ROOT,
+      stage: "hunt",
+      detail: true,
+    });
+
+    expect(pack.stage).toBe("hunt");
+    expect(pack.next_skill).toBe("dev");
+    expect(pack.changed_files).toBeDefined();
+  });
+
+  it("recovers from readCtxCompact failure (returns null)", async () => {
+    const ctxCtrl = await import("../../src/handlers/ctx-controller.js");
+    vi.mocked(ctxCtrl.ritsu_read_ctx).mockImplementationOnce(
+      async () => ({ content: [{ type: "text", text: "invalid json" }] }),
+    );
+
+    const pack = await runStagePreflight({
+      projectRoot: FAKE_ROOT,
+      stage: "think",
+      tier: "P2",
+      taskSummary: "test recovery",
+    });
+
+    expect(pack.stage).toBe("think");
+    expect(pack.passed).toBe(true);
+  });
+
+  it("handles agents JSON parse failure gracefully", async () => {
+    const agentsMock = await import("../../src/handlers/read-agents.js");
+    vi.mocked(agentsMock.ritsu_read_agents).mockImplementationOnce(
+      async () => ({ content: [{ type: "text", text: "not valid json" }] }),
+    );
+
+    const pack = await runStagePreflight({
+      projectRoot: FAKE_ROOT,
+      stage: "think",
+      tier: "P1",
+      taskSummary: "test",
+    });
+
+    expect(pack.stage).toBe("think");
+    expect(pack.passed).toBe(true);
   });
 });

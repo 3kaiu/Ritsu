@@ -170,6 +170,91 @@ schemas:
           - name: steps
             type: ordered_list
 
+  deploy_plan:
+    id: 20
+    path: ".ritsu/deploy-plan-{YYYYMMDD-HHMMSS}.md"
+    tier: critical
+    required_sections:
+      - title: "1. 部署概览 (Overview)"
+        fields:
+          - name: change_summary
+            label: "变更摘要"
+          - name: deploy_mode
+            label: "部署模式"
+            values: [quick, standard, canary, full_rollout]
+          - name: risk_assessment
+            label: "风险评估"
+      - title: "2. 回滚计划 (Rollback)"
+        fields:
+          - name: rollback_steps
+            label: "回滚步骤"
+            type: ordered_list
+          - name: data_rollback
+            label: "数据回滚"
+            optional: true
+          - name: rollback_validation
+            label: "回滚验证方式"
+      - title: "3. 部署策略 (Strategy)"
+        fields:
+          - name: rollout_plan
+            label: "发布策略"
+          - name: canary_percentage
+            label: "灰度比例"
+            optional: true
+          - name: canary_duration
+            label: "灰度观察时长"
+            optional: true
+          - name: health_checks
+            label: "健康检查方式"
+      - title: "4. 监控与告警 (Monitoring)"
+        fields:
+          - name: metrics_to_watch
+            label: "关注指标"
+          - name: alert_thresholds
+            label: "告警阈值"
+          - name: observation_window
+            label: "观察窗口"
+      - title: "5. 上线后验证 (Post-Deploy)"
+        fields:
+          - name: smoke_tests
+            label: "冒烟验证"
+            type: ordered_list
+          - name: performance_baseline
+            label: "性能基线"
+            optional: true
+      - title: "6. 决策记录 (Decision Log)"
+        fields:
+          - name: approval_gate
+            label: "审批门禁"
+            optional: true
+          - name: contingency_plan
+            label: "应急预案"
+            optional: true
+
+  deploy_report:
+    id: 21
+    path: ".ritsu/deploy-report-{YYYYMMDD-HHMMSS}.md"
+    tier: standard
+    required_sections:
+      - title: "发布结果"
+        fields:
+          - name: result
+            label: "结果"
+            values: [success, partial, failed, rolled_back]
+          - name: deployed_at
+            label: "发布时间"
+          - name: duration
+            label: "耗时"
+      - title: "验证结果"
+        fields:
+          - name: smoke_test_result
+            label: "冒烟测试结论"
+          - name: health_check_result
+            label: "健康检查结论"
+          - name: incident
+            label: "异常记录"
+            optional: true
+
   coordination_sheet:
     required_sections:
       - title: Intent & Trace

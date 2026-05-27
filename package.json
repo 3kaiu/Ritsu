@@ -1,8 +1,8 @@
 {
   "name": "ritsu",
-  "version": "8.0.0",
-  "ritsu_protocol_version": "8.0.0",
-  "description": "Ritsu \u2014 AI Delivery Workflow Skill Engine. Skills + policy + quality gates + cross-session memory.",
+  "version": "8.2.0",
+  "ritsu_protocol_version": "8.2.0",
+  "description": "AI Code Quality Gate \u2014 policy engine, quality gates, session recovery, and agent analytics for AI coding assistants (Claude Code, Codex, Cursor). Catch security issues, scope creep, and contract drift in AI-generated code.",
   "packageManager": "bun@1.3.5",
   "private": true,
   "type": "module",
@@ -31,8 +31,12 @@
     "ai",
     "mcp",
     "claude-code",
-    "workflow",
-    "policy",
-    "quality-gates"
+    "codex",
+    "cursor",
+    "quality-gates",
+    "code-review",
+    "policy-engine",
+    "session-recovery",
+    "agent-analytics"
   ]
 }

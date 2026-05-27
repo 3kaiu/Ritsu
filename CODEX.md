@@ -1,14 +1,38 @@
-# Ritsu — AI Delivery Skill Engine
+# Ritsu for Codex CLI
 
-See `CLAUDE.md` for the complete guide.
+Ritsu works with Codex CLI via the `CODEX.md` workflow file. Codex CLI reads this file at session start.
 
-Ritsu is a **skill + engine**: 7 skill commands, backed by an 11-detector policy engine and 8 MCP tools.
+## Install
 
 ```bash
-bun run --cwd runtime build   # Build
-bun run --cwd runtime test    # Test (316 tests)
+npx skills add 3kaiu/Ritsu -a codex -g -y
 ```
 
-Workflow: `/r-init` → `/r-think` → `/r-dev` → `/r-review` → `/r-hunt`
-Install: `npx skills add 3kaiu/Ritsu -a claude-code -g -y`
-Check: `ritsu doctor`
+## Quick Start
+
+```bash
+ritsu doctor           # Verify the environment
+ritsu bootstrap --demo # Generate demo data
+ritsu violations       # See live violation tracking
+```
+
+## Slash Commands in Codex
+
+| Command | What it does |
+|---------|-------------|
+| `/r-think` | Architecture analysis + design contracts |
+| `/r-dev` | Policy-enforced implementation |
+| `/r-review` | Quality assurance with evidence |
+| `/r-deploy` | Deployment plan + rollback |
+| `/r-hunt` | Root cause diagnosis |
+
+## Build & Test
+
+```bash
+bun run --cwd runtime build
+bun run --cwd runtime test
+```
+
+## Reference
+
+See `CLAUDE.md` for the complete protocol guide.

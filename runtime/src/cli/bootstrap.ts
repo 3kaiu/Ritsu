@@ -1,8 +1,29 @@
 import { detectProjectRoot } from "../project-root.js";
 import { color } from "./shared.js";
 import { bootstrapEcosystem } from "../ecosystem-bootstrap.js";
+import { generateDemoData } from "../demo-data.js";
 
 export function runBootstrap(args: string[] = []): void {
+  // --demo flag: generate demo data instead of normal bootstrapping
+  if (args.includes("--demo")) {
+    const root = detectProjectRoot();
+    console.log(color("Ritsu Bootstrap — Demo Data", "cyan"));
+    const files = generateDemoData(root);
+    console.log(color(`Project: ${root}`, "dim"));
+    console.log(color("Demo data generated:", "green"));
+    for (const f of files) {
+      const relPath = f.startsWith(root + "/") ? f.slice(root.length + 1) : f;
+      console.log(`  • ${relPath}`);
+    }
+    console.log("");
+    console.log(color("Try these commands:", "cyan"));
+    console.log("  ritsu violations          # List open violations");
+    console.log("  ritsu violations --per-file # Group by file");
+    console.log("  ritsu report              # Quality analytics");
+    console.log("  ritsu report --cost       # Cost breakdown");
+    return;
+  }
+
   const root = detectProjectRoot();
   console.log(color("Ritsu Bootstrap — Ecosystem", "cyan"));
   let host: import("../ecosystem-bootstrap.js").HostProfile | undefined;

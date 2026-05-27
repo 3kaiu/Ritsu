@@ -56,6 +56,7 @@ describe("ctx-reader resilience & self-healing", () => {
   });
 
   it("throws error in strict mode when line is unparseable", () => {
+    process.env.RITSU_DISABLE_SQLITE = "1";
     const ctxPath = getCtxPath(testRoot);
     writeFileSync(
       ctxPath,

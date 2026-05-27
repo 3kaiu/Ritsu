@@ -1,0 +1,17 @@
+---
+description: Ritsu live architecture context — auto-synced after preflight
+globs: "*"
+---
+# Architecture Context — dev stage
+
+**Modules**: 11 | **Cross-module deps**: 0
+
+## Dependency Graph
+
+```mermaid
+graph TD
+```
+
+## Active Constraints
+
+None

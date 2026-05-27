@@ -508,7 +508,7 @@ github.com/user/project/file2.go:1.10,5.20 5 2`,
   });
 
   it("detects Vitest and Jest runners correctly from commands and package.json", async () => {
-    const { detectTestRunner } = await import("../../src/handlers/run-quality-gates.js");
+    const { detectTestRunner } = await import("../../src/test-report-adapters.js");
     
     // Direct command detection
     expect(detectTestRunner({ binary: "vitest", args: ["run"], cwd: root })).toBe("vitest");
@@ -531,7 +531,7 @@ github.com/user/project/file2.go:1.10,5.20 5 2`,
   });
 
   it("injects reporter arguments with package manager double-dash handling", async () => {
-    const { injectReporterArgs } = await import("../../src/handlers/run-quality-gates.js");
+    const { injectReporterArgs } = await import("../../src/test-report-adapters.js");
 
     // Direct execution
     expect(injectReporterArgs("vitest", ["run"], "vitest", "/path/to/report.json"))

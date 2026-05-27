@@ -1,9 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   parseStat,
   analyzeRisk,
   parseChunks,
   extractNewIdentifiers,
+  inspectDiff,
 } from "../../src/orchestration/diff-inspect.js";
 
 const STAT_OUTPUT = [
@@ -171,11 +172,150 @@ describe("extractNewIdentifiers", () => {
     expect(ids).toEqual([]);
   });
 
+  it("extracts async function declarations", () => {
+    const patch = "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n+export async function fetchData() {}";
+    const ids = extractNewIdentifiers(patch);
+    const names = ids.map((i) => i.name);
+    expect(names).toContain("fetchData");
+  });
+
+  it("extracts class declarations", () => {
+    const patch = "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n+export class UserService {}";
+    const ids = extractNewIdentifiers(patch);
+    const names = ids.map((i) => i.name);
+    expect(names).toContain("UserService");
+  });
+
+  it("extracts interface declarations", () => {
+    const patch = "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n+export interface User {}";
+    const ids = extractNewIdentifiers(patch);
+    const names = ids.map((i) => i.name);
+    expect(names).toContain("User");
+  });
+
   it("deduplicates same identifier in same file", () => {
     const dup =
       "diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1,3 +1,3 @@\n+export const x = 1\n+export const x = 2";
     const ids = extractNewIdentifiers(dup);
     const xCount = ids.filter((i) => i.name === "x").length;
     expect(xCount).toBe(1);
+  });
+});
+
+// ─── inspectDiff (mock-based) ─────────────────────────────────
+
+describe("inspectDiff", () => {
+  const MOCK_STAT = " 1\t0\tsrc/test.ts\n";
+  const MOCK_PATCH = "diff --git a/src/test.ts b/src/test.ts\n--- a/src/test.ts\n+++ b/src/test.ts\n@@ -1 +1,3 @@\n+export const foo = 1\n+export function bar() {}\n";
+
+  beforeEach(async () => {
+    // Mock _git-utils to return controlled data
+    const gitMock = await import("../../src/handlers/_git-utils.js");
+    vi.spyOn(gitMock, "runGit").mockImplementation(
+      async (_args: string[], _root: string) => {
+        const args = Array.isArray(_args) ? _args : [];
+        if (args.includes("--stat")) {
+          return { ok: true, output: MOCK_STAT };
+        }
+        return { ok: true, output: MOCK_PATCH };
+      },
+    );
+  });
+
+  it("returns stat mode data", async () => {
+    const result = await inspectDiff({
+      projectRoot: "/tmp/test",
+      mode: "stat",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect((result.data as Record<string, unknown>).mode).toBe("stat");
+      expect((result.data as Record<string, unknown>).total_files).toBe(1);
+    }
+  });
+
+  it("returns chunks mode with risk scores", async () => {
+    const result = await inspectDiff({
+      projectRoot: "/tmp/test",
+      mode: "chunks",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const data = result.data as Record<string, unknown>;
+      expect(data.mode).toBe("chunks");
+      expect(data.total_chunks).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("slices chunks by topN", async () => {
+    const result = await inspectDiff({
+      projectRoot: "/tmp/test",
+      mode: "chunks",
+      topN: 1,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const chunks = (result.data as Record<string, unknown>).chunks as unknown[];
+      expect(chunks.length).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("returns full mode data", async () => {
+    const result = await inspectDiff({
+      projectRoot: "/tmp/test",
+      mode: "full",
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const data = result.data as Record<string, unknown>;
+      expect(data.mode).toBe("full");
+      expect(data.files).toBeDefined();
+      expect(data.new_identifiers).toBeDefined();
+      expect(data.diff).toBeDefined();
+    }
+  });
+
+  it("truncates output in full mode when maxOutputLines exceeded", async () => {
+    const result = await inspectDiff({
+      projectRoot: "/tmp/test",
+      mode: "full",
+      maxOutputLines: 1,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const data = result.data as Record<string, unknown>;
+      expect(data.truncated).toBe(true);
+      expect((data.diff as string)).toContain("diff truncated");
+    }
+  });
+
+  it("returns error when stat git fails", async () => {
+    const gitMock = await import("../../src/handlers/_git-utils.js");
+    vi.spyOn(gitMock, "runGit").mockImplementation(
+      async () => ({ ok: false, output: "fatal: not a git repository" }),
+    );
+
+    const result = await inspectDiff({
+      projectRoot: "/tmp/test",
+      mode: "stat",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("git diff --stat failed");
+    }
+  });
+
+  it("supports cached mode", async () => {
+    const gitMock = await import("../../src/handlers/_git-utils.js");
+    let usedCached = false;
+    vi.spyOn(gitMock, "runGit").mockImplementation(
+      async (args: string[], _root: string) => {
+        if (args.includes("--cached")) usedCached = true;
+        return { ok: true, output: MOCK_PATCH };
+      },
+    );
+
+    await inspectDiff({ projectRoot: "/tmp/test", mode: "chunks", cached: true });
+    expect(usedCached).toBe(true);
   });
 });

@@ -100,12 +100,25 @@
 - 上线建议: {建议上线/建议暂缓上线/建议灰度上线}
 - 业务影响: {一句话总结对业务的影响}
 
-## 4. 失败回流 (Rejection Feedback)
-- 拒绝原因: {若 PASS 则写“无”}
+## 4. 契约对账 (Contract Verdicts)
+
+适用条件: dev 阶段有设计单且包含 contracts。
+
+根据质量门禁中的 `contract_verification` 数据逐条填写：
+
+| Contract ID | 描述 | 状态 | 证据 |
+| --- | --- | --- | --- |
+| C1 | {契约描述} | {passed\|failed\|partial} | {测试文件:行号 或 说明} |
+| C2 | {契约描述} | {passed\|failed\|partial} | {测试文件:行号 或 说明} |
+
+> 状态说明: passed = 测试文件存在且包含契约引用; partial = 测试文件存在但无明确契约引用; failed = 未找到对应测试或断言。
+
+## 5. 失败回流 (Rejection Feedback)
+- 拒绝原因: {若 PASS 则写”无”}
 - 强制修复清单:
   - [ ] {具体的代码位置或逻辑点}: {修复要求}
 
-## 5. 后续建议
+## 6. 后续建议
 - 建议下一步: {进入发布流程|回到 dev 修复|回到 think 重设方案}
 ```
 
@@ -132,6 +145,72 @@
 - 关联设计单: {design-sheet 路径}
 
 ---
+## Deploy Plan (部署计划)
+
+适用产物类型：`deploy-plan`
+适用等级：Standard (P1) / Critical (P2)
+
+```markdown
+# Deploy Plan (部署计划)
+
+## 1. 部署概览 (Overview)
+- 变更摘要: {一句话描述本次部署的内容}
+- 部署模式: {quick|standard|canary|full_rollout}
+- 风险评估: {low|medium|high}
+
+## 2. 回滚计划 (Rollback)
+- 回滚步骤:
+  1. {git revert / 配置回滚 / 数据回滚 的具体命令}
+  2. {缓存清理或服务重启命令}
+  3. {验证回滚后状态的方法}
+- 数据回滚: {若有数据库变更，需包含回滚 SQL 脚本或迁移命令}
+- 回滚验证方式: {如何确认回滚成功}
+
+## 3. 部署策略 (Strategy)
+- 发布策略: {全量 / 灰度 / 金丝雀}
+- 灰度比例: {10% -> 50% -> 100%，仅灰度模式}
+- 灰度观察时长: {30min / 1h / 24h，仅灰度模式}
+- 健康检查方式: {接口 / 进程 / 依赖服务}
+
+## 4. 监控与告警 (Monitoring)
+- 关注指标: {错误率 / 延迟 p50/p95/p99 / CPU / 内存}
+- 告警阈值: {错误率 > X%, p95 > Y ms}
+- 观察窗口: {15min / 1h / 24h}
+
+## 5. 上线后验证 (Post-Deploy)
+- 冒烟验证:
+  1. {curl 命令或 UI 操作步骤}
+  2. {预期输出或结果}
+- 性能基线: {关键路径的预期延迟基线}
+
+## 6. 决策记录 (Decision Log)
+- 审批门禁: {谁确认了本次部署，基于什么}
+- 应急预案: {部署失败时的替代方案}
+```
+
+---
+
+## Deploy Report (上线报告)
+
+适用产物类型：`deploy-report`
+适用等级：Micro (P0) 快速上线
+
+```markdown
+# Deploy Report (上线报告)
+
+## 发布结果
+- 结果: {success|partial|failed|rolled_back}
+- 发布时间: {时间戳}
+- 耗时: {时长}
+
+## 验证结果
+- 冒烟测试结论: {通过/失败}
+- 健康检查结论: {通过/失败}
+- 异常记录: {若有异常，记录详情}
+```
+
+---
+
 ## Coordination Sheet (协调单)
 
 适用产物类型：`coordination-sheet`

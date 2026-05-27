@@ -1,0 +1,21 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Source files
+*.ts text
+*.js text
+*.json text
+*.yaml text
+*.yml text
+*.md text diff=markdown
+*.sh text
+
+# Binary
+*.png binary
+*.jpg binary
+*.ico binary
+
+# Generated files — not in releases
+.gitattributes export-ignore
+.gitignore export-ignore
+.github/ export-ignore

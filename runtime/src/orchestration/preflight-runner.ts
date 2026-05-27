@@ -21,6 +21,7 @@ import {
 } from "./internal-tools.js";
 import type { ArchitectureFingerprint } from "./architecture-analyzer.js";
 import { buildArchitectureFingerprint, storeArchitectureFingerprint, buildArchitectureContext } from "./architecture-analyzer.js";
+import { loadLatestCheckpoint, isCheckpointFresh, generateRecoveryPrompt } from "../context-lifecycle.js";
 
 export type PreflightStage = "think" | "dev" | "hunt" | "review";
 export type PreflightTier = "P0" | "P1" | "P2";
@@ -383,6 +384,17 @@ export async function runStagePreflight(
     pack = await runDevReviewPreflight(projectRoot, "dev", "dev", detail);
   } else {
     pack = await runDevReviewPreflight(projectRoot, "review", "review", detail);
+  }
+
+  // 会话恢复检测：如果有最近的检查点，注入恢复上下文
+  // 这样新会话知道自己"正在做什么、做到哪了、还有什么没做"
+  try {
+    const cp = loadLatestCheckpoint(projectRoot);
+    if (cp && isCheckpointFresh(cp)) {
+      pack._recovery = generateRecoveryPrompt(cp);
+    }
+  } catch {
+    // best-effort
   }
 
   // Mark entire preflight response as Suffix Zone — must go at the end of the prompt,

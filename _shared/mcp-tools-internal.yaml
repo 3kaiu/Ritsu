@@ -1,3 +1,0 @@
-# Internal MCP tools — NOT registered by schema-compiler.
-# Handlers remain in runtime for tests and write-artifact interception.
-tools: []

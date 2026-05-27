@@ -24,7 +24,7 @@ type PolicyCacheEntry = {
 const CACHE_TTL_MS = 30_000;
 let policyCache: PolicyCacheEntry | null = null;
 
-function parseChangedPaths(statOutput: string): string[] {
+export function parseChangedPaths(statOutput: string): string[] {
   const paths: string[] = [];
   for (const line of statOutput.split("\n")) {
     const match = line.match(/^\s*\d+\s+\d+\s+(.+)$/);

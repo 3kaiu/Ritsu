@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  main,
+  runDoctor,
+  runExport,
+  runTrace,
+  usage,
+} from "../src/cli.js";
+import type { CtxEvent } from "../src/cli.js";
+import {
   buildTraceSpanForest,
   countTripleVerifiedTraces,
   findLatestCtxFile,
@@ -9,19 +17,13 @@ import {
   getLatestTraceId,
   getOpenTraceIds,
   getTraceEvents,
-  main,
   normalizeTraceId,
   parseJsonl,
   parseLooseJsonl,
   readCoveragePct,
   readRuntimeMetadataFromPackageJson,
-  runDoctor,
-  runExport,
-  runTrace,
   summarizeTasks,
-  usage,
-} from "../src/cli.js";
-import type { CtxEvent } from "../src/cli.js";
+} from "../src/cli/shared.js";
 import {
   existsSync,
   mkdirSync,
@@ -633,7 +635,7 @@ describe("cli utilities", () => {
     expect(output.output).toContain("AGENTS.md found");
     expect(output.output).toContain(".ritsu/ directory found");
     expect(output.output).toContain("Stale lock files found: stale.lock");
-    expect(output.output).toContain("AGENTS.md ritsu-version mismatch: 0.0.0 != 8.0.0");
+    expect(output.output).toMatch(/AGENTS\.md ritsu-version mismatch: 0\.0\.0 != \d+\.\d+\.\d+/);
     expect(output.output).toContain("Summary: 1 Errors, 1 Warnings");
   });
 

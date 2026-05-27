@@ -82,7 +82,29 @@ export interface CoverageStats {
   branchesTrue?: CoverageMetric;
 }
 
+/**
+ * Test quality metrics for AI-generated code validation.
+ * Provides deeper insight than raw coverage %.
+ */
+export interface TestQualityMetrics {
+  total_tests: number;
+  tests_without_assertions: number;
+  snapshot_only: number;
+  assertion_density: number; // total assertions / total tests (target >= 2.0)
+  mock_gap: string[]; // external dependencies not mocked
+  contract_coverage: number; // % of design-sheet contracts with test assertions
+  quality_score: number; // 0-100 composite
+}
+
 export type CoverageByFile = Record<string, CoverageStats>;
+
+export interface ContractVerificationReport {
+  total: number;
+  verified: number;
+  partial: number;
+  failed: number;
+  summary: string;
+}
 
 export interface QualityGateSnapshot {
   recorded_at: string;
@@ -101,6 +123,8 @@ export interface QualityGateSnapshot {
     per_file: CoverageByFile;
     total?: CoverageStats;
   };
+  test_quality?: TestQualityMetrics;
+  contract_verification?: ContractVerificationReport;
   strict?: boolean;
   /** Waza-style verification claim check. Non-null when unverified claims are found. */
   verification_warning?: string;
@@ -246,6 +270,8 @@ export function buildQualityGateSnapshot(input: {
     summary: CoverageStats;
     per_file: CoverageByFile;
   };
+  test_quality?: TestQualityMetrics;
+  contract_verification?: ContractVerificationReport;
   strict?: boolean;
 }): QualityGateSnapshot {
   const overall = computeOverallStatus(input.lint.status, input.test.status);
@@ -263,6 +289,8 @@ export function buildQualityGateSnapshot(input: {
     worktree: input.worktree,
     lint: input.lint,
     test: input.test,
+    test_quality: input.test_quality,
+    contract_verification: input.contract_verification,
     coverage: input.coverage
       ? {
           ...input.coverage,
@@ -290,6 +318,22 @@ export function parseQualityGateSnapshot(
   const testOutput =
     typeof raw.test.output === "string" ? raw.test.output : "";
   const failures = Array.isArray(raw.test.failures) ? raw.test.failures : [];
+
+  // Parse test_quality
+  const testQualityRaw = raw.test_quality;
+  const testQuality: TestQualityMetrics | undefined = testQualityRaw && isRecord(testQualityRaw)
+    ? {
+        total_tests: Number(testQualityRaw.total_tests ?? 0),
+        tests_without_assertions: Number(testQualityRaw.tests_without_assertions ?? 0),
+        snapshot_only: Number(testQualityRaw.snapshot_only ?? 0),
+        assertion_density: Number(testQualityRaw.assertion_density ?? 0),
+        mock_gap: Array.isArray(testQualityRaw.mock_gap)
+          ? testQualityRaw.mock_gap.filter((m: unknown): m is string => typeof m === "string")
+          : [],
+        contract_coverage: Number(testQualityRaw.contract_coverage ?? 0),
+        quality_score: Number(testQualityRaw.quality_score ?? 0),
+      }
+    : undefined;
 
   let coverage: QualityGateSnapshot["coverage"] | undefined;
   if (raw.coverage !== undefined) {
@@ -370,6 +414,7 @@ export function parseQualityGateSnapshot(
       output: testOutput,
     },
     coverage,
+    test_quality: testQuality,
     strict: typeof raw.strict === "boolean" ? raw.strict : undefined,
   };
 }

@@ -10,17 +10,10 @@ import { runSync } from "./cli/sync.js";
 import { runMine } from "./cli/mine.js";
 import { runBootstrap } from "./cli/bootstrap.js";
 import { runCheck } from "./cli/check.js";
+import { runReport } from "./cli/report.js";
+import { runViolations } from "./cli/violations.js";
 
 
-// Re-exports for backward compatibility (used by tests)
-export {
-  findLatestCtxFile, parseJsonl, parseLooseJsonl,
-  readCoveragePct, readRuntimeMetadataFromPackageJson,
-  getArtifactTypes, getLatestTraceId, normalizeTraceId,
-  getTraceEvents, getOpenTraceIds, countTripleVerifiedTraces,
-  buildTraceSpanForest, summarizeTasks,
-  formatSkill, formatEvent,
-} from "./cli/shared.js";
 export { runDoctor, runDoctorHealth } from "./cli/doctor.js";
 export { runExport } from "./cli/export.js";
 export { runTrace } from "./cli/trace.js";
@@ -72,35 +65,46 @@ export function usage(detailed = false): string {
     "Usage: ritsu <command> [options]",
     "",
     "User Commands:",
-    "  ritsu bootstrap    # 初始化项目 (.mcp.json + ecosystem.json)",
-    "  ritsu doctor       # 项目健康检查",
-    "  ritsu doctor --ecosystem # MCP 生态验证",
-    "  ritsu doctor --signals   # 结构化审计信号 (PASS/WARN/FAIL)",
-    "  ritsu doctor --ai        # AI 工具配置检查",
-    "  ritsu trust        # 初始化/覆盖 HMAC 密钥",
-    "  ritsu verify <id>  # 校验指定 Trace 的 HMAC 签名",
-    "  ritsu mine --auto   # 自动偏好学习",
-    "  ritsu status        # 当前项目状态一览",
+    "  ritsu bootstrap    # Init project (.mcp.json + ecosystem.json)",
+    "  ritsu bootstrap --demo  # Generate demo data for quick try",
+    "  ritsu doctor       # Health check",
+    "  ritsu doctor --ecosystem # MCP ecosystem verification",
+    "  ritsu doctor --signals   # Structured audit (PASS/WARN/FAIL)",
+    "  ritsu doctor --ai        # AI tool configuration check",
+    "  ritsu trust        # Init/overwrite HMAC key",
+    "  ritsu verify <id>  # Verify trace HMAC signature",
+    "  ritsu mine --auto   # Auto preference learning",
+    "  ritsu report        # Agent behavior & cost report",
+    "  ritsu status        # Project status overview",
     "",
-    "Ritsu CLI — 4 阶段工作流: think → dev → review → hunt",
+    "Ritsu CLI — think → dev → review → deploy → hunt",
     "",
   ];
 
   if (detailed) {
     lines.push(
       "Development / Debug:",
-      "  ritsu cat <cid>      # 查看 ctx 事件",
-      "  ritsu trace <id>     # Trace 链路与 Span 树",
-      "  ritsu export         # 导出月度任务报告",
-      "  ritsu sync push/pull # .ritsu Git 同步",
-      "  ritsu mine --auto    # 自动偏好学习",
+      "  ritsu cat <cid>      # View ctx events",
+      "  ritsu trace <id>     # Trace links & span tree",
+      "  ritsu export         # Export monthly task report",
+      "  ritsu sync push/pull  # .ritsu Git sync",
+      "  ritsu mine --auto     # Auto preference learning",
+      "  ritsu report          # Agent behavior analytics",
+      "  ritsu violations      # List unresolved violations",
+      "  ritsu violations --per-file # Group by file",
+      "  ritsu violations --trend    # Monthly trend",
+      "  ritsu violations resolve <id> # Mark violation as fixed",
+      "  ritsu report --cost  # Cost breakdown by model",
+      "  ritsu report --trend # Quality trend over time",
+      "  ritsu report --json  # JSON output format",
+      "  ritsu report --month 3 # Specify months range",
       "",
     );
   }
 
   lines.push(
     "ENV:",
-    "  RITSU_PROJECT_ROOT       # 项目根目录（默认当前目录）",
+    "  RITSU_PROJECT_ROOT       # Project root (default: current dir)",
     "",
     "Use 'ritsu help' for all commands.",
   );
@@ -142,6 +146,8 @@ export function main() {
   if (cmd === "status") { runStatus(); return; }
   if (cmd === "cat") { runCat(cmdArgs); return; }
   if (cmd === "check") { runCheck(cmdArgs); return; }
+  if (cmd === "report") { runReport(cmdArgs); return; }
+  if (cmd === "violations") { runViolations(cmdArgs); return; }
 
 
   if (cmd === "trust") {

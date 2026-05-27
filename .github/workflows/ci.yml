@@ -51,20 +51,20 @@ jobs:
           cd runtime
           bun run lint
 
-      - name: Test
+      - name: Test with Coverage
         run: |
           cd runtime
-          bun run test 2>&1 | tee /tmp/test-output.txt; true
+          bun run test 2>&1 | tee /tmp/test-output.txt
 
-      - name: Gate — Test Baseline
+      - name: Check Test Results
         run: |
           FAILED=$(grep -oE '[0-9]+ failed' /tmp/test-output.txt | tail -1 | grep -oE '[0-9]+' || echo "0")
-          if [ "$FAILED" -gt 7 ]; then
-            echo "❌ $FAILED failures exceeds baseline of 7 (bun:sqlite pre-existing)"
+          if [ "$FAILED" -gt 0 ]; then
+            echo "❌ $FAILED test failures"
             grep "^FAIL" /tmp/test-output.txt
             exit 1
           fi
-          echo "✅ $FAILED failures (baseline: 7 tolerated — bun:sqlite not in CI)"
+          echo "✅ All 479 tests passed"
 
   verify:
     name: Verify

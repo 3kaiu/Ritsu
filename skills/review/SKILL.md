@@ -49,6 +49,22 @@ total_steps: 4
 
 - **P1**: 对账 `design-brief` / `dev-report`；红线扫描；可选 `ritsu_write_preference`。
 - **P2**: 三方对账 `design.contracts` ↔ `dev.gates` ↔ `assurance.verdict`；仅阅读 preflight 中的 high-risk chunks；违规 `emit_event(violation_detected)`。
+- **P2 契约验证**: 如果质量门禁中包含 `contract_verification` 数据，直接引用其 per-contract status 作为 assurance-sheet `contract_verdict` 的证据。对于 `partial` 状态的契约，在 assurance-sheet 中标记为 `needs_revision`。
+- **P2 违规对账**: Preflight 中包含来自 violation tracker 的未解决违规列表。审查时确认：
+  - 所有 open 违规是否确实已解决或误报
+  - 是否有新引入的违规未被 tracker 捕获
+  - 对于严重违规 (fatal/hard_stop)，确保在 assurance.verdict 中标记。
+
+#### 2b. 🔀 多 Agent 交叉审查
+
+当 dev 阶段使用了多 Agent (`ritsu_dispatch_task`)，review 阶段增加交叉审查检查：
+
+1. **检查 divergence_rate**: `ritsu_dispatch_task` 返回值中的 `divergence_rate` > 0.3 意味着超过 30% 的 Agent 输出有冲突，需要人工介入
+2. **审查冲突列表**: 逐条检查 `conflicts` 数组：
+   - `file_collision`: 同一文件被多个 Agent 修改 → 确认合并是否正确
+   - `quality_divergence`: Agent 间质量门禁结果不一致 → 重新运行质量门禁
+   - `design_divergence`: Agent 间对需求理解不一致 → 回退到 think 阶段
+3. **验证交叉审查结果**: `cross_reviews` 中若任何一个 reviewer 报告了 violation，需在 assurance-sheet 中记录
 
 #### 3. 产出与归档
 

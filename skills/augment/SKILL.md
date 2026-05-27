@@ -25,6 +25,13 @@ total_steps: 4
 ### 1. 契约与覆盖率对账
 - **读取设计单**：查找最近的 `design-sheet`，提取 `verification_plan.contracts`。
 - **获取覆盖率**：调用 `ritsu_run_quality_gates` 并解析其返回的 `coverage.per_file` 字段。
+- **测试质量分析**：调用 `ritsu_run_quality_gates(analyze_test_quality: true)` 获取 `test_quality` 指标。重点关注：
+  - `assertion_density < 2.0`：平均断言密度偏低，需要追加多场景断言
+  - `tests_without_assertions > 0`：存在无断言的测试用例，优先补断言
+  - `snapshot_only > 0`：存在仅依赖快照的测试，追加明确断言
+  - `mock_gap`：存在未 mock 的外部依赖，建议 mock 或集成测试
+  - `contract_coverage < 100`：部分契约没有对应测试断言，优先补
+- **优先级排序**：按 `test_quality.quality_score` 从低到高排序文件，优先处理低分模块。
 - **识别缺口**：对比 Contract 中的 `test_file_hint` 与实际文件的覆盖率。找出没有测试断言或者覆盖率偏低的 Contract。
 
 ### 2. 生成测试用例 (Generate)

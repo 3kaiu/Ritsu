@@ -14,6 +14,7 @@ import {
 import { getProjectRoot, ts, textResult, errorResult } from "./_utils.js";
 import { emitViolationEvent } from "../violation-events.js";
 import { autoCaptureOnEvent } from "../session-memory.js";
+import { autoCheckpoint } from "../context-lifecycle.js";
 
 export async function ritsu_emit_event(
   params: Record<string, unknown>,
@@ -153,6 +154,19 @@ export async function ritsu_emit_event(
 
   // 跨会话记忆：自动捕获关键事件（违规、偏好学习等）
   autoCaptureOnEvent(event);
+
+  // 在 step 完成和 artifact 写入时自动保存检查点
+  // 用于会话恢复（会话断裂后新会话可通过 preflight 恢复上下文）
+  if (eventType === "done" || eventType === "artifact_written" || eventType === "failed") {
+    try {
+      const skill = typeof event.skill === "string" ? event.skill : "";
+      if (skill) {
+        autoCheckpoint(root, skill, typeof params.task_goal === "string" ? params.task_goal : "");
+      }
+    } catch {
+      // checkpoint is best-effort, never block event write
+    }
+  }
 
   return textResult(
     JSON.stringify({

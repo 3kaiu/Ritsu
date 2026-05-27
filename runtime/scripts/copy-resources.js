@@ -9,7 +9,7 @@
  * self-contained, enabling zero-clone 'npx -y ritsu-mcp-server' execution.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,5 +52,12 @@ copyFolderSync(resolve(repoRoot, "_shared"), resolve(distDir, "_shared"));
 // 2. Copy rules
 console.log("[copy-resources] Bundling rules templates to dist/rules...");
 copyFolderSync(resolve(repoRoot, "rules"), resolve(distDir, "rules"));
+
+// 3. Remove test mocks from dist (not needed for production)
+const mockDir = resolve(distDir, "__mocks__");
+if (existsSync(mockDir)) {
+  rmSync(mockDir, { recursive: true, force: true });
+  console.log("[copy-resources] Removed __mocks__ from dist");
+}
 
 console.log("[copy-resources] All static resources bundled successfully!");
