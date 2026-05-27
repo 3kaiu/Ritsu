@@ -1,127 +1,60 @@
 # Ritsu — AI Code Quality Gate
 
-Ritsu is a policy engine + quality gate + session recovery system for AI coding agents. It runs alongside Claude Code, Cursor, or Codex CLI and ensures AI-generated code is correct, secure, and consistent.
+Ritsu is a policy engine + quality gates + session recovery for AI coding agents.
+It runs alongside Claude Code, Cursor, or Codex CLI.
 
-## Quick Start
+Ritsu 是 AI 编码代理的策略引擎 + 质量门禁 + 会话恢复系统。
+
+## 8 Slash Commands / 指令
+
+| Command | Stage | 阶段 |
+|---------|-------|------|
+| `/r-think` | Design | 架构分析与设计 |
+| `/r-dev` | Code | 策略强制编码 |
+| `/r-review` | Review | 质量验收 |
+| `/r-deploy` | Deploy | 部署门禁 |
+| `/r-hunt` | Debug | 根因诊断 |
+| `/r-augment` | Tests | 补测引擎 |
+| `/r-init` | Init | 项目初始化 |
+| `/r-freestyle` | Q&A | 快速问答 |
+
+## Quick Start / 快速开始
 
 ```bash
-# 1. Add Ritsu to your project
 npx skills add 3kaiu/Ritsu -a claude-code -g -y
-
-# 2. Check the environment
 ritsu doctor
-
-# 3. Initialize in Claude Code
-/r-init
-
-# Or try the demo mode (no project needed):
-ritsu bootstrap --demo
-ritsu violations
-ritsu report
+ritsu bootstrap --demo  # Try demo / 体验 demo
+ritsu violations --open # List violations / 查看违规
 ```
 
-## Slash Commands
-
-| Command | Stage | What it produces |
-|---------|-------|-----------------|
-| `/r-think` | Design | Architecture analysis, design-sheet with contracts |
-| `/r-dev` | Code | Policy-enforced code, quality gates passed |
-| `/r-review` | Review | Assurance sheet: mergeability + deployability |
-| `/r-deploy` | Deploy | Rollback plan, canary strategy, smoke tests |
-| `/r-hunt` | Debug | Root cause diagnosis with evidence chain |
-| `/r-augment` | Tests | Coverage gap analysis + targeted test generation |
-| `/r-init` | Init | Project baseline (AGENTS.md, ecosystem config) |
-| `/r-freestyle` | Q&A | Direct answer, no workflow |
-
-## How It Works
-
-When an AI coding agent runs a slash command, Ritsu intercepts the workflow:
+## Architecture / 架构
 
 ```
-Agent writes code → Policy engine checks (11 detectors)
-                  → Quality gates (lint + test + coverage)
-                  → Checkpoint saved (for session recovery)
-                  → Violation tracked (if any)
+Agent writes code → Policy engine (11 detectors) → Quality gates → Session checkpoint
+                  → Violation tracker → Contract verification → Agent analytics
 ```
 
-The policy engine catches what the agent misses: scope creep (AP-4), security vulnerabilities (R-6), architecture drift (R-8), credential leaks (R-3), contract changes (R-4), and 15 more anti-patterns.
+## Prompt Caching Protocol / 缓存协议
 
-## Architecture
+3-stage topology:
+1. **Stage 1 (Static Prefix)**: `anti-patterns.yaml` + `mcp-tools.yaml`
+2. **Stage 2 (Skill Guide)**: The specific `SKILL.md`
+3. **Stage 3 (Suffix Zone)**: Dynamic data, marked `_suffix: true`
 
-```
-skills/             8 SKILL.md instruction files
-rules/              20 anti-patterns + ast-grep + guardrails
-_shared/            MCP tool schemas + JSON Schema + protocols
-runtime/src/
-  handlers/         24 MCP tool handlers
-  policy/           11 detectors + blast radius + import graph
-  orchestration/    preflight, diff-inspect, multi-agent, architecture
-  cli/              doctor, bootstrap, report, violations, ...
-```
+**Critical**: Do not mix dynamic data into Stage 1 or 2. All dynamic context must use `_suffix: true`.
 
-### Prompt Caching Protocol
+## Quality Gates / 质量门禁
 
-Ritsu uses a 3-stage prompt topology for cache efficiency:
+`ritsu_run_quality_gates` runs lint + test + coverage check. Core modules (auth, payment) require 100% coverage; periphery passes on compilation.
 
-1. **Stage 1 (Static Prefix)** — Loaded once, cached across calls:
-   - `rules/anti-patterns.yaml` (always)
-   - `_shared/mcp-tools.yaml` (always)
-   - `rules/dev-guardrails.yaml` (only during `/r-dev`)
-   - `rules/review-redlines.yaml` (only during `/r-review`)
+## Session Recovery / 会话恢复
 
-2. **Stage 2 (Skill Guide)** — The specific SKILL.md for the current command
+Auto-saves checkpoint at every step. On next session, injects recovery context.
 
-3. **Stage 3 (Suffix Zone)** — Dynamic data, marked with `_suffix: true`:
-   - Context, diff, artifacts, policy results, recovery prompts
+## Troubleshooting / 故障排除
 
-**Critical**: Do not mix dynamic data into Stage 1 or 2. Cache prefix data must remain static across calls. All dynamic context must go in Stage 3 with `_suffix: true`.
-
-## Project Baseline (AGENTS.md)
-
-After `/r-init`, the project has an `AGENTS.md` file with a YAML configuration block:
-
-```yaml
-ritsu-version: 8.6.0
-domain: fullstack
-host_profile: claude-code
-tech_fingerprints:
-  - bun
-  - typescript
-lint_cmd: bun run lint
-test_cmd: bun run test
-```
-
-This defines the project's tech stack, domain, and test/lint commands used by quality gates.
-
-## Quality Gates
-
-`ritsu_run_quality_gates` runs three checks:
-
-1. **Lint** — Runs the project's linter
-2. **Test** — Runs tests with coverage
-3. **Coverage Threshold** — Core modules (auth, payment, crypto) require 100% line coverage; periphery passes on compilation
-
-Gate results are saved to `.ritsu/last-quality-gate.json` and checked during `/r-dev` completion.
-
-## Session Recovery
-
-If a session ends unexpectedly (timeout, crash, terminal close), the next session auto-detects the interruption and injects a recovery prompt:
-
-```
-📋 Session Recovery (hot)
-Skill: dev | Step 3/5
-Done: created models, implemented routes
-Pending: add tests, quality gates, deliver
-Active violations: none
-Working files: models/order.ts, routes/order.ts
-```
-
-## Troubleshooting
-
-| Problem | Check |
-|---------|-------|
-| `ritsu doctor` fails | Run `bun --version` (need >=1.3.0). Check `.ritsu/` directory exists. |
-| Slash commands not loading | Restart Claude Code after `skills add`. Check `.claude/settings.json` for MCP entry. |
-| Quality gates fail | Run lint/tests separately to confirm they pass outside Ritsu. |
-| Policy violation unclear | Run `ritsu violations` for details. Each violation has evidence (file:line). |
-| Demo data not showing | Run `ritsu bootstrap --demo` then `ritsu violations --open`. |
+| Problem / 问题 | Check / 检查 |
+|---------------|-------------|
+| `ritsu doctor` fails | `bun --version` >= 1.3.0 |
+| Slash commands not loading | Restart Claude Code, check `.mcp.json` |
+| Policy violation unclear | `ritsu violations --open` for details |
