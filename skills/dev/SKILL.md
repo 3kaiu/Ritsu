@@ -93,26 +93,46 @@ ritsu_dispatch_task(agents: 3, cross_review: true)
 - **单 Agent**: `ritsu_run_quality_gates`（已内嵌 policy preflight；传入当前 trace/span/correlation_id）。未通过禁止交付。
 - **多 Agent**: 每个 Agent 独立运行质量门禁。`ritsu_dispatch_task` 结果中的 `all_quality_gates_passed` 是所有 Agent 的门禁汇总。若存在 `quality_divergence` 类型的冲突，需人工介入。
 
-#### 4b. 🔍 视觉还原检查（可选，前端 P2 专用）
+#### 4b. 🔍 视觉还原管线（可选，前端 P2 专用）
 
-如果 `fe-sight` MCP 服务器可用且项目有设计稿，在质量门禁后做视觉检查：
+当项目有设计稿且 `fe-sight` MCP 服务器可用时，在 /r-dev 中整合视觉还原检查。
+
+**完整管线**（三步协作）：
 
 ```
-fe_sight_check(design: "设计稿.png", url: "http://localhost:5173")
+Step 1 — 设计分析
+  fe_sight_analyze_design(
+    figmaKey: "FILE_ID",
+    figmaToken: "PAT"
+  )
+  → 返回结构化设计规范（布局意图 + 颜色 + 字体 + 间距）
+
+Step 2 — 带设计约束的开发
+  ritsu_dispatch_task(
+    agents: 3,
+    design_analysis: <上一步的输出>
+  )
+  → 每个 Agent 的 prompt 中包含 Visual Design Spec
+  → 代码使用设计规范中的精确值
+
+Step 3 — 视觉验证
+  fe_sight_check(
+    design: "设计图.png",
+    url: "http://localhost:5173"
+  )
+  → 还原度 ≥ 95% → 通过
+  → 还原度 < 95% → 修复 → 回到 Step 3
 ```
 
-- 还原度 ≥ 95% → 通过，进入交付
-- 还原度 < 95% → 修复 CSS 差异后重检
-- fe-sight 不在 MCP 列表中则跳过（非硬依赖）
+fe-sight 是独立 MCP 服务器，在 `.mcp.json` 中注册：
 
-fe-sight 是独立 MCP 服务器，不包含在 Ritsu 中。安装方式：
-
-```bash
-npm install -g fe-sight
-npx playwright install chromium
+```json
+{
+  "fe-sight": { "command": "npx", "args": ["-y", "fe-sight"] }
+}
 ```
 
-然后在 `.mcp.json` 中添加 `fe-sight` 条目即可。
+安装：`npm install fe-sight && npx playwright install chromium`
 
 #### 5. 交付
 

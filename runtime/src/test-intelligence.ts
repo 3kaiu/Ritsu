@@ -63,7 +63,7 @@ const ASSERTION_ENTRY_PATTERNS = [
   /\bshould\s*\.\s*(?:equal|eql|be\.\w+|not\.\w+|ok|true|false|throw|resolve|reject)\s*\(/g,
 ];
 
-const TEST_BLOCK_PATTERNS = [
+const TEST_BLOCK_PATTERNS_ = [
   /\bit\s*\(/g,
   /\btest\s*\(/g,
   /\bdescribe\s*\(/g,
@@ -75,7 +75,7 @@ const SNAPSHOT_PATTERNS = [
   /\btoMatchInlineSnapshot\s*\(/g,
 ];
 
-const MOCK_PATTERNS = [
+const MOCK_PATTERNS_ = [
   /jest\.mock\s*\(/g,
   /vi\.mock\s*\(/g,
   /jest\.spyOn\s*\(/g,

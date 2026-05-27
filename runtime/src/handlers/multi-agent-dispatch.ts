@@ -111,6 +111,20 @@ export async function ritsu_dispatch_task(
   );
   const crossReview = params.cross_review !== false;
   const traceId = params.trace_id ? String(params.trace_id) : undefined;
+  const rawDesignAnalysis = params.design_analysis;
+
+  // Parse design analysis from fe-sight (structured visual spec)
+  let designAnalysis: import("../orchestration/multi-agent.js").DesignAnalysisData | undefined;
+  if (rawDesignAnalysis && typeof rawDesignAnalysis === "object") {
+    const da = rawDesignAnalysis as Record<string, unknown>;
+    designAnalysis = {
+      layout: typeof da.layout === "string" ? da.layout : undefined,
+      styleSystem: typeof da.styleSystem === "string" ? da.styleSystem : undefined,
+      colors: Array.isArray(da.colors) ? da.colors as import("../orchestration/multi-agent.js").DesignTokenValue[] : undefined,
+      typography: Array.isArray(da.typography) ? da.typography as import("../orchestration/multi-agent.js").TypographyTokenValue[] : undefined,
+      spacing: Array.isArray(da.spacing) ? da.spacing as import("../orchestration/multi-agent.js").DesignTokenValue[] : undefined,
+    };
+  }
 
   // Find design-sheet
   const designSheet = designSheetPath
@@ -134,6 +148,7 @@ export async function ritsu_dispatch_task(
       designSheetPath: designSheet.path,
       agentCount,
       crossReview,
+      designAnalysis,
     },
     (prompt: string, label: string) => launchAndCollect(prompt, label, traceId),
   );

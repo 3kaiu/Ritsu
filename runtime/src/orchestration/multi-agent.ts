@@ -21,6 +21,31 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { globSync } from "fast-glob";
 
+// ─── Design Analysis Type (from fe-sight) ─────────────────────
+
+export interface DesignTokenValue {
+  name: string;
+  value: string;
+}
+
+export interface TypographyTokenValue {
+  name: string;
+  fontSize: number;
+  fontWeight: number;
+  fontFamily: string;
+  lineHeight: number;
+}
+
+export interface DesignAnalysisData {
+  layout?: string;        // Human-readable layout structure description
+  colors?: DesignTokenValue[];
+  typography?: TypographyTokenValue[];
+  spacing?: DesignTokenValue[];
+  shadows?: DesignTokenValue[];
+  borderRadius?: DesignTokenValue[];
+  styleSystem?: string;
+}
+
 // ─── Types ────────────────────────────────────────────────────
 
 export interface Contract {
@@ -174,7 +199,7 @@ export interface TaskAnalysis {
  *   - Contracts with tight file coupling → splitting would cause conflicts
  *   - Simple refactors → overhead of coordination exceeds benefit
  */
-export function analyzeTask(designSheet: DesignSheet): TaskAnalysis {
+export function analyzeTask(designSheet: DesignSheet, designAnalysis?: DesignAnalysisData): TaskAnalysis {
   const contracts = designSheet.contracts;
   const count = contracts.length;
 
@@ -197,7 +222,7 @@ export function analyzeTask(designSheet: DesignSheet): TaskAnalysis {
 
   if (count >= 3 || (count >= 2 && multiDomain)) {
     // Splittable: build sub-tasks
-    const subTasks = buildSubTasks(designSheet, Math.min(count, 4));
+    const subTasks = buildSubTasks(designSheet, Math.min(count, 4), designAnalysis);
     const agentCount = Math.min(subTasks.length, 4);
 
     return {
@@ -237,6 +262,7 @@ export function analyzeTask(designSheet: DesignSheet): TaskAnalysis {
 export function buildSubTasks(
   designSheet: DesignSheet,
   agentCount: number,
+  designAnalysis?: DesignAnalysisData,
 ): SubTask[] {
   const contracts = designSheet.contracts;
   if (contracts.length === 0) return [];
@@ -244,7 +270,7 @@ export function buildSubTasks(
     // Single agent gets everything
     return [{
       contract: { id: "all", description: "Full task", file_hint: "" },
-      prompt: buildAgentPrompt(designSheet, contracts, "all"),
+      prompt: buildAgentPrompt(designSheet, contracts, "all", designAnalysis),
       target_files: extractTargetFiles(designSheet.content),
       dependencies: [],
     }];
@@ -300,7 +326,7 @@ export function buildSubTasks(
         description: `${g.domain}: ${g.contracts.map((c) => c.id).join(", ")}`,
         file_hint: g.contracts.map((c) => c.file_hint).filter(Boolean).join(", "),
       },
-      prompt: buildAgentPrompt(designSheet, g.contracts, g.domain),
+      prompt: buildAgentPrompt(designSheet, g.contracts, g.domain, designAnalysis),
       target_files: extractTargetFiles(designSheet.content, g.domain),
       dependencies: [],
     }));
@@ -323,7 +349,7 @@ export function buildSubTasks(
         description: `Contracts ${ids.join(", ")}`,
         file_hint: slice.map((c) => c.file_hint).filter(Boolean).join(", "),
       },
-      prompt: buildAgentPrompt(designSheet, slice, `agent-${i + 1}`),
+      prompt: buildAgentPrompt(designSheet, slice, `agent-${i + 1}`, designAnalysis),
       target_files: extractTargetFiles(designSheet.content),
       dependencies: [],
     });
@@ -348,8 +374,8 @@ export function buildAgentPrompt(
   designSheet: DesignSheet,
   contracts: Contract[],
   agentLabel: string,
+  designAnalysis?: DesignAnalysisData,
 ): string {
-  // Extract key sections from design-sheet
   const intakeMatch = designSheet.content.match(/## 1\. 任务识别.*?(?=## 2\.|$)/s);
   const planMatch = designSheet.content.match(/## 2\. 方案与边界.*?(?=## 3\.|$)/s);
   const goal = intakeMatch?.[0]?.split("\n")
@@ -368,6 +394,49 @@ export function buildAgentPrompt(
 
   const targetFiles = extractTargetFiles(designSheet.content).join(", ");
 
+  // Build visual design spec section if analysis data is available
+  const designSpecLines: string[] = [];
+  if (designAnalysis) {
+    designSpecLines.push(``, `## Visual Design Spec`, ``);
+
+    if (designAnalysis.layout) {
+      designSpecLines.push(`### Layout Structure`);
+      designSpecLines.push(designAnalysis.layout);
+      designSpecLines.push(``);
+    }
+
+    if (designAnalysis.colors && designAnalysis.colors.length > 0) {
+      designSpecLines.push(`### Color Palette`);
+      for (const c of designAnalysis.colors) {
+        designSpecLines.push(`- \`${c.name}\`: ${c.value}`);
+      }
+      designSpecLines.push(``);
+    }
+
+    if (designAnalysis.typography && designAnalysis.typography.length > 0) {
+      designSpecLines.push(`### Typography`);
+      for (const t of designAnalysis.typography) {
+        designSpecLines.push(`- ${t.name}: ${t.fontSize}px/${t.lineHeight} ${t.fontWeight}w ${t.fontFamily}`);
+      }
+      designSpecLines.push(``);
+    }
+
+    if (designAnalysis.spacing && designAnalysis.spacing.length > 0) {
+      designSpecLines.push(`### Spacing`);
+      for (const s of designAnalysis.spacing) {
+        designSpecLines.push(`- ${s.name}: ${s.value}`);
+      }
+      designSpecLines.push(``);
+    }
+
+    if (designAnalysis.styleSystem) {
+      designSpecLines.push(`Style system: ${designAnalysis.styleSystem}`);
+      designSpecLines.push(``);
+    }
+
+    designSpecLines.push(`**Important**: Follow these design tokens exactly. Do not invent colors, font sizes, or spacing values.`);
+  }
+
   return [
     `# Task: ${agentLabel}`,
     ``,
@@ -384,6 +453,8 @@ export function buildAgentPrompt(
     `- Use the project's existing coding style and conventions.`,
     `- Run quality gates after implementation.`,
     `- Write tests for all new code.`,
+    ``,
+    ...designSpecLines,
     ``,
     `## Shared Constraints (must be followed by all agents)`,
     `- Do not modify files outside your assigned contracts.`,
@@ -644,6 +715,8 @@ export interface DispatchOptions {
   contracts?: string[];
   crossReview?: boolean;
   timeoutMs?: number;
+  /** Structured design analysis from fe-sight (layout intents, tokens, etc.) */
+  designAnalysis?: DesignAnalysisData;
 }
 
 /**
@@ -663,7 +736,7 @@ export async function orchestrateMultiAgent(
   options: DispatchOptions,
   launchFn: (prompt: string, label: string) => Promise<AgentResult>,
 ): Promise<UnifiedResult> {
-  const { projectRoot, designSheetPath, agentCount = 2, crossReview = true } = options;
+  const { projectRoot, designSheetPath, agentCount = 2, crossReview = true, designAnalysis } = options;
 
   // Load design-sheet
   const designSheet = designSheetPath
@@ -682,7 +755,7 @@ export async function orchestrateMultiAgent(
     };
   }
 
-  const analysis = analyzeTask(designSheet);
+  const analysis = analyzeTask(designSheet, designAnalysis);
   if (!analysis.splittable || analysis.sub_tasks.length === 0) {
     return {
       agents: [],

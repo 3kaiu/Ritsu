@@ -18,7 +18,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { color } from "./shared.js";
 import {
-  readStore,
+   
   getOpenViolations,
   getViolationsByFile,
   getViolationTrend,
@@ -42,7 +42,6 @@ export function runViolations(cmdArgs: string[]): void {
   const showJson = cmdArgs.includes("--json");
   const showTrend = cmdArgs.includes("--trend");
   const showPerFile = cmdArgs.includes("--per-file");
-  const showOpen = cmdArgs.includes("--open") || !cmdArgs.some((a) => a.startsWith("--") || a === "resolve");
   const resolveId = cmdArgs[0] === "resolve" ? cmdArgs[1] : null;
   const ruleFilter = cmdArgs.includes("--rule") ? cmdArgs[cmdArgs.indexOf("--rule") + 1] : null;
 
