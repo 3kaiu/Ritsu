@@ -82,7 +82,7 @@ export class Database {
     return new Uint8Array(0);
   }
 
-  query<_T = unknown>(_sql: string): unknown[] {
+  query(sql: string): unknown[] {
     return [];
   }
 }

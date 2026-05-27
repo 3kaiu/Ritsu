@@ -20,7 +20,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { resolve, basename } from "node:path";
 import { readAllEntries } from "./ctx-reader.js";
-import { getOpenViolations, captureViolation } from "./violation-tracker.js";
+import { getOpenViolations } from "./violation-tracker.js";
 
 // ─── Types ────────────────────────────────────────────────────
 
