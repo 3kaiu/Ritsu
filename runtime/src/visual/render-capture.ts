@@ -2,7 +2,7 @@
  * fe-sight — Render Capture
  *
  * Renders a URL with Playwright and saves the result to disk:
- *   .fe-sight/captures/{capture_id}/
+ *   .ritsu/captures/{capture_id}/
  *     screenshot.png   — full page PNG
  *     dom.json         — DOM tree with computed styles
  *     meta.json        — URL, viewport, timestamp
@@ -20,18 +20,17 @@ import type { RenderedElement, RenderedSnapshot } from "./types.js";
 
 // ─── In-browser DOM extraction (runs inside page.evaluate) ────
 
-const CSS_PROPS = [
-  "font-size", "font-weight", "font-family", "line-height", "letter-spacing",
-  "color", "background-color", "border-color",
-  "padding", "margin",
-  "border-width", "border-radius",
-  "width", "height",
-  "display", "flex-direction", "align-items", "justify-content",
-  "box-shadow", "opacity", "gap", "text-align",
-  "grid-template-columns", "grid-template-rows",
-] as const;
-
 function extractDomTree(): RenderedElement[] {
+  const CSS_PROPS = [
+    "font-size", "font-weight", "font-family", "line-height", "letter-spacing",
+    "color", "background-color", "border-color",
+    "padding", "margin",
+    "border-width", "border-radius",
+    "width", "height",
+    "display", "flex-direction", "align-items", "justify-content",
+    "box-shadow", "opacity", "gap", "text-align",
+    "grid-template-columns", "grid-template-rows",
+  ];
   const EXCLUDED_TAGS = new Set(["script", "style", "link", "meta", "noscript", "br", "hr"]);
   const SIGNIFICANT_TAGS = new Set([
     "div", "span", "p", "h1", "h2", "h3", "h4", "h5", "h6",
@@ -128,7 +127,7 @@ export interface CaptureError {
 // ─── Capture Directory ────────────────────────────────────────
 
 function getCaptureDir(projectRoot: string): string {
-  return resolve(projectRoot, ".fe-sight", "captures");
+  return resolve(projectRoot, ".ritsu", "captures");
 }
 
 function captureHash(url: string, viewport: string): string {
