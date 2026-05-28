@@ -7,11 +7,18 @@
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
-let hasPlaywright = true;
+// Check if Playwright browser binaries are installed
+// (playwright npm package may be present, but browser binaries may not be)
+let hasPlaywright = false;
 try {
   await import("playwright");
+  const { existsSync } = await import("node:fs");
+  const { homedir } = await import("node:os");
+  const home = homedir();
+  hasPlaywright = existsSync(`${home}/.cache/ms-playwright`) ||
+                  existsSync(`${home}/Library/Caches/ms-playwright`);
 } catch {
-  hasPlaywright = false;
+  // Playwright not installed — test will skip
 }
 
 const describePW = hasPlaywright ? describe : describe.skip;
