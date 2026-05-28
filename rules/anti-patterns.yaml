@@ -257,4 +257,17 @@ review:
       - wrong: "circular dependency: api → services → api"
         right: "提取公共类型到 shared/ 模块，消除循环依赖"
 
+  - id: V-1
+    name: Visual fidelity — layout intent mismatch
+    pattern: "渲染的 CSS display/layout 与设计意图不一致"
+    severity: WARN
+    detector:
+      type: visual_fidelity
+      target: diff
+    examples:
+      - wrong: "设计使用 flex 布局但渲染使用 block"
+        right: "使用 display:flex 匹配设计意图"
+      - wrong: "设计使用 grid 布局但渲染使用 flex"
+        right: "使用 display:grid 匹配设计意图"
+
 dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"
