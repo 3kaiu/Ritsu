@@ -23,6 +23,7 @@ import { ritsu_coordination } from "./coordination.js";
 import { ritsu_write_file } from "./write-file.js";
 import { ritsu_launch_agent } from "./launch-agent.js";
 import { ritsu_dispatch_task } from "./multi-agent-dispatch.js";
+import { ritsu_visual_check } from "./visual-check.js";
 
 // ─── Handler Registry ───────
 
@@ -54,4 +55,5 @@ export const registerHandlers: Record<
   write_file: ritsu_write_file,
   ritsu_launch_agent,
   ritsu_dispatch_task,
+  ritsu_visual_check,
 };

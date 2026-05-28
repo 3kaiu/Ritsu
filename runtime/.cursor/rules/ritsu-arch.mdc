@@ -4,7 +4,7 @@ globs: "*"
 ---
 # Architecture Context — dev stage
 
-**Modules**: 11 | **Cross-module deps**: 0
+**Modules**: 12 | **Cross-module deps**: 0
 
 ## Dependency Graph
 

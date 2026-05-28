@@ -221,6 +221,48 @@ tools:
         active_count: { type: integer }
         agents: { type: array }
 
+  - name: ritsu_visual_check
+    description: "Visual fidelity check — renders a URL with Playwright and compares against a design image. Returns pixel diff %, style differences, and layout intent mismatches. Requires Playwright (optional dependency)."
+    call_template:
+      tool: ritsu_visual_check
+      params:
+        url: "http://localhost:5173"
+        design_image: "design.png"
+    input:
+      url:
+        type: string
+        required: true
+        description: "Local dev server URL to render"
+      design_image:
+        type: string
+        required: false
+        description: "Path to design PNG file"
+      design_prompt:
+        type: string
+        required: false
+        description: "Describe the design if no image available"
+      viewport_width:
+        type: integer
+        required: false
+        description: "Viewport width (default: 1440)"
+      viewport_height:
+        type: integer
+        required: false
+        description: "Viewport height (default: 900)"
+      force:
+        type: boolean
+        required: false
+        description: "Force re-capture (default: false)"
+    output_schema:
+      type: object
+      required: [ok, score]
+      properties:
+        ok: { type: boolean }
+        score: { type: integer }
+        pixel_diff_pct: { type: number }
+        style_issues: { type: object }
+        capture_id: { type: string }
+
   - name: ritsu_launch_agent
     description: "Launch an AI coding agent subprocess (Claude Code or Codex) with a focused prompt. Used internally by ritsu_dispatch_task for multi-agent orchestration."
     call_template:
