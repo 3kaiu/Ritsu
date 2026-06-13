@@ -14,7 +14,7 @@
  * v8.2.0
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   analyzeTask,
   buildSubTasks,
@@ -24,6 +24,7 @@ import {
   mergeResults,
   findLatestDesignSheet,
   extractTargetFiles,
+  orchestrateMultiAgent,
   type DesignSheet,
   type AgentResult,
   type Contract,
@@ -340,5 +341,89 @@ describe("mergeResults", () => {
     ];
     const merged = mergeResults(results, []);
     expect(merged.divergence_rate).toBe(0);
+  });
+});
+
+describe("orchestrateMultiAgent auto-judgment and fallback", () => {
+  it("should run multi-agent parallel flow when splittable", async () => {
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+
+    const tempPath = join(tmpdir(), `design-sheet-${Date.now()}-multi.md`);
+    writeFileSync(tempPath, multiContractSheet.content);
+
+    try {
+      const launchFn = vi.fn().mockResolvedValue({
+        agent_id: "agent-mock",
+        sub_task_id: "subtask-1",
+        contract_id: "C1",
+        ok: true,
+        output: "Success",
+        artifacts: [],
+        modified_files: ["src/a.ts"],
+        violations: [],
+        quality_gates_passed: true,
+        duration_ms: 100,
+      });
+
+      const result = await orchestrateMultiAgent(
+        {
+          projectRoot: tmpdir(),
+          designSheetPath: tempPath,
+          agentCount: 2,
+          crossReview: false,
+        },
+        launchFn
+      );
+
+      expect(result.agents.length).toBe(2);
+      expect(launchFn).toHaveBeenCalledTimes(2);
+      expect(result.unified_summary).toContain("Multi-Agent Auto-Judgment Routing");
+      expect(result.unified_summary).toContain("splittability is **true**");
+    } finally {
+      try { rmSync(tempPath); } catch {}
+    }
+  });
+
+  it("should run single-agent fallback flow when not splittable", async () => {
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+
+    const tempPath = join(tmpdir(), `design-sheet-${Date.now()}-single.md`);
+    writeFileSync(tempPath, singleContractSheet.content);
+
+    try {
+      const launchFn = vi.fn().mockResolvedValue({
+        agent_id: "agent-mock",
+        sub_task_id: "subtask-1",
+        contract_id: "C1",
+        ok: true,
+        output: "Success",
+        artifacts: [],
+        modified_files: ["src/a.ts"],
+        violations: [],
+        quality_gates_passed: true,
+        duration_ms: 100,
+      });
+
+      const result = await orchestrateMultiAgent(
+        {
+          projectRoot: tmpdir(),
+          designSheetPath: tempPath,
+          agentCount: 2,
+          crossReview: false,
+        },
+        launchFn
+      );
+
+      expect(result.agents.length).toBe(1);
+      expect(launchFn).toHaveBeenCalledTimes(1);
+      expect(result.unified_summary).toContain("Multi-Agent Auto-Judgment Routing");
+      expect(result.unified_summary).toContain("splittability is **false**");
+    } finally {
+      try { rmSync(tempPath); } catch {}
+    }
   });
 });

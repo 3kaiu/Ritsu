@@ -135,9 +135,7 @@ export function findLatestDesignSheet(projectRoot: string): DesignSheet | null {
   // Format: | C1 | {description} | {test_file_hint} |
   const contractRegex = /\|\s*(C\d+|OS-\S+)\s*\|\s*([^|]+)\s*\|\s*([^|]*)\s*\|/g;
   const contracts: Contract[] = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = contractRegex.exec(content)) !== null) {
+  for (const match of content.matchAll(contractRegex)) {
     contracts.push({
       id: match[1].trim(),
       description: match[2].trim(),
@@ -162,9 +160,7 @@ export function readDesignSheet(path: string): DesignSheet | null {
 
   const contractRegex = /\|\s*(C\d+|OS-\S+)\s*\|\s*([^|]+)\s*\|\s*([^|]*)\s*\|/g;
   const contracts: Contract[] = [];
-  let match: RegExpExecArray | null;
-
-  while ((match = contractRegex.exec(content)) !== null) {
+  for (const match of content.matchAll(contractRegex)) {
     contracts.push({
       id: match[1].trim(),
       description: match[2].trim(),
@@ -484,9 +480,7 @@ export function extractTargetFiles(
 
   // Match file paths in markdown code blocks and list items
   const fileRegex = /`([^`]+\.(?:ts|tsx|js|jsx|py|go|rs|vue|css|scss|json))`/g;
-  let match;
-
-  while ((match = fileRegex.exec(content)) !== null) {
+  for (const match of content.matchAll(fileRegex)) {
     const file = match[1];
     if (!files.includes(file)) {
       // Domain filter
@@ -756,32 +750,28 @@ export async function orchestrateMultiAgent(
   }
 
   const analysis = analyzeTask(designSheet, designAnalysis);
-  if (!analysis.splittable || analysis.sub_tasks.length === 0) {
-    return {
-      agents: [],
-      cross_reviews: [],
-      conflicts: [],
-      divergence_rate: 0,
-      unified_summary: `Not splittable: ${analysis.reason}. Use standard /r-dev path.`,
-      all_quality_gates_passed: false,
-      total_duration_ms: 0,
-    };
-  }
+  const shouldSplit = analysis.splittable && agentCount > 1;
+  const targetAgentCount = shouldSplit ? Math.min(agentCount, analysis.recommended_agents) : 1;
 
-  // Limit agents
-  const actualAgentCount = Math.min(agentCount, analysis.recommended_agents);
-  const subTasks = analysis.sub_tasks.slice(0, actualAgentCount);
+  console.error(`[ritsu-orchestrator] Task auto-judgment: splittable=${analysis.splittable}, recommended_agents=${analysis.recommended_agents}, requestedAgentCount=${agentCount}. Routing to ${shouldSplit ? "MULTI-AGENT" : "SINGLE-AGENT"} path with targetAgentCount=${targetAgentCount}.`);
+
+  const subTasks = shouldSplit
+    ? analysis.sub_tasks.slice(0, targetAgentCount)
+    : buildSubTasks(designSheet, 1, designAnalysis);
 
   // Launch agents in parallel
   const agentResults = await Promise.all(
     subTasks.map((task, i) =>
-      launchFn(task.prompt, `agent-${i + 1}(${task.contract.id})`),
+      launchFn(
+        task.prompt,
+        shouldSplit ? `agent-${i + 1}(${task.contract.id})` : `agent-single(all)`
+      )
     ),
   );
 
   // Cross-review
   let crossReviews: CrossReview[] = [];
-  if (crossReview && agentResults.length >= 2) {
+  if (crossReview && shouldSplit && agentResults.length >= 2) {
     const reviewPrompts = buildCrossReviewPrompts(agentResults);
     const reviewResults = await Promise.all(
       reviewPrompts.map(async (rp) => {
@@ -805,6 +795,15 @@ export async function orchestrateMultiAgent(
   // Merge
   const merged = mergeResults(agentResults, conflicts);
   merged.cross_reviews = crossReviews;
+
+  // Add auto-routing notice to unified summary
+  const routingNotice = [
+    `> [!NOTE]`,
+    `> **Multi-Agent Auto-Judgment Routing**: Task splittability is **${analysis.splittable}** (reason: ${analysis.reason}).`,
+    `> Automatically routed to **${shouldSplit ? "Parallel Multi-Agent" : "Single Agent Fallback"}** execution with **${targetAgentCount}** agent(s).`,
+    ``,
+  ].join("\n");
+  merged.unified_summary = routingNotice + merged.unified_summary;
 
   return merged;
 }
