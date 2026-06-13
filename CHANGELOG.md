@@ -4,6 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [8.9.0] - 2026-06-13
+
+### Added
+- **Autopilot Loop Engine & Tri-Insurance**:
+  - `execution-loop.ts`: Implemented self-correcting Execution Loop with iteration cap, timeout guard, and token budget ceiling.
+  - `test-augment-loop.ts`: Integrated a practical test coverage improvement loop using the `augment` skill.
+- **Scheduler & Sandbox Orchestration**:
+  - `heartbeat.ts`: Lightweight, Bun-native crontab scheduler (`*`, `*/N`, `A-B`, `A,B`) with auto-disable protection on consecutive failures.
+  - `sandbox.ts`: Worktree and branch-based isolated filesystem runner.
+  - `outbound-mcp.ts`: Integrated Slack and GitHub notification bridges with offline-fallback logging.
+  - `pr-review-loop.ts`: Branch checkout, quality gate checks, self-correction, push, and PR commenting.
+- **Skill Self-Evolution (Meta-Loop)**:
+  - `skill-optimizer.ts`: Implemented Microsoft SkillOpt Textual Gradient Descent for optimization of prompt/instruction sets.
+  - Created `skills/sleep/SKILL.md` mapping the sleep-mode self-evolution pipeline.
+- **CLI Commands & Rules Sync**:
+  - Background daemon control (`ritsu daemon start/stop/status`) with PID tracking.
+  - Loop console CLI (`ritsu loop list/trigger/status`) to trigger and check background runners.
+  - Auto Rule Syncing (`ritsu sync-rules` command and `syncLoopInstructionsToIDE` API) updating Cursor, Claude Code, and `AGENTS.md` instructions dynamically.
+- **Design Guardrails & Think Loop**:
+  - `design-architecture.ts`: New policy detector validating Clean Architecture, DDD layer violations, utility sprawl, and dead designs (`DA-1` to `DA-4`), and algorithmic complexity analysis (Big-O analysis) & architectural options trade-off matrix (`DA-5` and `DA-6`).
+  - `think-loop.ts`: Refinement loop to draft, check, and self-correct system design briefs.
+
+### Fixed
+- **Session Memory Vector Store**:
+  - Fixed L78 vector database indexing bug in `session-memory.ts` by replacing the discarded `computeSimpleEmbedding` with `indexViolationEmbedding`.
+  - Added `compactMemories` to limit index size to 500 entries.
+  - Added `queryBySkill` to retrieve logs.
+
 ## [8.8.0] - 2026-05-27
 
 ### Added
