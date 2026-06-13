@@ -7,6 +7,7 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentsProfile } from "../agents-parser.js";
 import { detectProjectRoot } from "../project-root.js";
+import { runCommandInSandbox } from "../loop/sandbox.js";
 
 type ParsedCommand = {
   binary: string;
@@ -67,44 +68,20 @@ export async function runCmdWithCwd(
   const safeTimeout = Math.min(timeoutMs, MAX_TIMEOUT_MS_HARD_LIMIT);
   const safeMaxBuffer = Math.min(maxBufferMb, MAX_BUFFER_MB_HARD_LIMIT);
 
-  return new Promise((resolvePromise) => {
-    const child = spawn(parsed.binary, parsed.args, {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    const maxBytes = safeMaxBuffer * 1024 * 1024;
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBytes) stdout += chunk.toString("utf-8");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBytes) stderr += chunk.toString("utf-8");
-    });
-
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      resolvePromise({ ok: false, output: stdout || stderr || "timeout" });
-    }, safeTimeout);
-
-    child.on("close", (code: number | null) => {
-      clearTimeout(timer);
-      const raw = (code === 0 ? stdout : stderr || stdout).trim();
-      const lines = raw.split("\n");
-      const truncated = lines.length > maxLines;
-      const output = truncated
-        ? lines.slice(0, maxLines).join("\n") + "\n⚠️ 输出已截断"
-        : raw;
-      resolvePromise({ ok: code === 0, output });
-    });
-
-    child.on("error", (err: Error) => {
-      clearTimeout(timer);
-      resolvePromise({ ok: false, output: err.message });
-    });
+  const r = await runCommandInSandbox(parsed.binary, parsed.args, {
+    cwd,
+    timeoutMs: safeTimeout,
+    maxBufferMb: safeMaxBuffer,
   });
+
+  const raw = r.output.trim();
+  const lines = raw.split("\n");
+  const truncated = lines.length > maxLines;
+  const output = truncated
+    ? lines.slice(0, maxLines).join("\n") + "\n⚠️ 输出已截断"
+    : raw;
+
+  return { ok: r.ok, output };
 }
 
 interface FingerprintCache {

@@ -108,6 +108,49 @@ export async function runLoop(cmdArgs: string[]) {
     return;
   }
 
-  console.error(color(`Unknown loop command: ${action}. Use list, trigger, or status.`, "red"));
+  if (action === "resume") {
+    const traceId = cmdArgs[1];
+    const inputIdx = cmdArgs.findIndex((arg) => arg === "--input" || arg === "-i");
+    const input = inputIdx !== -1 && cmdArgs[inputIdx + 1] ? cmdArgs[inputIdx + 1] : "";
+    
+    if (!traceId) {
+      console.error(color("❌ Missing trace ID. Usage: ritsu loop resume <trace-id> --input \"<guidance>\"", "red"));
+      process.exit(1);
+    }
+    
+    if (!input) {
+      console.error(color("❌ Missing input guidance. Usage: ritsu loop resume <trace-id> --input \"<guidance>\"", "red"));
+      process.exit(1);
+    }
+    
+    const interruptFile = resolve(root, ".ritsu", "pending_interrupt.json");
+    if (!existsSync(interruptFile)) {
+      console.error(color("❌ No active loop is currently suspended/waiting for intervention.", "red"));
+      process.exit(1);
+    }
+    
+    try {
+      const { readFileSync: rFS, writeFileSync: wFS } = require("node:fs");
+      const content = rFS(interruptFile, "utf-8");
+      const data = JSON.parse(content);
+      
+      if (data.trace_id !== traceId) {
+        console.error(color(`❌ Suspended loop trace ID '${data.trace_id}' does not match requested trace ID '${traceId}'.`, "red"));
+        process.exit(1);
+      }
+      
+      data.status = "resolved";
+      data.input = input;
+      
+      wFS(interruptFile, JSON.stringify(data, null, 2), "utf-8");
+      console.log(color(`✅ Loop ${traceId} successfully resumed with input: "${input}"`, "green"));
+    } catch (err: any) {
+      console.error(color(`❌ Failed to resume loop: ${err.message}`, "red"));
+      process.exit(1);
+    }
+    return;
+  }
+
+  console.error(color(`Unknown loop command: ${action}. Use list, trigger, status, or resume.`, "red"));
   process.exit(1);
 }

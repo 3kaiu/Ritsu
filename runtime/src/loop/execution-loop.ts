@@ -4,6 +4,9 @@ import { saveLoopCheckpoint, type LoopVerdict } from "../context-lifecycle.js";
 import { getProjectRoot } from "../handlers/_utils.js";
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { writeFileSync, existsSync, unlinkSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import readline from "node:readline";
 
 export interface LoopConfig {
   goal: string;
@@ -57,6 +60,7 @@ export async function runExecutionLoop(config: LoopConfig): Promise<LoopResult> 
   const startTime = Date.now();
   const budget = new LoopBudget(config.tokenBudget);
   const history: LoopResult["history"] = [];
+  let consecutiveFailures = 0;
 
   let lastFeedback: string | undefined = undefined;
   let passed = false;
@@ -81,6 +85,13 @@ export async function runExecutionLoop(config: LoopConfig): Promise<LoopResult> 
 
     console.error(`[ritsu-loop] Iteration ${iteration}/${config.maxIterations} starting...`);
 
+    // Pre-create/initialize checkpoint file so that side effects can be recorded during iteration
+    try {
+      saveLoopCheckpoint(projectRoot, traceId, iteration, { passed: false, reason: "Running...", tokensUsed: 0, fixableByRetry: true }, []);
+    } catch (err) {
+      console.error(`[ritsu-loop] Failed to pre-initialize checkpoint:`, err);
+    }
+
     // 3. Construct prompt incorporating feedback from previous run
     const prompt = iteration === 1
       ? `Goal: ${config.goal}\nPlease execute the task using the ${config.skill} skill.`
@@ -103,6 +114,8 @@ Please analyze the failure, make necessary code modifications to fix it, and ver
         agent_type: config.agentType ?? "claude",
         timeout_ms: Math.min(config.timeoutMs - elapsed, 300_000), // constrain to remaining time
         cwd: projectRoot,
+        trace_id: traceId,
+        span_id: String(iteration),
       });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -154,10 +167,39 @@ Please analyze the failure, make necessary code modifications to fix it, and ver
       agentOutput: agentResult.output,
     });
 
+    if (!verdict.passed) {
+      consecutiveFailures++;
+    } else {
+      consecutiveFailures = 0;
+    }
+
     if (verdict.passed) {
       passed = true;
       exitReason = verdict.reason || "Verification passed";
       break;
+    }
+
+    // Check if we need to trigger a breakpoint interrupt
+    const tokensLeft = budget.getMaxBudget() - budget.getSpent();
+    const budgetLow = tokensLeft < 15_000 && budget.getMaxBudget() >= 30_000;
+    
+    const isTest = process.env.NODE_ENV === "test" || process.env.VITEST === "true";
+    const runHitl = isTest ? (process.env.RITSU_TEST_HITL === "true") : true;
+
+    if ((consecutiveFailures >= 3 || budgetLow) && runHitl) {
+      const reason = consecutiveFailures >= 3 
+        ? `Quality gates failed 3 times consecutively.`
+        : `Token budget is running low (${tokensLeft} tokens remaining).`;
+        
+      try {
+        const userInput = await handleBreakpoint(projectRoot, traceId, iteration, reason);
+        console.error(`[ritsu-loop] Resuming loop with user feedback: "${userInput}"`);
+        lastFeedback = `${verdict.reason}\n\n[User Intervention]: ${userInput}`;
+        consecutiveFailures = 0; // reset
+        continue;
+      } catch (err) {
+        console.error(`[ritsu-loop] Failed to handle breakpoint:`, err);
+      }
     }
 
     if (!verdict.fixableByRetry) {
@@ -189,4 +231,62 @@ Please analyze the failure, make necessary code modifications to fix it, and ver
     durationMs,
     history,
   };
+}
+
+async function handleBreakpoint(
+  projectRoot: string,
+  traceId: string,
+  iteration: number,
+  reason: string
+): Promise<string> {
+  console.error(`\n⚠️  [ritsu-loop] LOOP SUSPENDED (Trace: ${traceId}, Iteration: ${iteration})`);
+  console.error(`Reason: ${reason}`);
+  
+  const interruptFile = resolve(projectRoot, ".ritsu", "pending_interrupt.json");
+  const interruptData = {
+    ts: new Date().toISOString(),
+    trace_id: traceId,
+    iteration,
+    reason,
+    status: "suspended",
+  };
+  
+  writeFileSync(interruptFile, JSON.stringify(interruptData, null, 2), "utf-8");
+  
+  // If running in foreground (isTTY on stdin), prompt directly in terminal
+  if (process.stdin.isTTY) {
+    console.error(`[ritsu-loop] Interactive terminal detected. Please enter instructions to guide the agent, or press Enter to retry:`);
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    return new Promise((resolvePrompt) => {
+      rl.question("> ", (answer) => {
+        rl.close();
+        try { unlinkSync(interruptFile); } catch { /* ignore */ }
+        resolvePrompt(answer.trim() || "Please retry and look for other solutions.");
+      });
+    });
+  }
+  
+  // Otherwise (running in background daemon), poll the interrupt file until status changes to "resolved"
+  console.error(`[ritsu-loop] Background daemon detected. Waiting for 'ritsu loop resume' command...`);
+  return new Promise((resolvePoll) => {
+    const interval = setInterval(() => {
+      if (!existsSync(interruptFile)) {
+        clearInterval(interval);
+        resolvePoll("Please retry and look for other solutions.");
+        return;
+      }
+      try {
+        const content = readFileSync(interruptFile, "utf-8");
+        const data = JSON.parse(content);
+        if (data.status === "resolved") {
+          clearInterval(interval);
+          try { unlinkSync(interruptFile); } catch { /* ignore */ }
+          resolvePoll(data.input || "Please retry and look for other solutions.");
+        }
+      } catch { /* ignore */ }
+    }, 1000);
+  });
 }

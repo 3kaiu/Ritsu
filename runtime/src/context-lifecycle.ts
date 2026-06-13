@@ -19,6 +19,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { resolve, basename } from "node:path";
+import { createHash } from "node:crypto";
 import { readAllEntries } from "./ctx-reader.js";
 import { getOpenViolations } from "./violation-tracker.js";
 
@@ -642,6 +643,15 @@ export interface LoopCheckpoint {
   iteration: number;
   verdict: LoopVerdict;
   files_changed: string[];
+  side_effects?: LoopSideEffect[];
+}
+
+export interface LoopSideEffect {
+  id: string;
+  tool: string;
+  args: any;
+  response: any;
+  ts: string;
 }
 
 function getLoopCheckpointDir(projectRoot: string): string {
@@ -663,15 +673,26 @@ export function saveLoopCheckpoint(
   filesChanged: string[] = [],
 ): string {
   const dir = getLoopCheckpointDir(projectRoot);
+  const filename = `loop-cp-${traceId}-${iteration}.json`;
+  const filepath = resolve(dir, filename);
+
+  let existingSideEffects: LoopSideEffect[] = [];
+  if (existsSync(filepath)) {
+    try {
+      const content = readFileSync(filepath, "utf-8");
+      const parsed = JSON.parse(content) as LoopCheckpoint;
+      existingSideEffects = parsed.side_effects ?? [];
+    } catch { /* ignore */ }
+  }
+
   const checkpoint: LoopCheckpoint = {
     ts: new Date().toISOString(),
     trace_id: traceId,
     iteration,
     verdict,
     files_changed: filesChanged,
+    side_effects: existingSideEffects,
   };
-  const filename = `loop-cp-${traceId}-${iteration}.json`;
-  const filepath = resolve(dir, filename);
   writeFileSync(filepath, JSON.stringify(checkpoint, null, 2), "utf-8");
   return filepath;
 }
@@ -700,6 +721,90 @@ export function loadLoopHistory(
       .sort((a, b) => a.iteration - b.iteration);
   } catch {
     return [];
+  }
+}
+
+/**
+ * Record a side effect to the loop checkpoint.
+ */
+export function recordSideEffect(
+  projectRoot: string,
+  traceId: string,
+  iteration: number,
+  tool: string,
+  args: any,
+  response: any
+): void {
+  const dir = getLoopCheckpointDir(projectRoot);
+  const filename = `loop-cp-${traceId}-${iteration}.json`;
+  const filepath = resolve(dir, filename);
+  
+  let checkpoint: LoopCheckpoint;
+  
+  if (existsSync(filepath)) {
+    try {
+      checkpoint = JSON.parse(readFileSync(filepath, "utf-8")) as LoopCheckpoint;
+    } catch {
+      checkpoint = {
+        ts: new Date().toISOString(),
+        trace_id: traceId,
+        iteration,
+        verdict: { passed: false, reason: "Running...", tokensUsed: 0, fixableByRetry: true },
+        files_changed: [],
+      };
+    }
+  } else {
+    checkpoint = {
+      ts: new Date().toISOString(),
+      trace_id: traceId,
+      iteration,
+      verdict: { passed: false, reason: "Running...", tokensUsed: 0, fixableByRetry: true },
+      files_changed: [],
+    };
+  }
+  
+  if (!checkpoint.side_effects) {
+    checkpoint.side_effects = [];
+  }
+  
+  const id = createHash("md5").update(tool + JSON.stringify(args)).digest("hex");
+  
+  checkpoint.side_effects.push({
+    id,
+    tool,
+    args,
+    response,
+    ts: new Date().toISOString(),
+  });
+  
+  writeFileSync(filepath, JSON.stringify(checkpoint, null, 2), "utf-8");
+}
+
+/**
+ * Check if a side effect has already been recorded.
+ */
+export function checkSideEffect(
+  projectRoot: string,
+  traceId: string,
+  iteration: number,
+  tool: string,
+  args: any
+): any | null {
+  const dir = getLoopCheckpointDir(projectRoot);
+  const filename = `loop-cp-${traceId}-${iteration}.json`;
+  const filepath = resolve(dir, filename);
+  
+  if (!existsSync(filepath)) return null;
+  
+  try {
+    const checkpoint = JSON.parse(readFileSync(filepath, "utf-8")) as LoopCheckpoint;
+    if (!checkpoint.side_effects) return null;
+    
+    const id = createHash("md5").update(tool + JSON.stringify(args)).digest("hex");
+    const found = checkpoint.side_effects.find((se) => se.id === id);
+    return found ? found.response : null;
+  } catch {
+    return null;
   }
 }
 

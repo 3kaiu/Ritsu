@@ -77,7 +77,7 @@ export function usage(detailed = false): string {
     "  ritsu report        # Agent behavior & cost report",
     "  ritsu status        # Project status overview",
     "  ritsu daemon start|stop|status # Manage background heartbeat scheduler",
-    "  ritsu loop list|trigger|status # Inspect or force execute autopilot loops",
+    "  ritsu loop list|trigger|status|resume # Inspect, execute or resume autopilot loops",
     "  ritsu sync-rules   # Synchronize autopilot rules to IDE rules",
     "",
     "Ritsu CLI — think → dev → review → deploy → hunt",

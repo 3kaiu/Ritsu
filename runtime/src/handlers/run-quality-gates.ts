@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from "n
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { getProjectRoot, textResult } from "./_utils.js";
+import { runCommandInSandbox } from "../loop/sandbox.js";
 import { ensureRitsuDir } from "../ctx-path.js";
 import {
   buildQualityGateSnapshot,
@@ -54,37 +55,14 @@ interface QualityGateResult {
   };
 }
 
+
 function runCommand(
   binary: string,
   args: string[],
   cwd: string,
   timeoutMs = 60_000,
 ): Promise<{ ok: boolean; output: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(binary, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    const maxBytes = 2 * 1024 * 1024;
-    child.stdout.on("data", (chunk: Buffer) => {
-      if (stdout.length < maxBytes) stdout += chunk.toString("utf-8");
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      if (stderr.length < maxBytes) stderr += chunk.toString("utf-8");
-    });
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      resolve({ ok: false, output: stdout || stderr || "timeout" });
-    }, timeoutMs);
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      const combined = (stdout + "\n" + stderr).trim();
-      resolve({ ok: code === 0, output: combined });
-    });
-    child.on("error", (err) => {
-      clearTimeout(timer);
-      resolve({ ok: false, output: err.message });
-    });
-  });
+  return runCommandInSandbox(binary, args, { cwd, timeoutMs });
 }
 
 
