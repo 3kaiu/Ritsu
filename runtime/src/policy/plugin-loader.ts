@@ -21,6 +21,7 @@ import { ArchitectureDetector } from "./detectors/architecture.js";
 import { SecuritySmellDetector } from "./detectors/security-smell.js";
 import { ContractDriftDetector } from "./detectors/contract-drift.js";
 import { VisualFidelityDetector } from "./detectors/visual-fidelity.js";
+import { DesignArchitectureDetector } from "./detectors/design-architecture.js";
 import { getProjectRoot } from "../handlers/_utils.js";
 
 const BUILT_IN_DETECTORS: Record<string, DetectorPlugin> = {
@@ -36,6 +37,7 @@ const BUILT_IN_DETECTORS: Record<string, DetectorPlugin> = {
   architecture: new ArchitectureDetector(),
   security_smell: new SecuritySmellDetector(),
   visual_fidelity: new VisualFidelityDetector(),
+  design_architecture: new DesignArchitectureDetector(),
 };
 
 let _cachedPlugins: Record<string, DetectorPlugin> | null = null;

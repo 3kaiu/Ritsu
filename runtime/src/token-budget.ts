@@ -54,3 +54,40 @@ export function trimToBudget<T extends Record<string, unknown>>(
 
   return result;
 }
+
+/**
+ * LoopBudget
+ *
+ * 用于跟踪循环执行期间的累积 Token 消耗，
+ * 并在超出总体预算限制时发出终止信号。
+ */
+export class LoopBudget {
+  private maxBudget: number;
+  private spent: number = 0;
+
+  constructor(maxBudget: number) {
+    this.maxBudget = maxBudget;
+  }
+
+  trackUsage(tokens: number): void {
+    this.spent += tokens;
+  }
+
+  getSpent(): number {
+    return this.spent;
+  }
+
+  getMaxBudget(): number {
+    return this.maxBudget;
+  }
+
+  shouldContinue(additionalEstimate: number = 0): boolean {
+    return this.spent + additionalEstimate <= this.maxBudget;
+  }
+
+  formatBudgetReport(): string {
+    const pct = this.maxBudget > 0 ? ((this.spent / this.maxBudget) * 100).toFixed(1) : "0.0";
+    return `Token Budget Report: Spent ${this.spent} / ${this.maxBudget} (${pct}%)`;
+  }
+}
+

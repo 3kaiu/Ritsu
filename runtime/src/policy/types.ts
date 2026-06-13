@@ -31,7 +31,8 @@ export type DetectorType =
   | "codegraph"
   | "architecture"
   | "security_smell"
-  | "visual_fidelity";
+  | "visual_fidelity"
+  | "design_architecture";
 
 export interface DetectorConfig {
   type: DetectorType;

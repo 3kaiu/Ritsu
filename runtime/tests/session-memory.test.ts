@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { existsSync, rmSync, mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, rmSync, mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -119,4 +119,41 @@ describe("session-memory", () => {
     expect(getMemoryTimeline("nonexistent")).toEqual([]);
     expect(getMemoryDetails(["nonexistent"])).toEqual([]);
   });
+
+  it("compactMemories keeps only last 500 entries", async () => {
+    const { captureMemory, compactMemories } = await import("../src/session-memory.js");
+    for (let i = 0; i < 510; i++) {
+      captureMemory({
+        type: "decision",
+        summary: `Decision ${i}`,
+        detail: "Detail",
+        project: "test",
+        tags: [],
+      });
+    }
+
+    const compacted = compactMemories();
+    expect(compacted).toBe(true);
+
+    const memPath = resolve(testRoot, ".ritsu/memories/index.jsonl");
+    const content = readFileSync(memPath, "utf-8");
+    const lines = content.split("\n").filter((l) => l.trim());
+    expect(lines.length).toBe(500);
+    expect(lines[0]).toContain("Decision 10");
+  });
+
+  it("queryBySkill filters memories by project/skill", async () => {
+    const { captureMemory, queryBySkill } = await import("../src/session-memory.js");
+    captureMemory({ type: "decision", summary: "A", detail: "A", project: "skill-a", tags: [] });
+    captureMemory({ type: "decision", summary: "B", detail: "B", project: "skill-b", tags: [] });
+
+    const skillAMemories = queryBySkill("skill-a");
+    expect(skillAMemories.length).toBe(1);
+    expect(skillAMemories[0].summary).toBe("A");
+
+    const skillBMemories = queryBySkill("skill-b");
+    expect(skillBMemories.length).toBe(1);
+    expect(skillBMemories[0].summary).toBe("B");
+  });
 });
+

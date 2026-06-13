@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { getProjectRoot } from "./handlers/_utils.js";
-import { isNativeAvailable, initNativeStore, computeSimpleEmbedding, searchSimilarViolations } from "./native-bridge.js";
+import { isNativeAvailable, initNativeStore, computeSimpleEmbedding, searchSimilarViolations, indexViolationEmbedding } from "./native-bridge.js";
 
 // ─── Storage ──────────────────────────────────────────────────
 
@@ -68,14 +68,15 @@ export function captureMemory(entry: Omit<MemoryEntry, "id" | "ts">): boolean {
 
     // Index into native vector store for semantic search
     const text = `${entry.summary} ${entry.detail}`;
-    const metadata = JSON.stringify({
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const metadata = {
       type: entry.type,
       project: entry.project,
       tags: entry.tags,
       ts,
-    });
-    computeSimpleEmbedding(text);
+    };
+    if (ensureNativeStore()) {
+      indexViolationEmbedding(id, text, metadata);
+    }
 
     return true;
   } catch {
@@ -216,5 +217,49 @@ export function autoCaptureOnEvent(event: Record<string, unknown>): void {
         tags: ["preference", "learning"],
       });
     }
+  }
+}
+
+/**
+ * Compact memory logs to prevent unbounded growth by keeping last 500 entries.
+ */
+export function compactMemories(): boolean {
+  try {
+    const root = getProjectRoot();
+    const memPath = getMemPath(root);
+    if (!existsSync(memPath)) return false;
+
+    const entries = readFileSync(memPath, "utf-8")
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as MemoryEntry);
+
+    if (entries.length <= 500) return true;
+
+    const kept = entries.slice(-500);
+    writeFileSync(memPath, kept.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Query memories by skill name (project field).
+ */
+export function queryBySkill(skill: string): MemoryEntry[] {
+  try {
+    const root = getProjectRoot();
+    const memPath = getMemPath(root);
+    if (!existsSync(memPath)) return [];
+
+    const entries = readFileSync(memPath, "utf-8")
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => JSON.parse(l) as MemoryEntry);
+
+    return entries.filter((e) => e.project === skill);
+  } catch {
+    return [];
   }
 }

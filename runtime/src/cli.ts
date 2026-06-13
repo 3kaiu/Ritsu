@@ -76,6 +76,9 @@ export function usage(detailed = false): string {
     "  ritsu mine --auto   # Auto preference learning",
     "  ritsu report        # Agent behavior & cost report",
     "  ritsu status        # Project status overview",
+    "  ritsu daemon start|stop|status # Manage background heartbeat scheduler",
+    "  ritsu loop list|trigger|status # Inspect or force execute autopilot loops",
+    "  ritsu sync-rules   # Synchronize autopilot rules to IDE rules",
     "",
     "Ritsu CLI — think → dev → review → deploy → hunt",
     "",
@@ -148,6 +151,33 @@ export function main() {
   if (cmd === "check") { runCheck(cmdArgs); return; }
   if (cmd === "report") { runReport(cmdArgs); return; }
   if (cmd === "violations") { runViolations(cmdArgs); return; }
+  if (cmd === "daemon") {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { runDaemon } = require("./cli/daemon.js");
+    runDaemon(cmdArgs);
+    return;
+  }
+  if (cmd === "loop") {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { runLoop } = require("./cli/loop.js");
+    runLoop(cmdArgs);
+    return;
+  }
+  if (cmd === "sync-rules") {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { syncLoopInstructionsToIDE } = require("./ide-rules-sync.js");
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { detectProjectRoot } = require("./project-root.js");
+    const root = detectProjectRoot();
+    const success = syncLoopInstructionsToIDE(root);
+    if (success) {
+      console.log(color("✅ Autopilot loop rules successfully synced to IDE rules.", "green"));
+    } else {
+      console.error(color("❌ Failed to sync autopilot loop rules.", "red"));
+      process.exit(1);
+    }
+    return;
+  }
 
 
   if (cmd === "trust") {

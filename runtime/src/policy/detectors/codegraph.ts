@@ -16,18 +16,24 @@ import { getProjectRoot } from "../../handlers/_utils.js";
 
 const CODEGRAPH_CMD = "codegraph";
 
+let isCodeGraphCached: boolean | null = null;
+
 function isCodeGraphAvailable(): boolean {
+  if (isCodeGraphCached !== null) return isCodeGraphCached;
   try {
     execFileSync("which", [CODEGRAPH_CMD], { stdio: "ignore" });
+    isCodeGraphCached = true;
     return true;
   } catch {
     try {
-      execFileSync("npx", ["-y", CODEGRAPH_CMD, "--version"], {
+      execFileSync("npx", ["--no-install", CODEGRAPH_CMD, "--version"], {
         stdio: "ignore",
-        timeout: 5000,
+        timeout: 1000,
       });
+      isCodeGraphCached = true;
       return true;
     } catch {
+      isCodeGraphCached = false;
       return false;
     }
   }

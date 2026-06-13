@@ -626,3 +626,80 @@ export function autoCheckpoint(
   const path = saveCheckpoint(projectRoot, checkpoint);
   return path;
 }
+
+// ─── Loop Checkpoint Operations ───────────────────────────────
+
+export interface LoopVerdict {
+  passed: boolean;
+  reason: string;
+  tokensUsed: number;
+  fixableByRetry: boolean;
+}
+
+export interface LoopCheckpoint {
+  ts: string;
+  trace_id: string;
+  iteration: number;
+  verdict: LoopVerdict;
+  files_changed: string[];
+}
+
+function getLoopCheckpointDir(projectRoot: string): string {
+  const dir = resolve(projectRoot, ".ritsu", CHECKPOINT_DIR, "loops");
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+/**
+ * Save a loop iteration checkpoint.
+ */
+export function saveLoopCheckpoint(
+  projectRoot: string,
+  traceId: string,
+  iteration: number,
+  verdict: LoopVerdict,
+  filesChanged: string[] = [],
+): string {
+  const dir = getLoopCheckpointDir(projectRoot);
+  const checkpoint: LoopCheckpoint = {
+    ts: new Date().toISOString(),
+    trace_id: traceId,
+    iteration,
+    verdict,
+    files_changed: filesChanged,
+  };
+  const filename = `loop-cp-${traceId}-${iteration}.json`;
+  const filepath = resolve(dir, filename);
+  writeFileSync(filepath, JSON.stringify(checkpoint, null, 2), "utf-8");
+  return filepath;
+}
+
+/**
+ * Load all loop checkpoints for a trace.
+ */
+export function loadLoopHistory(
+  projectRoot: string,
+  traceId: string,
+): LoopCheckpoint[] {
+  const dir = getLoopCheckpointDir(projectRoot);
+  if (!existsSync(dir)) return [];
+  try {
+    return readdirSync(dir)
+      .filter((f) => f.startsWith(`loop-cp-${traceId}-`) && f.endsWith(".json"))
+      .map((f) => {
+        try {
+          const content = readFileSync(resolve(dir, f), "utf-8");
+          return JSON.parse(content) as LoopCheckpoint;
+        } catch {
+          return null;
+        }
+      })
+      .filter((cp): cp is LoopCheckpoint => cp !== null)
+      .sort((a, b) => a.iteration - b.iteration);
+  } catch {
+    return [];
+  }
+}
+

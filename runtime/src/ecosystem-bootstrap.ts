@@ -9,6 +9,7 @@ import {
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRecord } from "./shared.js";
+import { syncLoopInstructionsToIDE } from "./ide-rules-sync.js";
 
 const RUNTIME_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -290,6 +291,10 @@ test_cmd: bun run --cwd runtime test
   if (!existsSync(resolve(projectRoot, "rules/ast-grep"))) {
     notes.push("rules/ast-grep/ missing — AP-13 inactive until rules present");
   }
+
+  try {
+    syncLoopInstructionsToIDE(projectRoot);
+  } catch { /* best effort */ }
 
   return {
     project_root: projectRoot,

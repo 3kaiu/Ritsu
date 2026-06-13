@@ -270,4 +270,70 @@ review:
       - wrong: "设计使用 grid 布局但渲染使用 flex"
         right: "使用 display:grid 匹配设计意图"
 
+  - id: DA-1
+    name: DDD & Clean Architecture Layer Violation
+    pattern: "设计稿中声明的模块依赖违反了 Clean Architecture 依赖规则，如 Domain 反向依赖 Infrastructure"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "design-sheet.md: Domain 层文件 models/user.ts import 了 Infrastructure 层的 database/user-repo.ts"
+        right: "Infrastructure 层文件 database/user-repo.ts 实现在 Domain 层定义的 UserRepo 接口，Domain 层不包含任何外部依赖"
+
+  - id: DA-2
+    name: Generic Utility Sprawl
+    pattern: "提议新建含糊的公共辅助文件（如 utils.ts, helpers.ts）而不是整合至具体的 Domain 服务或模块"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "提议创建 runtime/src/utils.ts，内含 3 个不同域的辅助函数"
+        right: "提议创建 runtime/src/cli/shared.ts（高内聚功能辅助）或复用现有公共模块"
+
+  - id: DA-3
+    name: Micro-File Sprawl
+    pattern: "设计中提议创建大量零散的极小散列文件（如每个文件仅一个类型或常量）而未进行高内聚聚合"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "提议创建 5 个独立文件分别只导出一个 TypeScript 接口"
+        right: "聚合在 runtime/src/policy/types.ts 中集中导出，提升模块内聚度"
+
+  - id: DA-4
+    name: Dead Design Guard
+    pattern: "设计稿中提议创建或修改文件，但在 dependency 链路中没有任何调用或消费端依赖"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "设计中定义了新建 fileA.ts，但 contracts 和 execution_plan 中没有任何模块声明将调用它"
+        right: "确保新建的 fileA.ts 被业务逻辑或测试文件引用并有对应 contract 约束"
+
+  - id: DA-5
+    name: Algorithmic Complexity Validation
+    pattern: "设计中未进行算法和数据结构的性能复杂度分析，或缺少备选算法对比"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "仅声明'使用列表存储任务并在查找时遍历它'而不提供时间复杂度评估"
+        right: "对比‘方案 A (数组查找): O(N)时间’与‘方案 B (Hash Map 索引): O(1)时间’并解释选择 B"
+
+  - id: DA-6
+    name: Architectural Option Evaluation
+    pattern: "设计中仅提供单一实现路径，缺少备选架构方案对比以及折中决策矩阵 (Trade-off Matrix)"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "只写了'使用 Polling 从服务端拉取数据'作为唯一方案"
+        right: "提供‘备选 1 (HTTP Polling): 实现简单但开销大’与‘备选 2 (WebSocket): 低延迟但需连接管理’的 Pros/Cons 对比矩阵"
+
 dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"

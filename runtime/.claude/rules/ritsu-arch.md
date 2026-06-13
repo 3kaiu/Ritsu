@@ -1,6 +1,6 @@
 # Architecture Context — dev stage (Ritsu Live Sync)
 
-**Modules**: 12 | **Cross-module deps**: 0 | **Stage**: dev
+**Modules**: 13 | **Cross-module deps**: 0 | **Stage**: dev
 
 ## Modules
 
@@ -12,6 +12,7 @@
 - src/cli
 - src/handlers
 - src/hooks
+- src/loop
 - src/orchestration
 - src/policy
 - src/tests
