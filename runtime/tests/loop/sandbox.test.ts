@@ -5,6 +5,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
 
+vi.mock("node:child_process", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...original,
+    execSync: vi.fn().mockImplementation((cmd: string, opts: any) => {
+      if (cmd.includes("docker")) {
+        throw new Error("Docker mocked out");
+      }
+      return original.execSync(cmd, opts);
+    }),
+  };
+});
+
 describe("sandbox isolation", () => {
   let testRoot: string;
   let originalEnv: Record<string, string | undefined>;
