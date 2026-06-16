@@ -48,6 +48,7 @@
 | 报错 / 排障 / 为什么不工作 | → `hunt` | Standard |
 | 解释代码 / 这是什么 / 分析 | → `freestyle` | — |
 | 快速问答 | → `freestyle` | — |
+| MasterGo 还原 / 一比一还原 / UI 还原 | → `d2c` | Standard |
 
 **注意**: 自动路由只是建议，AI 应在回复开头简短说明路由决策。
 

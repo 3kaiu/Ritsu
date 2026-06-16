@@ -360,3 +360,77 @@ tools:
         success: { type: boolean }
         path: { type: string }
 
+  - name: ritsu_d2c_compile
+    description: "DSL → Spec 编译器。输入原始 DSL 数据，输出确定性的 d2c-spec.json。所有值已计算完毕，AI 只需按 spec 序列化为代码。"
+    call_template:
+      tool: ritsu_d2c_compile
+      params:
+        dsl_sections: "{dsl_sections}"
+        root_metadata: "{root_metadata}"
+    input:
+      dsl_sections:
+        type: string
+        required: true
+        description: "所有 section DSL 合并后的 JSON 字符串"
+      root_metadata:
+        type: object
+        required: true
+        description: "rootMetadata（width, height, name, type, fills）"
+      split_containers:
+        type: array
+        required: false
+        description: "splitContainers 数组"
+      svgs:
+        type: object
+        required: false
+        description: "getDesignSvgs 返回的 SVG map"
+      texts:
+        type: object
+        required: false
+        description: "getDesignTexts 返回的 text map"
+      styles_map:
+        type: object
+        required: false
+        description: "DSL 中的 styles map（fillStyleId → color 映射）"
+      project_root:
+        type: string
+        required: false
+        description: "项目根目录路径（用于技术栈扫描，不传则 cwd）"
+    output_schema:
+      type: object
+      required: [ok, spec_path, environment, total_nodes]
+      properties:
+        ok: { type: boolean }
+        spec_path: { type: string }
+        environment: { type: object }
+        total_nodes: { type: integer }
+        warnings: { type: array }
+
+  - name: ritsu_dsl_validate
+    description: "节点级验证。对比 d2c-spec.json 与生成代码中的 [data-mg-id] 元素。"
+    call_template:
+      tool: ritsu_dsl_validate
+      params:
+        html_path: "{html_path}"
+        spec_path: "{spec_path}"
+    input:
+      html_path:
+        type: string
+        required: true
+        description: "生成的代码文件路径"
+      spec_path:
+        type: string
+        required: true
+        description: "d2c-spec.json 路径"
+    output_schema:
+      type: object
+      required: [ok, score, total_nodes, matched_nodes, missing_nodes, mismatched_styles]
+      properties:
+        ok: { type: boolean }
+        score: { type: integer }
+        total_nodes: { type: integer }
+        matched_nodes: { type: integer }
+        missing_nodes: { type: array }
+        mismatched_styles: { type: array }
+
+

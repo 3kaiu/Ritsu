@@ -246,3 +246,56 @@ export interface SyncResult {
   tokens_written: string[];
   output_dir: string;
 }
+
+// ─── D2C / MasterGo Spec Compiler ────────────────────────────
+
+export type DeviceType = "h5" | "pad" | "web";
+export type FrameworkType = "react" | "vue" | "rn" | "flutter" | "miniapp" | "next" | "nuxt" | "html";
+export type StyleSystemType = "tailwind" | "unocss" | "css-in-js" | "scss" | "less" | "css-modules" | "css";
+export type UnitStrategy = "px" | "rem" | "vw" | "rpx" | "none";
+
+export interface D2CEnvironment {
+  deviceType: DeviceType;
+  designWidth: number;
+  framework: FrameworkType;
+  styleSystem: StyleSystemType;
+  designSystem: string;
+  unitStrategy: UnitStrategy;
+  remBase: number;
+  viewport: { width: number; height: number };
+  isPartialComponent?: boolean;
+  svgSprites?: Record<string, string>;
+}
+
+export interface MasterGoDslNode extends FigmaNode {
+  fillStyleId?: string;
+  strokeStyleId?: string;
+  textStyleId?: string;
+  width?: number; // Ensure width/height are available
+  height?: number;
+}
+
+export interface D2CSpecNode {
+  id: string;
+  name: string;
+  dslType: string;
+  parentId: string | null;
+  childrenIds: string[];
+  tag: string;
+  css: Record<string, string>;
+  tailwindClasses?: string;
+  attributes: Record<string, string>;
+  textContent: string | null;
+  svgHtml: string | null;
+  variants?: Record<string, {
+    css: Record<string, string>;
+    tailwindClasses?: string;
+  }>;
+}
+
+export interface D2CSpec {
+  version: string;
+  environment: D2CEnvironment;
+  nodes: D2CSpecNode[];
+}
+

@@ -24,6 +24,8 @@ import { ritsu_write_file } from "./write-file.js";
 import { ritsu_launch_agent } from "./launch-agent.js";
 import { ritsu_dispatch_task } from "./multi-agent-dispatch.js";
 import { ritsu_visual_check } from "./visual-check.js";
+import { ritsu_d2c_compile } from "./d2c-compile.js";
+import { ritsu_dsl_validate } from "./dsl-validate.js";
 
 // ─── Handler Registry ───────
 
@@ -56,4 +58,6 @@ export const registerHandlers: Record<
   ritsu_launch_agent,
   ritsu_dispatch_task,
   ritsu_visual_check,
+  ritsu_d2c_compile,
+  ritsu_dsl_validate,
 };
