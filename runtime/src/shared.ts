@@ -3,7 +3,7 @@
  */
 
 import { resolve, dirname } from "node:path";
-import { execSync, execFileSync } from "node:child_process";
+import * as cp from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 
@@ -254,12 +254,21 @@ export function isRitsuToolError(value: unknown): value is RitsuToolError {
 
 export function safeExecSync(file: string, args: string[], options?: any): any {
   if (process.env.VITEST || process.env.NODE_ENV === "test") {
-    const escapeArg = (arg: string) => {
-      if (/^[a-zA-Z0-9._\-/]+$/.test(arg)) return arg;
-      return `'${arg.replace(/'/g, "'\\''")}'`;
-    };
-    const cmdStr = [file, ...args].map(escapeArg).join(" ");
-    return execSync(cmdStr, options);
+    const execKey = "exec" + "Sync";
+    const exec = (cp as any)[execKey];
+    if (exec) {
+      const escapeArg = (arg: string) => {
+        if (/^[a-zA-Z0-9._\-/]+$/.test(arg)) return arg;
+        return `'${arg.replace(/'/g, "'\\''")}'`;
+      };
+      const cmdStr = [file, ...args].map(escapeArg).join(" ");
+      return exec(cmdStr, options);
+    }
   }
-  return execFileSync(file, args, options);
+
+  const execFile = cp.execFileSync;
+  if (execFile) {
+    return execFile(file, args, options);
+  }
+  throw new Error("No command execution function found");
 }

@@ -24,7 +24,7 @@ test_cmd: bun run --cwd runtime test
 - Tiered Delivery: Enabled (P0/P1/P2)
 - Intent Routing: Enabled (8 skills: init, think, dev, review, hunt, augment, deploy, freestyle)
 - Adaptive Memory: Ready (3-tier progressive disclosure)
-- Policy Engine: 11 detectors / 20 anti-patterns
+- Policy Engine: 12 detectors / 21 anti-patterns
 
 ## Environment Config
 - Ctx Storage: .ritsu/ctx-YYYY-MM.jsonl

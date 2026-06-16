@@ -4,7 +4,7 @@
 
 **AI agents write code. Ritsu checks it.**
 
-[![Tests](https://img.shields.io/badge/Tests-589_passing-green.svg)](runtime/tests)
+[![Tests](https://img.shields.io/badge/Tests-592_passing-green.svg)](runtime/tests)
 [![npm](https://img.shields.io/npm/v/ritsu-mcp-server)](https://www.npmjs.com/package/ritsu-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -55,7 +55,7 @@ Ritsu is a **governance layer** that runs alongside AI agents, continuously chec
 ## Architecture
 
 ```
-Agent writes code → Policy engine (12 detectors) → Quality gates → Violation tracked
+Agent writes code → Policy engine (12 detectors / 21 anti-patterns) → Quality gates → Violation tracked
                   → Session checkpoint → Contract verified → Visual check
 ```
 
