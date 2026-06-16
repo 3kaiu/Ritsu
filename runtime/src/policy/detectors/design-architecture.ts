@@ -1,4 +1,5 @@
-import { dirname, basename } from "node:path";
+import { dirname, basename, resolve } from "node:path";
+import { existsSync } from "node:fs";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
 import { getProjectRoot } from "../../handlers/_utils.js";
 
@@ -171,6 +172,33 @@ export class DesignArchitectureDetector implements DetectorPlugin {
           evidence: "No architectural trade-off or alternative options sections found.",
           suggestion: "Add an 'Alternative Architectures' section containing a Markdown table or comparative list evaluating trade-offs.",
         });
+      }
+    }
+
+    if (rule.id === "DA-7") {
+      const hasMasterGo = /mastergo\.com/i.test(content) || /mastergo/i.test(content);
+      if (hasMasterGo) {
+        const d2cSpecPath = resolve(root, "d2c-spec.json");
+        const hasSpecFile = existsSync(d2cSpecPath);
+        const referencesSpecFile = /d2c-spec\.json/i.test(content);
+
+        if (!hasSpecFile) {
+          violations.push({
+            rule_id: rule.id,
+            severity: rule.severity,
+            message: "MasterGo D2C Integration Violation: MasterGo design link detected but 'd2c-spec.json' does not exist. You must run D2C compilation first.",
+            evidence: "MasterGo reference found in design sheet, but d2c-spec.json is missing.",
+            suggestion: "Retrieve the design DSL using the mastergo-mcp server tools and run 'ritsu_d2c_compile' to compile it into 'd2c-spec.json'.",
+          });
+        } else if (!referencesSpecFile) {
+          violations.push({
+            rule_id: rule.id,
+            severity: rule.severity,
+            message: "MasterGo D2C Integration Violation: 'd2c-spec.json' exists but is not referenced or integrated in the design sheet.",
+            evidence: "d2c-spec.json file is present but the design sheet does not reference or document its structure/requirements.",
+            suggestion: "Add a section in the design sheet referencing 'd2c-spec.json' and outlining the design requirements and node structure to be implemented.",
+          });
+        }
       }
     }
 

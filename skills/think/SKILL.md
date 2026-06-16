@@ -60,6 +60,16 @@ total_steps: 4
    - 单人非 OpenSpec：`design-sheet` + `contracts[]` 必填。
    - Multi-Agent：`ritsu_span_lifecycle action=open` + `coordination-sheet`。
 
+### 🔵 MasterGo D2C 设计稿还原集成 (P1 & P2 均适用)
+
+如果需求或设计目标中提供了 MasterGo 链接（如 `https://mastergo.com/file/...` 或短链）：
+1. **自动调用 D2C 流程**：你必须按照 [d2c skill](file:///Users/edy/CascadeProjects/Ritsu/skills/d2c/SKILL.md) 自动执行还原与 spec 编译：
+   - 首先调用 `mcp__getDesignSections` 获取设计稿 overview。
+   - 并行批量调用 `mcp__getDesignSections` (带 `sectionIndex`)、`mcp__getDesignSvgs` 和 `mcp__getDesignTexts` 获取完整资源与 DSL。
+   - 调用 `ritsu_d2c_compile` 编译生成 `d2c-spec.json`。
+2. **集成设计契约**：设计稿 `design-sheet.md` (或 `design-brief.md`) **必须显式引用并链接** `d2c-spec.json`（如 `[d2c-spec.json](file:///Users/edy/CascadeProjects/Ritsu/d2c-spec.json)`），且必须在整体设计中阐明需要还原的结构及交互状态，以通过 `DA-7` 门禁检查。
+3. **完成整体设计**：只有在 D2C 编译通过、spec 生成并被设计文档集成引用后，才可以进入 `/r-dev` 阶段。
+
 ### 架构上下文
 Preflight 已自动加载架构指纹（见 AGENTS.md Architecture Block）。分析时优先参考该块的模块边界和依赖规则。
 

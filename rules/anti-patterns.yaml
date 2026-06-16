@@ -336,4 +336,15 @@ review:
       - wrong: "只写了'使用 Polling 从服务端拉取数据'作为唯一方案"
         right: "提供‘备选 1 (HTTP Polling): 实现简单但开销大’与‘备选 2 (WebSocket): 低延迟但需连接管理’的 Pros/Cons 对比矩阵"
 
+  - id: DA-7
+    name: MasterGo Design D2C Integration
+    pattern: "任务或设计目标中包含 MasterGo 内容，但在设计阶段未生成/编译 `d2c-spec.json`，或设计稿未引入/集成 `d2c-spec.json` 的需求与结构"
+    severity: HARD_STOP
+    detector:
+      type: design_architecture
+      target: artifact_content
+    examples:
+      - wrong: "任务涉及 MasterGo 设计稿还原，但设计阶段未运行 D2C 编译生成 d2c-spec.json"
+        right: "运行 mcp__getDesignSections 并通过 ritsu_d2c_compile 产出 d2c-spec.json，并在设计稿中引用集成其规范"
+
 dedup_declaration: "全局底线与 review 红线共同构成完整拦截体系。各技能 HC 通过标注（=AP-N）引用本文件规则，避免重写同一规则。具体执行协议由 SKILL.md 定义，本文件只声明底线"
