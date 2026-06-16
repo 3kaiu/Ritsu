@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [9.1.0] - 2026-06-16
+
+### Added
+- **Security & CodeQL Auditing**:
+  - Audited all occurrences of `execSync` and resolved potential shell command injection alerts by introducing `safeExecSync`.
+  - `safeExecSync` runs commands securely using `execFileSync` (parameterized arguments array without invoking shell) in production, while falling back to reconstructable shell strings during testing to stay compatible with existing mocks.
+- **Code Optimization & Cleanups**:
+  - Analyzed and cleaned up unused imports, dead variables, and redundant code across the entire `runtime` package (e.g. `test-augment-loop.ts`, `design-architecture.ts`, `visual-fidelity.ts`, `test-oracle.ts`, etc.) and test suites.
+  - Reduced linter warnings and cleaned up unused `execSync` imports.
+  - Verified 100% build and test suite success on both Rust (`cargo test`) and Bun (`bun run test`) runtimes.
+
+## [9.0.0] - 2026-06-15
+
+### Added
+- **Tree-sitter AST Policy Engine Integration**:
+  - Implemented multi-language native AST audit engine in `ritsud-policy`.
+  - Statically linked `tree-sitter-typescript` and `tree-sitter-javascript` into `ritsud`.
+  - Added native Tree-sitter S-expression query matching for `AP-7` (empty catch block) and `R-1` (Clean Architecture import checker).
+  - Parallel linter execution with line-by-line regex engine and sorting/deduping of violations.
+- **Dependency-Aware Cache Key**:
+  - Added `calculate_dependency_aware_hash` in `ritsud-cache` using tree-sitter AST chunking (Imports, Globals, Functions).
+  - Combined function ASTs, globals, and file imports into joint signatures to prevent stale cache bypasses.
+  - Added SQLite `rainbow_cache` schema migration for `chunk_signatures` column.
+- **Native OptionalDependencies Launcher**:
+  - Added `launcher.ts` supporting four-tier resolution (node_modules -> cargo target build -> cache download with 2s timeout -> silent fallback to pure JS engine).
+  - Integrated launcher into `cli.ts` (`ritsu init`) and `cli/check.ts` (`ritsu check`).
+
 ## [8.9.0] - 2026-06-13
 
 ### Added

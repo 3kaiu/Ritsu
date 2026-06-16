@@ -14,7 +14,7 @@
  */
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { getProjectRoot, textResult, structuredError, ts } from "./_utils.js";
+import { getProjectRoot, textResult } from "./_utils.js";
 import { launchAgent } from "./launch-agent.js";
 import {
   findLatestDesignSheet,

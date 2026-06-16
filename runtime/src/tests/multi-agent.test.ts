@@ -22,17 +22,13 @@ import {
   buildCrossReviewPrompts,
   detectConflicts,
   mergeResults,
-  findLatestDesignSheet,
   extractTargetFiles,
   orchestrateMultiAgent,
   type DesignSheet,
   type AgentResult,
-  type Contract,
 } from "../orchestration/multi-agent.js";
 
-import { resolve } from "node:path";
 
-const PROJECT_ROOT = resolve(import.meta.dirname, "..");
 
 // ─── Fixtures ─────────────────────────────────────────────────
 
@@ -382,7 +378,7 @@ describe("orchestrateMultiAgent auto-judgment and fallback", () => {
       expect(result.unified_summary).toContain("Multi-Agent Auto-Judgment Routing");
       expect(result.unified_summary).toContain("splittability is **true**");
     } finally {
-      try { rmSync(tempPath); } catch {}
+      try { rmSync(tempPath); } catch { /* ignore */ }
     }
   });
 
@@ -423,7 +419,7 @@ describe("orchestrateMultiAgent auto-judgment and fallback", () => {
       expect(result.unified_summary).toContain("Multi-Agent Auto-Judgment Routing");
       expect(result.unified_summary).toContain("splittability is **false**");
     } finally {
-      try { rmSync(tempPath); } catch {}
+      try { rmSync(tempPath); } catch { /* ignore */ }
     }
   });
 });

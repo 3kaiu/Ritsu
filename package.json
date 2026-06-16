@@ -1,7 +1,7 @@
 {
   "name": "ritsu",
-  "version": "8.2.0",
-  "ritsu_protocol_version": "8.2.0",
+  "version": "9.1.0",
+  "ritsu_protocol_version": "9.1.0",
   "description": "AI Code Quality Gate \u2014 policy engine, quality gates, session recovery, and agent analytics for AI coding assistants (Claude Code, Codex, Cursor). Catch security issues, scope creep, and contract drift in AI-generated code.",
   "packageManager": "bun@1.3.5",
   "private": true,
@@ -9,9 +9,13 @@
   "scripts": {
     "install:all": "bun install --cwd runtime",
     "build": "bun run --cwd runtime build",
+    "build:rust": "cargo build --manifest-path ritsud/Cargo.toml --release",
+    "build:all": "bun run build && bun run build:rust",
     "dev": "bun run --cwd runtime dev",
     "lint": "bun run --cwd runtime lint",
     "test": "bun run --cwd runtime test",
+    "test:rust": "cargo test --manifest-path ritsud/Cargo.toml",
+    "test:all": "bun run test && bun run test:rust",
     "doctor": "bun run --cwd runtime dist/cli.js doctor",
     "bootstrap": "bun run --cwd runtime dist/cli.js bootstrap"
   },

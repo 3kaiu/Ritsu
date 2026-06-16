@@ -21,6 +21,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            ritsud -> target
+
+      - name: Build Rust Sidecar (Release)
+        run: cargo build --manifest-path ritsud/Cargo.toml --release
+
+      - name: Test Rust Sidecar
+        run: cargo test --manifest-path ritsud/Cargo.toml
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
@@ -64,7 +79,7 @@ jobs:
             grep "^FAIL" /tmp/test-output.txt
             exit 1
           fi
-          echo "✅ All 479 tests passed"
+          echo "✅ All tests passed successfully"
 
   verify:
     name: Verify

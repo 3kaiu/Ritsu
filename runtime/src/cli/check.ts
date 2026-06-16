@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { detectProjectRoot } from "../project-root.js";
 import { evaluatePolicies } from "../policy/index.js";
 import { color } from "./shared.js";
+import { getRitsudBinaryPath } from "../launcher.js";
 
 function findLineForViolation(content: string, v: any): number {
   if (v.evidence) {
@@ -49,6 +50,21 @@ export function runCheck(cmdArgs: string[]) {
   if (stagedFiles.length === 0) {
     console.log(color("✅ [ritsu check] No staged files to check.", "green"));
     process.exit(0);
+  }
+
+  // Check if native ritsud binary exists and delegate checking
+  const ritsudPath = getRitsudBinaryPath(root);
+  if (ritsudPath) {
+    const codeFiles = stagedFiles.filter((f) =>
+      /\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|sql|json|yaml|yml|md)$/.test(f)
+    );
+    if (codeFiles.length === 0) {
+      console.log(color("✅ [ritsu check] No staged code/config files to check.", "green"));
+      process.exit(0);
+    }
+    console.log(color("⚡ [ritsu check] Delegating to native ritsud check...", "cyan"));
+    const ritsudResult = spawnSync(ritsudPath, ["check", ...codeFiles], { cwd: root, stdio: "inherit" });
+    process.exit(ritsudResult.status ?? 0);
   }
 
   let hasFatalViolations = false;

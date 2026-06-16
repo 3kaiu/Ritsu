@@ -13,7 +13,7 @@
  * implements that intent correctly — not that coordinates happen to match.
  */
 
-import type { FigmaNode, RenderedElement, CssStyles } from "../types.js";
+import type { FigmaNode, RenderedElement } from "../types.js";
 
 // Figma nodes may have width/height as direct properties from API
 interface FigmaNodeWithSize extends FigmaNode {

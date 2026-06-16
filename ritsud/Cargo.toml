@@ -1,0 +1,18 @@
+[package]
+name = "ritsud"
+version = "9.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = { version = "0.31", features = ["bundled"] }
+tree-sitter = "0.20"
+tree-sitter-typescript = "0.20"
+tree-sitter-javascript = "0.20"
+sha2 = "0.10"
+glob = "0.3"
+tempfile = "3.9"
+nix = { version = "0.27", features = ["process", "sched"] }
+

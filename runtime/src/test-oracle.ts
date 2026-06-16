@@ -15,7 +15,6 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { extractKeyPhrases } from "./contract-verification.js";
 
 // ─── Istanbul Types ───────────────────────────────────────────

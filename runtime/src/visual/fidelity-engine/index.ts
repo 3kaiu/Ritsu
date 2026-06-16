@@ -9,12 +9,10 @@
  */
 
 import type {
-  DesignSnapshot, DesignElement, RenderedSnapshot, RenderedElement,
+  RenderedSnapshot, RenderedElement,
   StyleDiff, FidelityReport, FigmaNode,
 } from "../types.js";
-import { matchElements } from "./element-mapper.js";
 import { pixelDiff } from "./pixel-diff.js";
-import { computeStyleDiffs } from "./style-diff.js";
 import { detectLayoutIntent, verifyLayoutIntent } from "./layout-intent.js";
 import { verifyContentSize } from "./content-size.js";
 import { calculateScore } from "./score.js";
@@ -145,7 +143,6 @@ function buildSummary(
     lines.push(`| Category | Weight | Penalty | Issues |`);
     lines.push(`|----------|--------|---------|--------|`);
     for (const b of score.breakdown) {
-      const bar = b.penalty > 0 ? "⚠️" : "✅";
       lines.push(`| ${b.category} | ×${b.weight} | ${b.penalty} | ${b.issues} |`);
     }
     lines.push(``);

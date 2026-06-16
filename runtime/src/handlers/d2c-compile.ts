@@ -526,7 +526,7 @@ export async function ritsu_d2c_compile(
   const warnings: string[] = [];
 
   // Parse inputs
-  let dslSectionsRaw = params.dsl_sections;
+  const dslSectionsRaw = params.dsl_sections;
   if (!dslSectionsRaw) {
     return structuredError("ValidationError", "DSL_SECTIONS_REQUIRED", "dsl_sections is required");
   }
@@ -698,7 +698,9 @@ export async function ritsu_d2c_compile(
 
   // Flatten and process all children nodes recursively
   while (rawNodesToProcess.length > 0) {
-    let { node, parentId } = rawNodesToProcess.shift()!;
+    const _item = rawNodesToProcess.shift()!;
+    let node = _item.node;
+    const parentId = _item.parentId;
     if (!node) continue;
 
     // Normalize node format (Figma standard vs MasterGo D2C format)

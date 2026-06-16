@@ -1,8 +1,7 @@
-import { runExecutionLoop, type LoopConfig, type LoopResult } from "./execution-loop.js";
+import { runExecutionLoop, type LoopResult } from "./execution-loop.js";
 import { ritsu_run_quality_gates } from "../handlers/run-quality-gates.js";
 import { getProjectRoot } from "../handlers/_utils.js";
 import { resolve, relative } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
 
 export interface TestAugmentConfig {
   targetFile: string;              // e.g. "runtime/src/loop/execution-loop.ts"
@@ -28,7 +27,7 @@ export async function runTestAugmentLoop(config: TestAugmentConfig): Promise<Loo
 Target File: ${relativeTargetFile}
 ${config.testFile ? `Test File to modify: ${config.testFile}` : `Please locate or create the appropriate test file for ${relativeTargetFile}.`}`;
 
-  const verifyFn = async (iteration: number, lastFeedback?: string) => {
+  const verifyFn = async (_iteration: number, _lastFeedback?: string) => {
     console.error(`[ritsu-loop-augment] Running Quality Gates to check test status and coverage...`);
     
     const gateResult = await ritsu_run_quality_gates({

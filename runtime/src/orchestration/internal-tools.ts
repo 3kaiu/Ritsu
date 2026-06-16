@@ -10,7 +10,7 @@
 
 import { existsSync, } from "node:fs";
 import { resolve } from "node:path";
-import { execFileSync, execSync } from "node:child_process";
+import { safeExecSync } from "../shared.js";
 
 // ─── Superpowers 内部调用 ─────────────────────────────────────
 
@@ -18,11 +18,11 @@ const BRAINSTORMING_TIMEOUT = 60_000;
 
 export function hasSuperpowers(): boolean {
   try {
-    execFileSync("which", ["superpowers"], { stdio: "ignore" });
+    safeExecSync("which", ["superpowers"], { stdio: "ignore" });
     return true;
   } catch {
     try {
-      execFileSync("npx", ["-y", "superpowers", "--version"], {
+      safeExecSync("npx", ["-y", "superpowers", "--version"], {
         stdio: "ignore",
         timeout: 5000,
       });
@@ -50,12 +50,17 @@ export function runSuperpowersBrainstorming(topic: string): BrainstormResult {
     return { ok: false };
   }
   try {
-    const output = execSync(
-      `echo '${topic.replace(/'/g, "'\\''")}' | superpowers brainstorming --json`,
-      { timeout: BRAINSTORMING_TIMEOUT, stdio: ["pipe", "pipe", "pipe"] },
+    const output = safeExecSync(
+      "superpowers",
+      ["brainstorming", "--json"],
+      {
+        input: topic,
+        timeout: BRAINSTORMING_TIMEOUT,
+        stdio: ["pipe", "pipe", "pipe"],
+      }
     ).toString().trim();
 
-    const lines = output.split("\n").filter((l) => l.trim());
+    const lines = output.split("\n").filter((l: string) => l.trim());
     return {
       ok: true,
       requirements: lines,
@@ -70,7 +75,7 @@ export function runSuperpowersBrainstorming(topic: string): BrainstormResult {
 
 export function hasCodeGraph(): boolean {
   try {
-    execFileSync("which", ["codegraph"], { stdio: "ignore" });
+    safeExecSync("which", ["codegraph"], { stdio: "ignore" });
     return true;
   } catch {
     return false;
@@ -92,7 +97,7 @@ export function fetchCodeGraphContext(files: string[]): CodeGraphContext {
     return { symbols: [], files: [] };
   }
   try {
-    const output = execFileSync("codegraph", ["affected", "--json", ...files.slice(0, 10)], {
+    const output = safeExecSync("codegraph", ["affected", "--json", ...files.slice(0, 10)], {
       stdio: ["ignore", "pipe", "ignore"],
       timeout: 10000,
       maxBuffer: 1024 * 1024,

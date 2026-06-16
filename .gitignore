@@ -42,3 +42,7 @@ coverage/
 !.cursor/rules/*
 .fe-sight/
 .fe-sight/
+
+# Rust
+ritsud/target/
+target/

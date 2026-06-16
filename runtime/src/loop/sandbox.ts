@@ -1,7 +1,8 @@
-import { execSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { resolve, relative } from "node:path";
 import { getProjectRoot } from "../handlers/_utils.js";
+import { safeExecSync } from "../shared.js";
 
 export interface SandboxConfig {
   branchPrefix?: string;           // default "ritsu/loop/"
@@ -24,7 +25,7 @@ export function resetDockerCache(): void {
 export function isDockerAvailable(): boolean {
   if (isDockerCached !== null) return isDockerCached;
   try {
-    execSync("docker info", { stdio: "ignore", timeout: 1000 });
+    safeExecSync("docker", ["info"], { stdio: "ignore", timeout: 1000 });
     isDockerCached = true;
     return true;
   } catch {
@@ -57,7 +58,7 @@ export async function createSandbox(
     console.error(`[ritsu-sandbox] Creating git worktree at ${sandboxDir} on branch ${branchName}...`);
     
     // Add worktree and checkout a new branch from HEAD
-    execSync(`git worktree add -b ${branchName} ${sandboxDir} HEAD`, {
+    safeExecSync("git", ["worktree", "add", "-b", branchName, sandboxDir, "HEAD"], {
       cwd: root,
       stdio: "ignore",
     });
@@ -67,8 +68,9 @@ export async function createSandbox(
       const containerName = `ritsu-sandbox-${id}`;
       console.error(`[ritsu-sandbox] Starting Docker container ${containerName} for sandboxed execution...`);
       try {
-        execSync(
-          `docker run -d --name ${containerName} -v ${sandboxDir}:/workspace -w /workspace node:18-slim tail -f /dev/null`,
+        safeExecSync(
+          "docker",
+          ["run", "-d", "--name", containerName, "-v", `${sandboxDir}:/workspace`, "-w", "/workspace", "node:18-slim", "tail", "-f", "/dev/null"],
           { stdio: "ignore" }
         );
       } catch (err) {
@@ -88,19 +90,19 @@ export async function createSandbox(
         const containerName = `ritsu-sandbox-${id}`;
         console.error(`[ritsu-sandbox] Stopping and removing Docker container ${containerName}...`);
         try {
-          execSync(`docker rm -f ${containerName}`, { stdio: "ignore" });
+          safeExecSync("docker", ["rm", "-f", containerName], { stdio: "ignore" });
         } catch (err) {
           console.error(`[ritsu-sandbox] Failed to stop/remove Docker container:`, err);
         }
       }
 
       try {
-        execSync(`git worktree remove --force ${sandboxDir}`, { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["worktree", "remove", "--force", sandboxDir], { cwd: root, stdio: "ignore" });
       } catch (err) {
         console.error(`[ritsu-sandbox] Failed to remove worktree:`, err);
       }
       try {
-        execSync(`git branch -D ${branchName}`, { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["branch", "-D", branchName], { cwd: root, stdio: "ignore" });
       } catch (err) {
         console.error(`[ritsu-sandbox] Failed to delete branch:`, err);
       }
@@ -122,28 +124,28 @@ export async function createSandbox(
     
     let stashed = false;
     try {
-      const status = execSync("git status --porcelain", { cwd: root, encoding: "utf8" }).trim();
+      const status = safeExecSync("git", ["status", "--porcelain"], { cwd: root, encoding: "utf8" }).trim();
       if (status) {
-        execSync("git stash", { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["stash"], { cwd: root, stdio: "ignore" });
         stashed = true;
       }
     } catch { /* ignore */ }
     
-    const originalBranch = execSync("git branch --show-current", { cwd: root, encoding: "utf8" }).trim();
+    const originalBranch = safeExecSync("git", ["branch", "--show-current"], { cwd: root, encoding: "utf8" }).trim();
     
-    execSync(`git checkout -b ${branchName}`, { cwd: root, stdio: "ignore" });
+    safeExecSync("git", ["checkout", "-b", branchName], { cwd: root, stdio: "ignore" });
     
     const cleanup = async () => {
       console.error(`[ritsu-sandbox] Restoring original branch ${originalBranch}...`);
       try {
-        execSync(`git checkout ${originalBranch}`, { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["checkout", originalBranch], { cwd: root, stdio: "ignore" });
       } catch { /* ignore */ }
       try {
-        execSync(`git branch -D ${branchName}`, { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["branch", "-D", branchName], { cwd: root, stdio: "ignore" });
       } catch { /* ignore */ }
       if (stashed) {
         try {
-          execSync("git stash pop", { cwd: root, stdio: "ignore" });
+          safeExecSync("git", ["stash", "pop"], { cwd: root, stdio: "ignore" });
         } catch { /* ignore */ }
       }
     };
@@ -187,7 +189,7 @@ export async function runCommandInSandbox(
     const containerName = `ritsu-sandbox-${sandboxId}`;
     try {
       // Check if container is running
-      execSync(`docker inspect -f '{{.State.Running}}' ${containerName}`, { stdio: "ignore", timeout: 1000 });
+      safeExecSync("docker", ["inspect", "-f", "{{.State.Running}}", containerName], { stdio: "ignore", timeout: 1000 });
       
       const sandboxDir = resolve(sandboxesDir, sandboxId);
       const relPath = relative(sandboxDir, cwd);

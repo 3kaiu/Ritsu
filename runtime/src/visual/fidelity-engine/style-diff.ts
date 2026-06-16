@@ -6,7 +6,7 @@
  */
 
 import type { DesignElement, RenderedElement, StyleDiff, Severity } from "../types.js";
-import { cssToTailwind, suggestTailwindFix } from "../style-adapters/tailwind.js";
+import { suggestTailwindFix } from "../style-adapters/tailwind.js";
 
 // ─── Properties to compare ───────────────────────────────────
 

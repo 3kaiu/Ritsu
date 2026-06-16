@@ -8,9 +8,9 @@
  * v8.5.0
  */
 
-import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { DataStore } from "./data-store.js";
+import { safeExecSync } from "./shared.js";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ function truncateMessage(msg: string, max = 60): string {
 
 function getCurrentCommit(root: string): string {
   try {
-    return execSync("git rev-parse --short HEAD", {
+    return safeExecSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: root,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],

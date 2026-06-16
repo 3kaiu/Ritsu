@@ -25,7 +25,6 @@ function bar(value: number, max: number, width = 20): string {
 }
 
 function pctBar(pct: number, width = 15): string {
-  const filled = Math.round((pct / 100) * width);
   if (pct >= 80) return color(bar(pct, 100, width), "green");
   if (pct >= 50) return color(bar(pct, 100, width), "yellow");
   return color(bar(pct, 100, width), "red");

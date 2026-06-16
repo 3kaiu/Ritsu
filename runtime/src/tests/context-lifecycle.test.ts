@@ -6,7 +6,7 @@
 
 import { describe, it, expect } from "vitest";
 import { resolve } from "node:path";
-import { writeFileSync, mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {

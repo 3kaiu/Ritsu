@@ -12,6 +12,9 @@ import { runBootstrap } from "./cli/bootstrap.js";
 import { runCheck } from "./cli/check.js";
 import { runReport } from "./cli/report.js";
 import { runViolations } from "./cli/violations.js";
+import { spawnSync } from "node:child_process";
+import { detectProjectRoot } from "./project-root.js";
+import { getRitsudBinaryPath } from "./launcher.js";
 
 
 export { runDoctor, runDoctorHealth } from "./cli/doctor.js";
@@ -67,6 +70,7 @@ export function usage(detailed = false): string {
     "User Commands:",
     "  ritsu bootstrap    # Init project (.mcp.json + ecosystem.json)",
     "  ritsu bootstrap --demo  # Generate demo data for quick try",
+    "  ritsu init         # Initialize git pre-commit policy hook (delegates to ritsud)",
     "  ritsu doctor       # Health check",
     "  ritsu doctor --ecosystem # MCP ecosystem verification",
     "  ritsu doctor --signals   # Structured audit (PASS/WARN/FAIL)",
@@ -123,6 +127,18 @@ export function main() {
   if (cmd === "help") { console.log(usage(true)); return; }
 
   if (cmd === "bootstrap") { runBootstrap(cmdArgs); return; }
+  if (cmd === "init") {
+    const root = detectProjectRoot();
+    const ritsudPath = getRitsudBinaryPath(root);
+    if (ritsudPath) {
+      console.log(color("⚡ Delegating to native ritsud init...", "cyan"));
+      const ritsudResult = spawnSync(ritsudPath, ["init"], { cwd: root, stdio: "inherit" });
+      process.exit(ritsudResult.status ?? 0);
+    } else {
+      console.error(color("❌ Native ritsud binary not found. Please compile it first with 'bun run build:rust' or ensure a valid cached/optional-dep sidecar is present.", "red"));
+      process.exit(1);
+    }
+  }
   if (cmd === "doctor") { runDoctor(cmdArgs); return; }
   if (cmd === "export") {
     let outPath = null;

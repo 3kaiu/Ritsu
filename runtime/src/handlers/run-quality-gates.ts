@@ -1,7 +1,7 @@
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { existsSync, readFileSync, writeFileSync, statSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { resolve } from "node:path";
-import { spawn } from "node:child_process";
+
 import { getProjectRoot, textResult } from "./_utils.js";
 import { runCommandInSandbox } from "../loop/sandbox.js";
 import { ensureRitsuDir } from "../ctx-path.js";
@@ -13,19 +13,16 @@ import {
   getCoverageThreshold,
   checkCoverageThreshold,
   type CoverageByFile,
-  type CoverageMetric,
   type CoverageStats,
 } from "../quality-gates.js";
 import { runPolicyPreflight } from "../orchestration/policy-preflight.js";
 import { getAgentsProfile } from "../agents-parser.js";
-import { isRecord } from "../shared.js";
+
 import { runTestQualityAnalysis, type TestQualityMetrics } from "../test-intelligence.js";
 import { verifyContracts, type VerificationReport } from "../contract-verification.js";
 import { captureViolation } from "../violation-tracker.js";
 import {
-  parseCoverageSummary,
   getCoverageSummaryCached,
-  type CoverageAdapter,
 } from "../coverage-adapters.js";
 import {
   detectTestRunner,
@@ -34,7 +31,6 @@ import {
   stripAnsi,
   testReportAdapters,
   type TestFailure,
-  type TestReportAdapter,
 } from "../test-report-adapters.js";
 
 interface CommandSpec {

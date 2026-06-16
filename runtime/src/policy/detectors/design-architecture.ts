@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { resolve, dirname, basename } from "node:path";
+import { dirname, basename } from "node:path";
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
 import { getProjectRoot } from "../../handlers/_utils.js";
 

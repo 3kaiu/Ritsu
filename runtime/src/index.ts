@@ -205,3 +205,14 @@ function gracefulShutdown(signal: string) {
 
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
 process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+// ─── Library Exports for Platform Integration ────────────────
+export {
+  orchestrateMultiAgent,
+  buildSubTasks,
+  analyzeTask,
+  detectConflicts,
+  type DispatchOptions,
+  type AgentResult,
+  type UnifiedResult,
+} from "./orchestration/multi-agent.js";

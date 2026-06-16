@@ -14,8 +14,7 @@
  */
 
 import type { DetectorPlugin, PolicyCheckContext, PolicyRule, PolicyViolation } from "../types.js";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+
 
 // ─── Intent Patterns ─────────────────────────────────────────
 

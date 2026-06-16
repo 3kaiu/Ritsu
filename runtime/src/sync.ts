@@ -1,7 +1,7 @@
-import { execSync } from "node:child_process";
 import { existsSync, rmSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { getProjectRoot } from "./handlers/_utils.js";
+import { safeExecSync } from "./shared.js";
 import { randomUUID } from "node:crypto";
 
 const RITSU_DIR = ".ritsu";
@@ -36,7 +36,7 @@ export function getCurrentBranch(root: string): string {
     }
 
     // Fallback to git CLI if reading HEAD directly failed (e.g. detached HEAD or other format)
-    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+    const branch = safeExecSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: root,
       stdio: ["ignore", "pipe", "ignore"],
     })
@@ -113,16 +113,16 @@ export function syncPush(targetBranch?: string): boolean {
     const env = { ...process.env, GIT_INDEX_FILE: tmpIndex };
 
     // 1. Force add .ritsu to the temporary index (bypassing .gitignore)
-    execSync(`git add -f ${RITSU_DIR}`, { cwd: root, env, stdio: "ignore" });
+    safeExecSync("git", ["add", "-f", RITSU_DIR], { cwd: root, env, stdio: "ignore" });
 
     // 2. Write tree from the temporary index
-    const treeSha = execSync("git write-tree", { cwd: root, env, stdio: ["ignore", "pipe", "ignore"] })
+    const treeSha = safeExecSync("git", ["write-tree"], { cwd: root, env, stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
 
     // Check if the tree is identical to the current ref's tree to bypass committing and pushing
     try {
-      const parentTreeSha = execSync(`git rev-parse ${refName}^{tree}`, {
+      const parentTreeSha = safeExecSync("git", ["rev-parse", `${refName}^{tree}`], {
         cwd: root,
         stdio: ["ignore", "pipe", "ignore"],
       })
@@ -138,30 +138,30 @@ export function syncPush(targetBranch?: string): boolean {
 
     // 3. Create a commit object
     // Try to get the previous commit from this ref to maintain history, though not strictly required
-    let parentArg = "";
+    const commitArgs = ["commit-tree", treeSha];
     try {
-      const parentSha = execSync(`git rev-parse ${refName}`, { cwd: root, stdio: ["ignore", "pipe", "ignore"] })
+      const parentSha = safeExecSync("git", ["rev-parse", refName], { cwd: root, stdio: ["ignore", "pipe", "ignore"] })
         .toString()
         .trim();
-      if (parentSha) parentArg = `-p ${parentSha}`;
+      if (parentSha) {
+        commitArgs.push("-p", parentSha);
+      }
     } catch {
       // Ref doesn't exist yet, which is fine
     }
+    commitArgs.push("-m", "chore(ritsu): auto-sync harness context");
 
-    const commitSha = execSync(
-      `git commit-tree ${treeSha} ${parentArg} -m "chore(ritsu): auto-sync harness context"`,
-      { cwd: root, env, stdio: ["ignore", "pipe", "ignore"] },
-    )
+    const commitSha = safeExecSync("git", commitArgs, { cwd: root, env, stdio: ["ignore", "pipe", "ignore"] })
       .toString()
       .trim();
 
     // 4. Update the ref
-    execSync(`git update-ref ${refName} ${commitSha}`, { cwd: root, stdio: "ignore" });
+    safeExecSync("git", ["update-ref", refName, commitSha], { cwd: root, stdio: "ignore" });
 
     // 5. Try pushing to origin
     if (hasOriginRemote(root)) {
       try {
-        execSync(`git push origin ${refName}:${refName} --force`, { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["push", "origin", `${refName}:${refName}`, "--force"], { cwd: root, stdio: "ignore" });
       } catch {
         // It's okay if push fails (e.g. no internet)
         // The local ref is still updated.
@@ -203,7 +203,7 @@ export function syncPull(targetBranch?: string): boolean {
     // 1. Fetch the ref from origin
     if (hasOriginRemote(root)) {
       try {
-        execSync(`git fetch origin ${refName}:${refName}`, { cwd: root, stdio: "ignore" });
+        safeExecSync("git", ["fetch", "origin", `${refName}:${refName}`], { cwd: root, stdio: "ignore" });
       } catch {
         // Fetch might fail if remote doesn't have it, we can still try to extract from local ref
       }
@@ -211,7 +211,7 @@ export function syncPull(targetBranch?: string): boolean {
 
     // Check if the ref exists locally
     try {
-      execSync(`git rev-parse --verify ${refName}`, { cwd: root, stdio: "ignore" });
+      safeExecSync("git", ["rev-parse", "--verify", refName], { cwd: root, stdio: "ignore" });
     } catch {
       // Ref doesn't exist, nothing to pull
       return false;
@@ -228,7 +228,7 @@ export function syncPull(targetBranch?: string): boolean {
     const tmpIndex = join(root, `.git`, `ritsu-index-${randomUUID()}`);
     try {
       const env = { ...process.env, GIT_INDEX_FILE: tmpIndex };
-      execSync(`git checkout ${refName} -- ${RITSU_DIR}`, { cwd: root, env, stdio: "ignore" });
+      safeExecSync("git", ["checkout", refName, "--", RITSU_DIR], { cwd: root, env, stdio: "ignore" });
     } finally {
       if (existsSync(tmpIndex)) {
         try {

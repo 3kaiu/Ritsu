@@ -2,9 +2,9 @@ import { createSandbox } from "./sandbox.js";
 import { runExecutionLoop } from "./execution-loop.js";
 import { postGithubPrComment } from "./outbound-mcp.js";
 import { ritsu_run_quality_gates } from "../handlers/run-quality-gates.js";
-import { execSync } from "node:child_process";
 import { resolve } from "node:path";
 import { getProjectRoot } from "../handlers/_utils.js";
+import { safeExecSync } from "../shared.js";
 
 export interface PRReviewConfig {
   owner: string;
@@ -20,8 +20,7 @@ export interface PRReviewConfig {
  * pushes fixes if successful, and comments back on the GitHub PR.
  */
 export async function runPRReviewLoop(config: PRReviewConfig): Promise<{ passed: boolean; reason: string }> {
-  const baseBranch = config.baseBranch ?? "main";
-  const root = getProjectRoot();
+
   
   // 1. Create Git worktree sandbox
   const sandboxId = `pr-${config.prNumber}-${Date.now().toString().slice(-4)}`;
@@ -30,8 +29,8 @@ export async function runPRReviewLoop(config: PRReviewConfig): Promise<{ passed:
   try {
     // 2. Fetch and checkout the PR branch in the sandbox
     console.error(`[ritsu-pr-review] Fetching PR branch ${config.branch}...`);
-    execSync(`git fetch origin ${config.branch}:${config.branch}`, { cwd: sandbox.path, stdio: "ignore" });
-    execSync(`git checkout ${config.branch}`, { cwd: sandbox.path, stdio: "ignore" });
+    safeExecSync("git", ["fetch", "origin", `${config.branch}:${config.branch}`], { cwd: sandbox.path, stdio: "ignore" });
+    safeExecSync("git", ["checkout", config.branch], { cwd: sandbox.path, stdio: "ignore" });
     
     // 3. Define verifyFn for quality gates check
     const verifyFn = async (iteration: number) => {
@@ -96,7 +95,7 @@ export async function runPRReviewLoop(config: PRReviewConfig): Promise<{ passed:
     
     if (result.passed) {
       // Push the fixes back to origin
-      execSync(`git push origin ${config.branch}`, { cwd: sandbox.path, stdio: "ignore" });
+      safeExecSync("git", ["push", "origin", config.branch], { cwd: sandbox.path, stdio: "ignore" });
       const msg = `✅ Ritsu auto-fixed quality gate failures on branch \`${config.branch}\` and pushed the updates!`;
       await postGithubPrComment(config.owner, config.repo, config.prNumber, msg);
       return { passed: true, reason: msg };

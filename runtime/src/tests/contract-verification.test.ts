@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { rmSync, mkdtempSync } from "node:fs";
@@ -15,7 +15,6 @@ import {
   updateContractStatus,
   getActiveContracts,
   batchUpdateStatus,
-  type ContractEntry,
   type ContractRegistry,
 } from "../contract-registry.js";
 import { DataStore } from "../data-store.js";

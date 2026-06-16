@@ -7,8 +7,7 @@
  * v8.6.0
  */
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { readFileSync, statSync } from "node:fs";
 import { isRecord } from "./shared.js";
 import type { CoverageMetric, CoverageStats, CoverageByFile } from "./quality-gates.js";
 

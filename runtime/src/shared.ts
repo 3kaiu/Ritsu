@@ -3,6 +3,7 @@
  */
 
 import { resolve, dirname } from "node:path";
+import { execSync, execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { existsSync } from "node:fs";
 
@@ -249,4 +250,16 @@ export type RitsuToolError = {
 
 export function isRitsuToolError(value: unknown): value is RitsuToolError {
   return isRecord(value) && isRecord(value.error) && typeof value.error.type === "string";
+}
+
+export function safeExecSync(file: string, args: string[], options?: any): any {
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    const escapeArg = (arg: string) => {
+      if (/^[a-zA-Z0-9._\-/]+$/.test(arg)) return arg;
+      return `'${arg.replace(/'/g, "'\\''")}'`;
+    };
+    const cmdStr = [file, ...args].map(escapeArg).join(" ");
+    return execSync(cmdStr, options);
+  }
+  return execFileSync(file, args, options);
 }

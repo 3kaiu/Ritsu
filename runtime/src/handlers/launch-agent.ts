@@ -15,8 +15,9 @@
 
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { spawn } from "node:child_process";
-import { randomUUID, randomBytes } from "node:crypto";
-import { existsSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { safeExecSync } from "../shared.js";
+
 import { getProjectRoot, textResult, structuredError, ts } from "./_utils.js";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -53,8 +54,7 @@ function resolveAgentBinary(agentType: string): string | null {
   for (const bin of candidates) {
     try {
       // Quick check if binary exists in PATH
-      const { execSync } = require("node:child_process") as typeof import("node:child_process");
-      execSync(`which ${bin}`, { stdio: "ignore" });
+      safeExecSync("which", [bin], { stdio: "ignore" });
       return bin;
     } catch {
       continue;
