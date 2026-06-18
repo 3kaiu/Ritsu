@@ -41,7 +41,7 @@
     "zod": "^4.4.3",
     "pixelmatch": "^7.2.0",
     "pngjs": "^7.0.0",
-    "jsdom": "^26.0.0"
+    "jsdom": "^29.1.1"
   },
   "optionalDependencies": {
     "playwright": "^1.52.0"
