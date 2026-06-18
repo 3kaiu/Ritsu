@@ -52,7 +52,7 @@
     "@types/node": "^25.9.3",
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
-    "@types/jsdom": "^21.1.7",
+    "@types/jsdom": "^28.0.3",
     "@typescript-eslint/eslint-plugin": "8.59.4",
     "@typescript-eslint/parser": "8.59.4",
     "@vitest/coverage-v8": "^4.1.6",
